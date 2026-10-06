@@ -1,3 +1,4 @@
+import java.util.Base64
 import java.util.Properties
 
 // AGP 9 compiles Kotlin itself (built-in Kotlin), so there's no separate Kotlin Android plugin.
@@ -41,6 +42,19 @@ android {
         versionCode = 1
         versionName = "1.0"
 
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        // The Facebook sign-in test's test user, from the environment (scripts/facebook-signin-test.sh
+        // loads them). Base64 so a password's symbols survive `am instrument`'s command line.
+        mapOf(
+            "fbEmail" to "FB_TEST_ANDROID_EMAIL",
+            "fbPassword" to "FB_TEST_ANDROID_PASSWORD",
+            "fbName" to "FB_TEST_ANDROID_NAME",
+        ).forEach { (argument, variable) ->
+            providers.environmentVariable(variable).orNull?.takeIf { it.isNotEmpty() }?.let {
+                testInstrumentationRunnerArguments[argument] = Base64.getEncoder().encodeToString(it.toByteArray())
+            }
+        }
+
         // Names the Hot Mess audience to the AudienceKit API for sign-in and branding.
         // hotmess.admin.audiencekit.com resolves by subdomain; switch to hotmess.social once that
         // domain is verified.
@@ -71,6 +85,10 @@ android {
             matchingFallbacks += listOf("release")
         }
     }
+
+    // UI tests sign in against the real API, and the test users only work on the Facebook app the
+    // Hot Mess branding names, so they run on Staging rather than Debug's local API.
+    testBuildType = "staging"
 
     buildTypes.configureEach {
         val environment = environments.getValue(name)
@@ -132,4 +150,8 @@ dependencies {
     implementation(libs.firebase.messaging)
 
     testImplementation(libs.junit)
+
+    androidTestImplementation(libs.androidx.test.runner)
+    androidTestImplementation(libs.androidx.test.junit)
+    androidTestImplementation(libs.uiautomator)
 }
