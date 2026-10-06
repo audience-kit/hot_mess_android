@@ -32,7 +32,7 @@ val environments = mapOf(
 
 android {
     namespace = "social.hotmess.android"
-    compileSdk = 36
+    compileSdk = 37
 
     defaultConfig {
         applicationId = "social.hotmess.android"
