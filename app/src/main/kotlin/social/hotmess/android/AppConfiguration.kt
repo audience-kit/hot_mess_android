@@ -21,15 +21,17 @@ data class AppConfiguration(
             facebookAppId = facebookAppId,
         )
 
-    /** Which Facebook app the build signs in with, for the Me screen. */
-    val facebookEnvironment: String
-        get() = when (facebookAppId) {
-            "1168782378316790" -> "production"
-            "713525445368431" -> "AudienceKit platform"
-            "915436455177328" -> "staging"
-            "842337999153841" -> "development"
-            else -> "unknown"
-        }
+    /** The Facebook app sign-in uses: the one the audience's branding names, or the build's own. */
+    fun signInFacebookAppId(brandingAppId: String?): String = brandingAppId?.takeIf { it.isNotBlank() } ?: facebookAppId
+
+    /** Which Facebook app [appId] is, for the Me screen. */
+    fun facebookEnvironment(appId: String): String = when (appId) {
+        "1168782378316790" -> "production"
+        "713525445368431" -> "AudienceKit platform"
+        "915436455177328" -> "staging"
+        "842337999153841" -> "development"
+        else -> appId
+    }
 
     /** The API serves every user's avatar from the same path. */
     fun avatarUrl(userId: String): String = "${baseUrl.trimEnd('/')}/users/${userId.uppercase()}/picture"

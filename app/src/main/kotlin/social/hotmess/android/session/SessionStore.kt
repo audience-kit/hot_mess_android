@@ -114,7 +114,7 @@ class SessionStore(
     suspend fun beginSignIn(): String? {
         _state.value = AuthState.SigningIn
         val branding = brand.branding.value ?: brand.refresh()
-        val appId = branding?.facebookAppId?.takeIf { it.isNotBlank() } ?: configuration.facebookAppId
+        val appId = configuration.signInFacebookAppId(branding?.facebookAppId)
         if (appId.isBlank()) {
             signInFailed("Facebook sign-in isn't set up for this build yet.")
             return null
