@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="colorPrimary">#3F51B5</color>
-    <color name="colorPrimaryDark">#303F9F</color>
-    <color name="colorAccent">#FF4081</color>
+    <!-- The design system's hot_mess theme; the rest of the palette lives in ui/theme/Tokens.kt. -->
+    <color name="surface">#f6eff3</color>
+    <color name="accent">#b8236f</color>
+    <color name="icon_background">#1a1519</color>
 </resources>

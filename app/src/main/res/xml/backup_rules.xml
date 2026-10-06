@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The session token is encrypted with a key that never leaves this device's keystore, so a
+     restored copy couldn't be read. Leave it out. -->
+<full-backup-content>
+    <exclude domain="sharedpref" path="com.audiencekit.session.xml" />
+</full-backup-content>
