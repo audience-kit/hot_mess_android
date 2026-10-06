@@ -17,22 +17,15 @@ AudienceKit Kotlin SDK, styled with the AudienceKit design system's `hot_mess` p
 1. Clone [audience-kit](https://github.com/audience-kit/audience-kit) next to this repository
    (`../audience-kit`). The SDK in `sdk/kotlin` is included as a Gradle composite build. To keep it
    somewhere else, set `audiencekit.dir` in `local.properties` or `AUDIENCEKIT_DIR`.
-2. Add the secrets the build needs to `local.properties` (never commit them):
+2. Optionally, add Firebase's settings to `local.properties` for push (never commit them):
 
    ```properties
-   # Facebook Login client tokens, per build type
-   hotmess.facebookClientToken.debug=...
-   hotmess.facebookClientToken.staging=...
-   hotmess.facebookClientToken.release=...
-
-   # Firebase Cloud Messaging (optional; push is off without it)
    hotmess.firebase.projectId=...
    hotmess.firebase.applicationId=...
    hotmess.firebase.apiKey=...
    hotmess.firebase.senderId=...
    ```
 
-   Without a client token the app runs, and sign-in says Facebook isn't set up for that build.
 3. Open the project in Android Studio, or run `./gradlew installDebug`.
 
 ## Environments
@@ -43,7 +36,11 @@ AudienceKit Kotlin SDK, styled with the AudienceKit design system's `hot_mess` p
 | `staging` | `https://api.audiencekit.com` | 915436455177328 | `social.hotmess.android.staging` |
 | `release` | `https://api.audiencekit.com` | 1168782378316790 | `social.hotmess.android` |
 
-Each Facebook app needs this app's package name and key hashes added under its Android platform.
+Sign-in uses the Facebook app the audience's branding names (with its Login for Business
+`config_id`), falling back to the build's app. It opens Facebook's OAuth dialog in a Custom Tab, which
+redirects to `fbconnect://cct.<application id>` with a code that the API exchanges. That Facebook app
+needs an Android platform listing this app's package names and key hashes, and the redirect has to
+be accepted as a Valid OAuth Redirect URI.
 
 ## CI
 

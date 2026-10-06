@@ -7,8 +7,8 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
 }
 
-// Secrets that must not be committed (the Facebook client tokens, Firebase's app settings) come
-// from local.properties or Gradle properties, e.g. `hotmess.facebookClientToken.release=…`.
+// Secrets that must not be committed (Firebase's app settings) come from local.properties or Gradle
+// properties, e.g. `hotmess.firebase.apiKey=…`.
 val localProperties = Properties().apply {
     rootProject.file("local.properties").takeIf { it.exists() }?.inputStream()?.use(::load)
 }
@@ -77,11 +77,6 @@ android {
         buildConfigField("String", "API_BASE_URL", "\"${environment.apiBaseUrl}\"")
         buildConfigField("String", "AUDIENCE_ID", "\"${environment.audienceId}\"")
         buildConfigField("String", "FACEBOOK_APP_ID", "\"${environment.facebookAppId}\"")
-        resValue("string", "facebook_app_id", environment.facebookAppId)
-        resValue("string", "fb_login_protocol_scheme", "fb${environment.facebookAppId}")
-        // Copy each environment's client token from the Facebook app dashboard (Settings, Advanced,
-        // Client token) into local.properties as hotmess.facebookClientToken.<debug|staging|release>.
-        resValue("string", "facebook_client_token", secret("facebookClientToken.${environment.name}"))
         resValue(
             "string",
             "app_name",
@@ -130,7 +125,7 @@ dependencies {
 
     implementation(libs.coil.compose)
     implementation(libs.coil.network.okhttp)
-    implementation(libs.facebook.login)
+    implementation(libs.androidx.browser)
     // Facebook Login brings an old Fragment; the Activity Result API needs 1.3 or later.
     implementation(libs.androidx.fragment)
     implementation(libs.maplibre)
