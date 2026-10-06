@@ -3,19 +3,17 @@ package social.hotmess.android
 import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
-import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.browser.customtabs.CustomTabsIntent
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
+import androidx.core.net.toUri
+import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.facebook.CallbackManager
-import com.facebook.FacebookCallback
-import com.facebook.FacebookException
-import com.facebook.login.LoginManager
-import com.facebook.login.LoginResult
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.receiveAsFlow
+import kotlinx.coroutines.launch
 import social.hotmess.android.ui.HotMessApp
 import social.hotmess.android.ui.LocalAppGraph
 import social.hotmess.android.ui.theme.HotMessTheme
@@ -24,30 +22,12 @@ import social.hotmess.core.DeepLink
 
 class MainActivity : ComponentActivity() {
     private val graph by lazy { appGraph }
-    private val callbackManager = CallbackManager.Factory.create()
     private val links = Channel<AppRoute>(Channel.CONFLATED)
     private val linkFlow = links.receiveAsFlow()
-
-    // The Facebook SDK only initializes when the build has a client token, and LoginManager throws
-    // until it has, so without one there's no launcher and sign-in says it isn't set up.
-    private var facebookLogin: ActivityResultLauncher<Collection<String>>? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
-
-        if (graph.session.isFacebookConfigured) {
-            val loginManager = LoginManager.getInstance()
-            facebookLogin = registerForActivityResult(
-                loginManager.createLogInActivityResultContract(callbackManager),
-            ) { /* Delivered to the callback below. */ }
-            loginManager.registerCallback(callbackManager, object : FacebookCallback<LoginResult> {
-                override fun onSuccess(result: LoginResult) = graph.session.completeSignIn(result.accessToken.token)
-                override fun onCancel() = graph.session.signInCancelled()
-                override fun onError(error: FacebookException) =
-                    graph.session.signInFailed("Facebook couldn't sign you in. Try again in a moment.")
-            })
-        }
 
         if (savedInstanceState == null) handle(intent)
 
@@ -66,22 +46,22 @@ class MainActivity : ComponentActivity() {
         handle(intent)
     }
 
-    override fun onDestroy() {
-        if (facebookLogin != null) LoginManager.getInstance().unregisterCallback(callbackManager)
-        super.onDestroy()
+    override fun onResume() {
+        super.onResume()
+        // A redirect arrives through onNewIntent first, so still waiting here means the tab was closed.
+        graph.session.signInAbandoned()
     }
 
     private fun signIn() {
-        val facebookLogin = facebookLogin ?: run {
-            graph.session.signInFailed("Facebook sign-in isn't set up for this build yet.")
-            return
+        lifecycleScope.launch {
+            val url = graph.session.beginSignIn() ?: return@launch
+            CustomTabsIntent.Builder().build().launchUrl(this@MainActivity, url.toUri())
         }
-        graph.session.beginSignIn()
-        facebookLogin.launch(listOf("public_profile", "email", "user_friends"))
     }
 
     private fun handle(intent: Intent?) {
         val url = intent?.takeIf { it.action == Intent.ACTION_VIEW }?.dataString ?: return
+        if (graph.session.handleRedirect(url)) return
         DeepLink.route(url)?.let { links.trySend(it) }
     }
 }

@@ -24,7 +24,7 @@ class AppGraph(context: Context, val configuration: AppConfiguration = AppConfig
     val api = HotMessApi(audienceKit)
     val brand = BrandStore(audienceKit, scope)
     val push = PushRegistrar(context, api, scope)
-    val session = SessionStore(context, api, audienceKit, configuration, push, scope)
+    val session = SessionStore(context, api, audienceKit, brand, configuration, push, scope)
     val location = LocationProvider(context, api, configuration, scope)
 }
 

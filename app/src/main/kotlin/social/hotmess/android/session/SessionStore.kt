@@ -6,8 +6,6 @@ import com.audiencekit.AudienceKitClient
 import com.audiencekit.DeviceDescription
 import com.audiencekit.SessionEvent
 import com.audiencekit.android.current
-import com.facebook.AccessToken
-import com.facebook.login.LoginManager
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -17,6 +15,7 @@ import kotlinx.coroutines.launch
 import social.hotmess.android.AppConfiguration
 import social.hotmess.android.push.PushRegistrar
 import social.hotmess.core.ApiError
+import social.hotmess.core.FacebookLoginDialog
 import social.hotmess.core.HotMessApi
 import social.hotmess.core.User
 import social.hotmess.core.VersionInfo
@@ -33,14 +32,15 @@ sealed interface AuthState {
 /**
  * Signs people in with Facebook through AudienceKit and keeps track of the session.
  *
- * Facebook Login runs in the activity (it needs an activity result); its token comes here, and the
- * SDK exchanges it for an AudienceKit session kept in the Android Keystore. When the API ends the
- * session, the app goes back to sign-in.
+ * Sign-in opens Facebook's Login for Business dialog in a Custom Tab (see [FacebookLoginDialog]);
+ * the activity hands the redirect back here, and the SDK exchanges its code for an AudienceKit
+ * session kept in the Android Keystore. When the API ends the session, the app goes back to sign-in.
  */
 class SessionStore(
     private val context: Context,
     private val api: HotMessApi,
     private val audienceKit: AudienceKitClient,
+    private val brand: BrandStore,
     private val configuration: AppConfiguration,
     private val push: PushRegistrar,
     private val scope: CoroutineScope,
@@ -60,9 +60,8 @@ class SessionStore(
     /** The session token, needed outside the SDK only for the chat websocket. */
     val sessionToken: String? get() = audienceKit.sessionToken()
 
-    /** Whether this build can sign in: Facebook needs a client token (see app/build.gradle.kts). */
-    val isFacebookConfigured: Boolean
-        get() = context.getString(social.hotmess.android.R.string.facebook_client_token).isNotBlank()
+    /** The dialog the Custom Tab is showing, and the state its redirect must carry. */
+    private var pendingLogin: Pair<FacebookLoginDialog, String>? = null
 
     init {
         scope.launch {
@@ -88,7 +87,6 @@ class SessionStore(
     }
 
     private suspend fun restore() {
-        // A stored session is enough on its own; only fall back to Facebook when there isn't one.
         if (audienceKit.isSignedIn) {
             try {
                 _user.value = api.me()
@@ -105,21 +103,49 @@ class SessionStore(
             }
         }
 
-        // Without a client token the Facebook SDK never initializes, and AccessToken throws.
-        val facebookToken = if (isFacebookConfigured) {
-            AccessToken.getCurrentAccessToken()?.takeUnless { it.isExpired }?.token
-        } else {
-            null
-        }
-        if (facebookToken == null) {
-            _state.value = AuthState.SignedOut
-            return
-        }
-        exchange(facebookToken)
+        _state.value = AuthState.SignedOut
     }
 
-    fun beginSignIn() {
+    /**
+     * Starts sign-in and returns the Facebook dialog to open, or null when there's no Facebook app
+     * to sign in with. The audience's branding names the app and its Login for Business
+     * configuration; the build's own app is the fallback, asking for permissions instead.
+     */
+    suspend fun beginSignIn(): String? {
         _state.value = AuthState.SigningIn
+        val branding = brand.branding.value ?: brand.refresh()
+        val appId = configuration.signInFacebookAppId(branding?.facebookAppId)
+        if (appId.isBlank()) {
+            signInFailed("Facebook sign-in isn't set up for this build yet.")
+            return null
+        }
+        val configId = branding?.facebookLoginConfigId?.takeIf { branding.facebookAppId == appId }
+        val dialog = FacebookLoginDialog(appId, configId, PERMISSIONS, context.packageName)
+        val state = java.util.UUID.randomUUID().toString()
+        pendingLogin = dialog to state
+        return dialog.url(state)
+    }
+
+    /** Takes the dialog's redirect, if [url] is one. */
+    fun handleRedirect(url: String): Boolean {
+        val (dialog, state) = pendingLogin?.takeIf { it.first.isRedirect(url) } ?: return false
+        pendingLogin = null
+        when (val result = dialog.result(url, state)) {
+            is FacebookLoginDialog.Result.Code -> scope.launch { exchange(result.code, dialog) }
+            FacebookLoginDialog.Result.Cancelled -> signInCancelled()
+            is FacebookLoginDialog.Result.Failed -> {
+                Log.e("HotMess", "Facebook sign-in failed: ${result.reason}")
+                signInFailed(result.reason)
+            }
+        }
+        return true
+    }
+
+    /** The app came back without a redirect: the Custom Tab was closed. */
+    fun signInAbandoned() {
+        if (pendingLogin == null || _state.value != AuthState.SigningIn) return
+        pendingLogin = null
+        signInCancelled()
     }
 
     fun signInCancelled() {
@@ -130,15 +156,16 @@ class SessionStore(
         _state.value = AuthState.Failed(message)
     }
 
-    /** Exchanges the token Facebook Login returned for an AudienceKit session. */
-    fun completeSignIn(facebookToken: String) {
-        scope.launch { exchange(facebookToken) }
-    }
-
-    private suspend fun exchange(facebookToken: String) {
+    /** Exchanges the dialog's code for an AudienceKit session, with the app the dialog was for. */
+    private suspend fun exchange(code: String, dialog: FacebookLoginDialog) {
         _state.value = AuthState.SigningIn
         try {
-            val result = audienceKit.signIn(facebookToken, DeviceDescription.current(context))
+            val result = audienceKit.signIn(
+                facebookCode = code,
+                redirectUri = dialog.redirectUri,
+                device = DeviceDescription.current(context),
+                facebookAppId = dialog.appId,
+            )
             val id = social.hotmess.core.RecordId.normalize(result.user.id)
             _user.value = id?.let { User(it, result.user.name.orEmpty()) }
             if (_user.value?.name.isNullOrBlank()) _user.value = runCatching { api.me() }.getOrNull() ?: _user.value
@@ -146,7 +173,7 @@ class SessionStore(
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            Log.w("HotMess", "Sign-in failed: ${e.message}")
+            Log.e("HotMess", "Sign-in failed: ${e.message}")
             _state.value = AuthState.Failed(
                 when (e) {
                     is com.audiencekit.AudienceKitException.SignInRejected ->
@@ -164,7 +191,6 @@ class SessionStore(
     }
 
     fun signOut() {
-        if (isFacebookConfigured) LoginManager.getInstance().logOut()
         audienceKit.signOut()
         _user.value = null
         _state.value = AuthState.SignedOut
@@ -184,5 +210,8 @@ class SessionStore(
     companion object {
         /** The app's own preferences (the remembered locale and the like). */
         const val PREFERENCES = "social.hotmess.preferences"
+
+        /** What a Consumer-type Facebook app is asked for; Login for Business sets its own. */
+        private val PERMISSIONS = listOf("public_profile", "email", "user_friends")
     }
 }
