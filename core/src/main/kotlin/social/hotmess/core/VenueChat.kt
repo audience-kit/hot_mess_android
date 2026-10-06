@@ -29,9 +29,12 @@ data class VenueMessage(
 }
 
 /**
- * The Action Cable protocol behind a venue's chat room: the `RealtimeChannel` subscription for
- * `chat_<venue id>`, chat lines in and out, and the server's own frames. Kept apart from the socket
- * so it can be tested.
+ * The Action Cable protocol behind a venue's chat room: the `RealtimeChannel` subscription for a
+ * venue, chat lines in and out, and the server's own frames. Kept apart from the socket so it can be
+ * tested.
+ *
+ * The room is only open to people at the venue: the server rejects the subscription otherwise, and
+ * sends `{"type":"left"}` when someone's presence lapses. It adds the sender to each line itself.
  */
 object ChatProtocol {
     private const val CHANNEL = "RealtimeChannel"
@@ -42,17 +45,23 @@ object ChatProtocol {
         data object Connected : Frame
         data class Message(val message: VenueMessage) : Frame
         data object Disconnected : Frame
+
+        /** The server won't let this person in: they haven't reported a position at the venue lately. */
+        data object Rejected : Frame
+
+        /** They were in the room, but they've left the venue. */
+        data object Left : Frame
     }
 
     /** Action Cable names a subscription by a JSON *string*, not an object. */
     fun identifier(venueId: String): String =
-        JsonObject(mapOf("channel" to JsonPrimitive(CHANNEL), "venue_id" to JsonPrimitive("chat_${venueId.uppercase()}"))).toString()
+        JsonObject(mapOf("channel" to JsonPrimitive(CHANNEL), "venue_id" to JsonPrimitive(venueId.lowercase()))).toString()
 
     fun subscribe(venueId: String): String =
         json.encodeToString(OutgoingFrame.serializer(), OutgoingFrame("subscribe", identifier(venueId), null))
 
-    fun message(venueId: String, body: String, userId: String, avatarUrl: String?): String {
-        val line = json.encodeToString(OutgoingMessage.serializer(), OutgoingMessage(message = body, userId = userId.uppercase(), avatarUrl = avatarUrl))
+    fun message(venueId: String, body: String): String {
+        val line = json.encodeToString(OutgoingMessage.serializer(), OutgoingMessage(message = body))
         return json.encodeToString(OutgoingFrame.serializer(), OutgoingFrame("message", identifier(venueId), line))
     }
 
@@ -62,10 +71,12 @@ object ChatProtocol {
         return when ((frame["type"] as? JsonPrimitive)?.contentOrNull) {
             "welcome", "confirm_subscription" -> Frame.Connected
             "disconnect" -> Frame.Disconnected
+            "reject_subscription" -> Frame.Rejected
             null -> {
                 // A frame with no type and a message object is a chat line. Action Cable reuses
                 // `message` for its ping counter, so anything else there is ignored.
                 val message = frame["message"] as? JsonObject ?: return null
+                if ((message["type"] as? JsonPrimitive)?.contentOrNull == "left") return Frame.Left
                 val payload = runCatching { json.decodeFromJsonElement(IncomingMessage.serializer(), message) }.getOrNull()
                     ?: return null
                 Frame.Message(VenueMessage(body = payload.message, userId = payload.userId, avatarUrl = payload.avatarUrl))
@@ -86,12 +97,7 @@ object ChatProtocol {
     private data class OutgoingFrame(val command: String, val identifier: String, val data: String?)
 
     @Serializable
-    private data class OutgoingMessage(
-        val type: String = "outgoing",
-        val message: String,
-        @SerialName("user_id") val userId: String,
-        @SerialName("avatar_url") val avatarUrl: String?,
-    )
+    private data class OutgoingMessage(val message: String)
 
     @Serializable
     private data class IncomingMessage(
@@ -112,6 +118,8 @@ class VenueChatConnection(
         data object Connected : Event
         data class Received(val message: VenueMessage) : Event
         data class Disconnected(val reason: String?) : Event
+        data object Rejected : Event
+        data object Left : Event
     }
 
     @Volatile private var socket: WebSocket? = null
@@ -131,6 +139,8 @@ class VenueChatConnection(
                 when (val frame = ChatProtocol.parse(text)) {
                     ChatProtocol.Frame.Connected -> trySend(Event.Connected)
                     ChatProtocol.Frame.Disconnected -> trySend(Event.Disconnected(null))
+                    ChatProtocol.Frame.Rejected -> trySend(Event.Rejected)
+                    ChatProtocol.Frame.Left -> trySend(Event.Left)
                     is ChatProtocol.Frame.Message -> trySend(Event.Received(frame.message))
                     null -> Unit
                 }
@@ -155,6 +165,5 @@ class VenueChatConnection(
     }
 
     /** Sends a line. The server echoes it back, so the caller doesn't add it locally. */
-    fun send(body: String, userId: String, avatarUrl: String?): Boolean =
-        socket?.send(ChatProtocol.message(venueId, body, userId, avatarUrl)) ?: false
+    fun send(body: String): Boolean = socket?.send(ChatProtocol.message(venueId, body)) ?: false
 }

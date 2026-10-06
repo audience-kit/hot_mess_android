@@ -9,6 +9,8 @@ import kotlinx.coroutines.test.runTest
 import java.time.Instant
 import java.time.ZoneId
 import java.util.Locale
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -139,7 +141,7 @@ class ChatProtocolTest {
     fun subscribesWithAStringIdentifier() {
         val frame = HotMessApi.json.parseToJsonElement(ChatProtocol.subscribe(venue)).toString()
         assertTrue(frame.contains("\"command\":\"subscribe\""))
-        assertTrue(frame.contains("chat_B0F8B66A-E636-495D-9475-0F5317EA08E0"))
+        assertTrue(frame.contains("venue_id\\\":\\\"$venue"), frame)
         assertTrue(frame.contains("\"identifier\":\"{"), "the identifier is a JSON string")
     }
 
@@ -154,6 +156,18 @@ class ChatProtocolTest {
         val message = assertIs<ChatProtocol.Frame.Message>(line).message
         assertEquals("hi", message.body)
         assertTrue(message.isOutgoing("u-1"))
+    }
+
+    @Test
+    fun readsBeingTurnedAwayAndLeaving() {
+        assertEquals(ChatProtocol.Frame.Rejected, ChatProtocol.parse("""{"type":"reject_subscription","identifier":"x"}"""))
+        assertEquals(ChatProtocol.Frame.Left, ChatProtocol.parse("""{"identifier":"x","message":{"type":"left"}}"""))
+    }
+
+    @Test
+    fun sendsOnlyTheText() {
+        val frame = HotMessApi.json.parseToJsonElement(ChatProtocol.message(venue, "hi")).jsonObject
+        assertEquals("""{"message":"hi"}""", frame["data"]!!.jsonPrimitive.content)
     }
 
     @Test
