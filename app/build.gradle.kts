@@ -131,6 +131,8 @@ dependencies {
     implementation(libs.coil.compose)
     implementation(libs.coil.network.okhttp)
     implementation(libs.facebook.login)
+    // Facebook Login brings an old Fragment; the Activity Result API needs 1.3 or later.
+    implementation(libs.androidx.fragment)
     implementation(libs.maplibre)
     implementation(libs.firebase.messaging)
 
