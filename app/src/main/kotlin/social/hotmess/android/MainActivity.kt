@@ -3,6 +3,7 @@ package social.hotmess.android
 import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.CompositionLocalProvider
@@ -27,20 +28,26 @@ class MainActivity : ComponentActivity() {
     private val links = Channel<AppRoute>(Channel.CONFLATED)
     private val linkFlow = links.receiveAsFlow()
 
-    private val facebookLogin = registerForActivityResult(
-        LoginManager.getInstance().createLogInActivityResultContract(callbackManager),
-    ) { /* Delivered to the callback registered in onCreate. */ }
+    // The Facebook SDK only initializes when the build has a client token, and LoginManager throws
+    // until it has, so without one there's no launcher and sign-in says it isn't set up.
+    private var facebookLogin: ActivityResultLauncher<Collection<String>>? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
 
-        LoginManager.getInstance().registerCallback(callbackManager, object : FacebookCallback<LoginResult> {
-            override fun onSuccess(result: LoginResult) = graph.session.completeSignIn(result.accessToken.token)
-            override fun onCancel() = graph.session.signInCancelled()
-            override fun onError(error: FacebookException) =
-                graph.session.signInFailed("Facebook couldn't sign you in. Try again in a moment.")
-        })
+        if (graph.session.isFacebookConfigured) {
+            val loginManager = LoginManager.getInstance()
+            facebookLogin = registerForActivityResult(
+                loginManager.createLogInActivityResultContract(callbackManager),
+            ) { /* Delivered to the callback below. */ }
+            loginManager.registerCallback(callbackManager, object : FacebookCallback<LoginResult> {
+                override fun onSuccess(result: LoginResult) = graph.session.completeSignIn(result.accessToken.token)
+                override fun onCancel() = graph.session.signInCancelled()
+                override fun onError(error: FacebookException) =
+                    graph.session.signInFailed("Facebook couldn't sign you in. Try again in a moment.")
+            })
+        }
 
         if (savedInstanceState == null) handle(intent)
 
@@ -60,12 +67,12 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
-        LoginManager.getInstance().unregisterCallback(callbackManager)
+        if (facebookLogin != null) LoginManager.getInstance().unregisterCallback(callbackManager)
         super.onDestroy()
     }
 
     private fun signIn() {
-        if (!graph.session.isFacebookConfigured) {
+        val facebookLogin = facebookLogin ?: run {
             graph.session.signInFailed("Facebook sign-in isn't set up for this build yet.")
             return
         }
