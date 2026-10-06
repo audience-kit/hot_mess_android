@@ -48,7 +48,6 @@ fun MeScreen() {
     val user by graph.session.user.collectAsStateWithLifecycle()
     val locale by graph.location.locale.collectAsStateWithLifecycle()
     val access by graph.location.access.collectAsStateWithLifecycle()
-    val branding by graph.brand.branding.collectAsStateWithLifecycle()
     var confirm by remember { mutableStateOf<Confirm?>(null) }
     val configuration = graph.configuration
 
@@ -102,7 +101,7 @@ fun MeScreen() {
                 Section("About") {
                     InfoRow("Version", "${configuration.versionName} (${configuration.versionCode})")
                     RowDivider()
-                    InfoRow("Facebook", configuration.facebookEnvironment(configuration.signInFacebookAppId(branding?.facebookAppId)))
+                    InfoRow("Facebook", configuration.facebookEnvironment)
                     RowDivider()
                     InfoRow("Server", configuration.baseUrl.removePrefix("https://").removePrefix("http://"))
                 }

@@ -9,11 +9,9 @@ import androidx.browser.customtabs.CustomTabsIntent
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.core.net.toUri
-import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.receiveAsFlow
-import kotlinx.coroutines.launch
 import social.hotmess.android.ui.HotMessApp
 import social.hotmess.android.ui.LocalAppGraph
 import social.hotmess.android.ui.theme.HotMessTheme
@@ -53,10 +51,8 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun signIn() {
-        lifecycleScope.launch {
-            val url = graph.session.beginSignIn() ?: return@launch
-            CustomTabsIntent.Builder().build().launchUrl(this@MainActivity, url.toUri())
-        }
+        val url = graph.session.beginSignIn() ?: return
+        CustomTabsIntent.Builder().build().launchUrl(this, url.toUri())
     }
 
     private fun handle(intent: Intent?) {

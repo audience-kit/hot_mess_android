@@ -8,39 +8,28 @@ import kotlin.test.assertTrue
 
 class FacebookLoginDialogTest {
     private val dialog = FacebookLoginDialog(
-        appId = "713525445368431",
-        configId = "4085560021745660",
-        permissions = listOf("public_profile", "email"),
+        appId = "1168782378316790",
+        permissions = listOf("public_profile", "email", "user_friends"),
         packageName = "social.hotmess.android.staging",
     )
 
     private fun query(url: String) = URI(url).query.split('&').associate { it.substringBefore('=') to it.substringAfter('=') }
 
     @Test
-    fun opensTheDialogWithTheLoginForBusinessConfiguration() {
+    fun opensTheDialogAskingForThePermissions() {
         val url = dialog.url(state = "s-1")
 
         assertTrue(url.startsWith("https://www.facebook.com/v21.0/dialog/oauth?"))
         assertEquals(
             mapOf(
-                "client_id" to "713525445368431",
+                "client_id" to "1168782378316790",
                 "redirect_uri" to "fbconnect://cct.social.hotmess.android.staging",
                 "response_type" to "code",
                 "state" to "s-1",
-                "config_id" to "4085560021745660",
+                "scope" to "public_profile,email,user_friends",
             ),
             query(url),
         )
-    }
-
-    @Test
-    fun asksForPermissionsWithoutAConfiguration() {
-        val consumer = FacebookLoginDialog("842337999153841", null, listOf("public_profile", "email"), "social.hotmess.android")
-
-        val query = query(consumer.url("s-1"))
-
-        assertEquals("public_profile,email", query["scope"])
-        assertFalse("config_id" in query)
     }
 
     @Test

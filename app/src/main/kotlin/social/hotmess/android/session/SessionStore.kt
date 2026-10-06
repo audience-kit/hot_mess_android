@@ -40,7 +40,6 @@ class SessionStore(
     private val context: Context,
     private val api: HotMessApi,
     private val audienceKit: AudienceKitClient,
-    private val brand: BrandStore,
     private val configuration: AppConfiguration,
     private val push: PushRegistrar,
     private val scope: CoroutineScope,
@@ -107,20 +106,17 @@ class SessionStore(
     }
 
     /**
-     * Starts sign-in and returns the Facebook dialog to open, or null when there's no Facebook app
-     * to sign in with. The audience's branding names the app and its Login for Business
-     * configuration; the build's own app is the fallback, asking for permissions instead.
+     * Starts sign-in and returns the Facebook dialog to open, or null when the build has no Facebook
+     * app. Hot Mess is a consumer app, so this is classic Facebook Login on the build's own app.
      */
-    suspend fun beginSignIn(): String? {
+    fun beginSignIn(): String? {
         _state.value = AuthState.SigningIn
-        val branding = brand.branding.value ?: brand.refresh()
-        val appId = configuration.signInFacebookAppId(branding?.facebookAppId)
+        val appId = configuration.facebookAppId
         if (appId.isBlank()) {
             signInFailed("Facebook sign-in isn't set up for this build yet.")
             return null
         }
-        val configId = branding?.facebookLoginConfigId?.takeIf { branding.facebookAppId == appId }
-        val dialog = FacebookLoginDialog(appId, configId, PERMISSIONS, context.packageName)
+        val dialog = FacebookLoginDialog(appId, PERMISSIONS, context.packageName)
         val state = java.util.UUID.randomUUID().toString()
         pendingLogin = dialog to state
         return dialog.url(state)
@@ -211,7 +207,7 @@ class SessionStore(
         /** The app's own preferences (the remembered locale and the like). */
         const val PREFERENCES = "social.hotmess.preferences"
 
-        /** What a Consumer-type Facebook app is asked for; Login for Business sets its own. */
+        /** What sign-in asks Facebook for. */
         private val PERMISSIONS = listOf("public_profile", "email", "user_friends")
     }
 }
