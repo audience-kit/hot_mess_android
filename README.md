@@ -36,11 +36,11 @@ AudienceKit Kotlin SDK, styled with the AudienceKit design system's `hot_mess` p
 | `staging` | `https://api.audiencekit.com` | 915436455177328 | `social.hotmess.android.staging` |
 | `release` | `https://api.audiencekit.com` | 1168782378316790 | `social.hotmess.android` |
 
-Sign-in uses the Facebook app the audience's branding names (with its Login for Business
-`config_id`), falling back to the build's app. It opens Facebook's OAuth dialog in a Custom Tab, which
-redirects to `fbconnect://cct.<application id>` with a code that the API exchanges. That Facebook app
-needs an Android platform listing this app's package names and key hashes, and the redirect has to
-be accepted as a Valid OAuth Redirect URI.
+Hot Mess is a consumer app: sign-in is classic Facebook Login on the build's Facebook app, asking
+for `public_profile`, `email` and `user_friends`, like the iOS app. It opens Facebook's OAuth dialog
+in a Custom Tab, which redirects to `fbconnect://cct.<application id>` with a code that the API
+exchanges. Each Facebook app needs an Android platform listing this app's package names and key
+hashes, and the redirect has to be accepted as a Valid OAuth Redirect URI.
 
 ## Facebook sign-in test
 

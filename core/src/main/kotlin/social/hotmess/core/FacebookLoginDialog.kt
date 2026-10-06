@@ -5,17 +5,14 @@ import java.net.URLDecoder
 import java.net.URLEncoder
 
 /**
- * Facebook's OAuth dialog, opened in a Custom Tab, which returns a code for the API to exchange.
+ * Facebook's OAuth dialog (classic Facebook Login), opened in a Custom Tab, which returns a code for
+ * the API to exchange, like the iOS app's web login.
  *
- * The Facebook Android SDK can't do this for a Business-type Facebook app: such an app only accepts
- * a dialog opened with its Login for Business `config_id`, which the SDK never sends. The redirect
- * goes to `fbconnect://cct.<package name>`, the one the SDK's own Custom Tab login uses, which the
- * Facebook app's Android platform must list.
+ * The redirect goes to `fbconnect://cct.<package name>`, the one the Facebook Android SDK's own
+ * Custom Tab login uses, which the Facebook app's Android platform must list.
  */
 class FacebookLoginDialog(
     val appId: String,
-    /** The Login for Business configuration. Without one the dialog asks for [permissions] instead. */
-    private val configId: String?,
     private val permissions: List<String>,
     packageName: String,
 ) {
@@ -28,7 +25,7 @@ class FacebookLoginDialog(
             add("redirect_uri" to redirectUri)
             add("response_type" to "code")
             add("state" to state)
-            if (configId != null) add("config_id" to configId) else add("scope" to permissions.joinToString(","))
+            add("scope" to permissions.joinToString(","))
         }
         return "https://www.facebook.com/v21.0/dialog/oauth?" +
             query.joinToString("&") { (name, value) -> "$name=${URLEncoder.encode(value, Charsets.UTF_8)}" }

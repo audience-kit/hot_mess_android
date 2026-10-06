@@ -16,18 +16,14 @@ class BrandStore(private val audienceKit: AudienceKitClient, private val scope: 
     val branding: StateFlow<Branding?> = _branding.asStateFlow()
 
     fun load() {
-        scope.launch { refresh() }
-    }
-
-    /** Loads branding now, for sign-in, which needs the audience's Facebook app. */
-    suspend fun refresh(): Branding? {
-        try {
-            _branding.value = audienceKit.branding()
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            Log.w("HotMess", "Branding unavailable: ${e.message}")
+        scope.launch {
+            try {
+                _branding.value = audienceKit.branding()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.w("HotMess", "Branding unavailable: ${e.message}")
+            }
         }
-        return _branding.value
     }
 }
