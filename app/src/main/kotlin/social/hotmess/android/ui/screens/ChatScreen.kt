@@ -49,6 +49,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.takeWhile
 import kotlinx.coroutines.launch
 import social.hotmess.android.AppGraph
 import social.hotmess.android.ui.LocalAppGraph
@@ -65,9 +67,13 @@ import social.hotmess.core.ChatProtocol
 import social.hotmess.core.VenueChatConnection
 import social.hotmess.core.VenueMessage
 
-/** The live chat room for one venue, kept across configuration changes. */
+/**
+ * The live chat room for one venue, kept across configuration changes. Only people at the venue get
+ * in, so the position is reported when the room opens and every few minutes while it's open.
+ */
 class VenueChatModel(private val graph: AppGraph, private val venueId: String) : ViewModel() {
-    enum class Status { CONNECTING, CONNECTED, OFFLINE }
+    /** AWAY: the server says this person isn't at the venue, or has left it. */
+    enum class Status { CONNECTING, CONNECTED, OFFLINE, AWAY }
 
     private val _messages = MutableStateFlow<List<VenueMessage>>(emptyList())
     val messages: StateFlow<List<VenueMessage>> = _messages.asStateFlow()
@@ -77,6 +83,7 @@ class VenueChatModel(private val graph: AppGraph, private val venueId: String) :
 
     private var connection: VenueChatConnection? = null
     private var job: Job? = null
+    private var heartbeat: Job? = null
 
     /** Connects while the screen is showing, reconnecting after a drop. */
     fun connect() {
@@ -85,23 +92,44 @@ class VenueChatModel(private val graph: AppGraph, private val venueId: String) :
             _status.value = Status.OFFLINE
             return
         }
+        if (heartbeat?.isActive != true) {
+            heartbeat = viewModelScope.launch {
+                while (true) {
+                    delay(HEARTBEAT_MS)
+                    graph.location.reportAgain()
+                }
+            }
+        }
         job = viewModelScope.launch {
+            _status.value = Status.CONNECTING
+            // The server checks for a recent position at the venue before letting anyone in.
+            graph.location.reportAgain()
             var backoff = 1_000L
             while (true) {
                 _status.value = Status.CONNECTING
                 val current = VenueChatConnection(venueId, url, graph.session.sessionToken)
                 connection = current
-                current.events().collect { event ->
+                var away = false
+                current.events().takeWhile { event ->
                     when (event) {
                         VenueChatConnection.Event.Connected -> {
                             _status.value = Status.CONNECTED
                             backoff = 1_000L
                         }
-                        is VenueChatConnection.Event.Received -> _messages.value = _messages.value + event.message
+                        is VenueChatConnection.Event.Received -> _messages.value = _messages.value + event.message.let {
+                            it.copy(avatarUrl = it.avatarUrl ?: graph.configuration.avatarUrl(it.userId))
+                        }
                         is VenueChatConnection.Event.Disconnected -> _status.value = Status.OFFLINE
+                        VenueChatConnection.Event.Rejected, VenueChatConnection.Event.Left -> away = true
                     }
-                }
+                    !away
+                }.collect()
                 connection = null
+                if (away) {
+                    // Reconnecting won't help until they're back; "Try again" reconnects.
+                    _status.value = Status.AWAY
+                    return@launch
+                }
                 _status.value = Status.OFFLINE
                 delay(backoff)
                 backoff = (backoff * 2).coerceAtMost(30_000L)
@@ -112,17 +140,22 @@ class VenueChatModel(private val graph: AppGraph, private val venueId: String) :
     fun disconnect() {
         job?.cancel()
         job = null
+        heartbeat?.cancel()
+        heartbeat = null
         connection = null
     }
 
     fun send(body: String): Boolean {
         val text = body.trim()
-        val userId = graph.session.user.value?.id ?: return false
         if (text.isEmpty()) return false
-        return connection?.send(text, userId, graph.configuration.avatarUrl(userId)) ?: false
+        return connection?.send(text) ?: false
     }
 
     override fun onCleared() = disconnect()
+
+    private companion object {
+        const val HEARTBEAT_MS = 4 * 60 * 1000L
+    }
 }
 
 @Composable
@@ -147,6 +180,17 @@ fun VenueChatScreen(venueId: String, venueName: String, navigator: Navigator) {
 
     ScreenScaffold(title = venueName, onBack = navigator::back) {
         Column(Modifier.fillMaxSize().imePadding().navigationBarsPadding()) {
+            if (status == VenueChatModel.Status.AWAY) {
+                Box(Modifier.weight(1f).fillMaxWidth()) {
+                    Message(
+                        Icons.AutoMirrored.Rounded.Chat,
+                        "Only for people at $venueName",
+                        "The room opens when you're there. Your location has to be on so Hot Mess can tell.",
+                        action = "Try again" to { model.disconnect(); model.connect() },
+                    )
+                }
+                return@Column
+            }
             if (status != VenueChatModel.Status.CONNECTED) {
                 Text(
                     if (status == VenueChatModel.Status.CONNECTING) "Connecting…" else "Offline. Reconnecting…",

@@ -132,6 +132,9 @@ class LocationProvider(
         scope.launch { reportPosition() }
     }
 
+    /** Reports the latest position again, so the API knows the device is still where it was. */
+    suspend fun reportAgain() = reportPosition()
+
     private suspend fun reportPosition() {
         val position = _coordinates.value ?: return
         try {
