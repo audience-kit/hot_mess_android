@@ -60,9 +60,10 @@ fun LoginScreen(onSignIn: () -> Unit) {
 
     HotMessTheme(branding = branding?.theme, darkTheme = true) {
         Box(Modifier.fillMaxSize().background(Color.Black)) {
+            // The backdrop carries the wordmark, so the name isn't repeated as text.
             Image(
                 painterResource(R.drawable.login_background),
-                contentDescription = null,
+                contentDescription = branding?.audience?.name ?: "Hot Mess",
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize(),
             )
@@ -75,7 +76,6 @@ fun LoginScreen(onSignIn: () -> Unit) {
                 verticalArrangement = Arrangement.Bottom,
             ) {
                 Column(Modifier.widthIn(max = 420.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(Space.s4)) {
-                    Text(branding?.audience?.name ?: "Hot Mess", style = HotMessType.display, color = Color.White, textAlign = TextAlign.Center)
                     Text(
                         branding?.theme?.tagline ?: "Queer nights out, all in one place.",
                         style = HotMessType.heading,

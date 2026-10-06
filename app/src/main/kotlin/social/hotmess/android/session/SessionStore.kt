@@ -105,7 +105,12 @@ class SessionStore(
             }
         }
 
-        val facebookToken = AccessToken.getCurrentAccessToken()?.takeUnless { it.isExpired }?.token
+        // Without a client token the Facebook SDK never initializes, and AccessToken throws.
+        val facebookToken = if (isFacebookConfigured) {
+            AccessToken.getCurrentAccessToken()?.takeUnless { it.isExpired }?.token
+        } else {
+            null
+        }
         if (facebookToken == null) {
             _state.value = AuthState.SignedOut
             return
@@ -159,7 +164,7 @@ class SessionStore(
     }
 
     fun signOut() {
-        LoginManager.getInstance().logOut()
+        if (isFacebookConfigured) LoginManager.getInstance().logOut()
         audienceKit.signOut()
         _user.value = null
         _state.value = AuthState.SignedOut

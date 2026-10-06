@@ -47,6 +47,19 @@ val audienceKitSdk = listOfNotNull(
         "The AudienceKit Kotlin SDK wasn't found. Clone audience-kit/audience-kit next to this " +
             "repository, or set audiencekit.dir in local.properties.",
     )
+
+// The SDK build only includes :audiencekit-android (and AGP only finds the Android SDK) through
+// ANDROID_HOME or its own local.properties, so pass on an sdk.dir that's only set here.
+localProperties.getProperty("sdk.dir")?.let { sdkDir ->
+    val sdkLocalProperties = audienceKitSdk.resolve("local.properties")
+    val existing = java.util.Properties().apply {
+        sdkLocalProperties.takeIf { it.exists() }?.inputStream()?.use(::load)
+    }
+    if (existing.getProperty("sdk.dir") == null) {
+        existing.setProperty("sdk.dir", sdkDir)
+        sdkLocalProperties.outputStream().use { existing.store(it, "sdk.dir from hot_mess_android") }
+    }
+}
 includeBuild(audienceKitSdk)
 
 // The app's logic: models, the GraphQL documents, chat and formatting. Plain Kotlin/JVM, so its
