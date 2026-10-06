@@ -53,8 +53,10 @@ connected test run, it uninstalls the app when it finishes.
 
 ## CI
 
-`.github/workflows/build.yml` checks out audience-kit beside the app, so the repository needs an
-`AUDIENCE_KIT_TOKEN` secret with read access to audience-kit/audience-kit.
+`.github/workflows/build.yml` checks out audience-kit beside the app. audience-kit is private, so
+the repository has an `AUDIENCE_KIT_SSH_KEY` secret: the private half of a read-only deploy key on
+audience-kit/audience-kit ("hot_mess_android CI (read-only)"). An `AUDIENCE_KIT_TOKEN` with read
+access works too.
 
 ## Credits
 
