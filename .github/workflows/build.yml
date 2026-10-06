@@ -37,6 +37,9 @@ jobs:
         with:
           distribution: temurin
           java-version: 17
+      # The runner image doesn't always come with an Android SDK, and without one (no ANDROID_HOME)
+      # settings.gradle.kts leaves the app out. AGP downloads the platforms the build needs.
+      - uses: android-actions/setup-android@v3
       - uses: gradle/actions/setup-gradle@v5
       - name: Build and run unit tests
         run: ./gradlew :core:test assembleDebug testDebugUnitTest
