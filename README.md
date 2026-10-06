@@ -42,6 +42,15 @@ redirects to `fbconnect://cct.<application id>` with a code that the API exchang
 needs an Android platform listing this app's package names and key hashes, and the redirect has to
 be accepted as a Valid OAuth Redirect URI.
 
+## Facebook sign-in test
+
+`FacebookSignInTest` (`app/src/androidTest`) signs in on a connected phone as a Facebook test user of
+app 713525445368431 and checks the Me tab shows them. `scripts/facebook-signin-test.sh` loads
+`FB_TEST_ANDROID_EMAIL`, `FB_TEST_ANDROID_PASSWORD` and `FB_TEST_ANDROID_NAME` from
+`~/.config/audience-kit/fb_test_users.env` and runs it on the Staging build; without them it's
+skipped. Sign-in uses Chrome's Facebook cookies, so log out of facebook.com in Chrome first. Like any
+connected test run, it uninstalls the app when it finishes.
+
 ## CI
 
 `.github/workflows/build.yml` checks out audience-kit beside the app, so the repository needs an
