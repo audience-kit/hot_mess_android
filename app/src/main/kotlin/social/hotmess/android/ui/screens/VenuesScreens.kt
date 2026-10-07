@@ -79,6 +79,7 @@ import social.hotmess.android.ui.theme.tokens
 import social.hotmess.core.AppRoute
 import social.hotmess.core.Formatting
 import social.hotmess.core.PhotoTone
+import social.hotmess.core.PingPick
 import social.hotmess.core.Venue
 import social.hotmess.core.VenueOverview
 import social.hotmess.core.isIn
@@ -190,6 +191,13 @@ fun VenueScreen(id: String, navigator: Navigator) {
 
     LaunchedEffect(id) { loader.load(id) { graph.api.venueOverview(id) } }
 
+    val userId = rememberUserId()
+    var pingHere by rememberSaveable { mutableStateOf(false) }
+    val actions = rememberPingActions { ping ->
+        loader.update { overview -> overview.copy(friendPings = overview.friendPings.map { if (it.id == ping.id) ping else it }) }
+        graph.pingUpdated(ping.id)
+    }
+
     val venue = state.valueOrNull?.venue
     val listState = rememberLazyListState()
     val scrolled by rememberHeroCollapsed(listState)
@@ -227,6 +235,15 @@ fun VenueScreen(id: String, navigator: Navigator) {
                     }
                 },
             ) {
+                item {
+                    PingStripSection(
+                        pings = overview.friendPings,
+                        pickOf = { it.pickForVenue(loaded.id) },
+                        userId = userId,
+                        actions = actions,
+                        onPingHere = { pingHere = true },
+                    )
+                }
                 item {
                     DetailSection("About") {
                         loaded.description?.takeIf { it.isNotBlank() }?.let {
@@ -293,6 +310,15 @@ fun VenueScreen(id: String, navigator: Navigator) {
                 }
             }
         }
+    }
+
+    val here = venue
+    if (pingHere && here != null) {
+        PingSheet(
+            preselect = PingPick.VenuePick(here),
+            onDismiss = { pingHere = false },
+            onSent = { graph.pingUpdated(it.id) },
+        )
     }
 }
 
