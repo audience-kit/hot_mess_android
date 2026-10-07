@@ -23,6 +23,10 @@ dependencyResolutionManagement {
             }
         }
         mavenCentral()
+        // Square's In-App Payments SDK, for Square venues' cover, is only published here.
+        maven("https://sdk.squareup.com/public/android") {
+            content { includeGroupByRegex("com\\.squareup\\.sdk.*") }
+        }
     }
 }
 

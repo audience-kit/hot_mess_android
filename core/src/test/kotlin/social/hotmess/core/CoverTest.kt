@@ -6,6 +6,7 @@ import com.audiencekit.AudienceKitClient
 import com.audiencekit.AudienceKitConfiguration
 import com.audiencekit.CoverCharge
 import com.audiencekit.CoverPass
+import com.audiencekit.CoverPurchase
 import com.audiencekit.HttpResponse
 import com.audiencekit.HttpTransport
 import com.audiencekit.InMemoryTokenStore
@@ -97,6 +98,44 @@ class CoverOfferTest {
         assertEquals(CoverAction.SHOW_PASS, CoverOffer.of(withPass)?.action)
         assertEquals(CoverAction.PRICE_ONLY, CoverOffer.of(event.copy(venue = null))?.action)
         assertNull(CoverOffer.of(event.copy(coverCharge = null)))
+    }
+}
+
+class CoverPaymentTest {
+    private val pending = paid.copy(status = AdmissionStatus.PENDING)
+    private val stripe = CoverPurchase(
+        admission = pending,
+        paymentIntentClientSecret = "pi_1_secret_2",
+        publishableKey = "pk_test_1",
+        stripeAccountId = "acct_1",
+    )
+    private val square = CoverPurchase(
+        admission = pending,
+        provider = "SQUARE",
+        squareApplicationId = "sq0idp-1",
+        squareLocationId = "L1",
+    )
+
+    @Test
+    fun stripeVenuesPayOnThePaymentSheet() {
+        assertEquals(CoverPayment.Stripe(paid.id, "pi_1_secret_2", "pk_test_1", "acct_1"), CoverPayment.of(stripe))
+        assertEquals(CoverPayment.Confirm(paid.id), CoverPayment.of(stripe.copy(paymentIntentClientSecret = null)))
+        assertTrue(CoverPayment.of(stripe.copy(publishableKey = null)) is CoverPayment.Unavailable)
+    }
+
+    @Test
+    fun squareVenuesPayWithCardEntry() {
+        assertTrue(square.isSquare)
+        assertFalse(square.isPaid, "a Square purchase has no client secret but still needs paying")
+        assertEquals(CoverPayment.Square(paid.id, "sq0idp-1", "L1"), CoverPayment.of(square))
+        assertTrue(CoverPayment.of(square.copy(squareApplicationId = null)) is CoverPayment.Unavailable)
+        assertTrue(CoverPayment.of(square.copy(squareApplicationId = " ")) is CoverPayment.Unavailable)
+    }
+
+    @Test
+    fun aPaidPassIsShownWhicheverTheProvider() {
+        assertEquals(CoverPayment.Paid(paid), CoverPayment.of(stripe.copy(admission = paid)))
+        assertEquals(CoverPayment.Paid(paid), CoverPayment.of(square.copy(admission = paid)))
     }
 }
 
@@ -222,6 +261,30 @@ class CoverApiTest {
 
         assertTrue(bodies.single().contains("venue { id coverCharge"))
         assertEquals(CoverAction.PAY, CoverOffer.of(event)?.action)
+    }
+
+    @Test
+    fun aSquareVenueSaysHowToPay() = runTest {
+        val (api, _) = api {
+            """{"data":{"buyCover":{"admission":{"id":"a-1","status":"PENDING","night":"2026-10-09","totalCents":1112},
+               "provider":"SQUARE","paymentIntentClientSecret":null,"publishableKey":null,"stripeAccountId":null,
+               "squareApplicationId":"sq0idp-1","squareLocationId":"L1"}}}"""
+        }
+        assertEquals(CoverPayment.Square("a-1", "sq0idp-1", "L1"), CoverPayment.of(api.buyCover("v-1")))
+    }
+
+    @Test
+    fun aSquareNonceIsSentWithPayCover() = runTest {
+        val (api, bodies) = api {
+            """{"data":{"payCover":{"admission":{"id":"a-1","status":"PAID","night":"2026-10-09","totalCents":1112,
+               "passSecret":"AAEC"}}}}"""
+        }
+        val admission = api.payCover("a-1", "cnon:card-nonce-ok")
+
+        assertTrue(bodies.single().contains("mutation PayCover"))
+        assertTrue(bodies.single().contains("cnon:card-nonce-ok"))
+        assertEquals(AdmissionStatus.PAID, admission.status)
+        assertTrue(admission.isPaid)
     }
 
     @Test

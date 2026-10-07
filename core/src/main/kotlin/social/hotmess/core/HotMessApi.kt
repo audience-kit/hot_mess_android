@@ -129,9 +129,17 @@ class HotMessApi(val client: AudienceKitClient) {
 
     /**
      * Starts paying tonight's cover at a venue: the pass, pending until paid, and what Stripe's payment
-     * sheet needs. Asking again the same night returns the same pass and payment.
+     * sheet or Square's card entry needs ([CoverPayment] says which). Asking again the same night returns
+     * the same pass and payment.
      */
     suspend fun buyCover(venueId: String): CoverPurchase = mutate { client.buyCover(venueId) }
+
+    /**
+     * Pays a Square venue's cover with the nonce Square's card entry made ([sourceId]). The pass comes back
+     * paid when Square took the payment.
+     */
+    suspend fun payCover(admissionId: String, sourceId: String, verificationToken: String? = null): Admission =
+        mutate { client.payCover(admissionId, sourceId, verificationToken) }
 
     /** Checks the payment with Stripe once the payment sheet finishes, so the pass works straight away. */
     suspend fun confirmCover(admissionId: String): Admission = mutate { client.confirmCover(admissionId) }

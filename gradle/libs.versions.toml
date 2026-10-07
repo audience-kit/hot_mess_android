@@ -17,6 +17,7 @@ browser = "1.8.0"
 maplibre = "13.6.1"
 firebase-messaging = "24.1.0"
 stripe = "23.22.0"
+square-in-app-payments = "1.7.0"
 zxing = "3.5.4"
 camerax = "1.4.2"
 junit = "4.13.2"
@@ -51,6 +52,7 @@ coil-network-okhttp = { module = "io.coil-kt.coil3:coil-network-okhttp", version
 maplibre = { module = "org.maplibre.gl:android-sdk-opengl", version.ref = "maplibre" }
 firebase-messaging = { module = "com.google.firebase:firebase-messaging", version.ref = "firebase-messaging" }
 stripe-android = { module = "com.stripe:stripe-android", version.ref = "stripe" }
+square-card-entry = { module = "com.squareup.sdk.in-app-payments:card-entry", version.ref = "square-in-app-payments" }
 zxing-core = { module = "com.google.zxing:core", version.ref = "zxing" }
 androidx-camera-camera2 = { module = "androidx.camera:camera-camera2", version.ref = "camerax" }
 androidx-camera-lifecycle = { module = "androidx.camera:camera-lifecycle", version.ref = "camerax" }
