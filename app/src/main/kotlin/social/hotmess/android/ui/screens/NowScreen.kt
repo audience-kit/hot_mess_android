@@ -48,6 +48,7 @@ import social.hotmess.android.ui.components.InfoRow
 import social.hotmess.android.ui.components.LoadStateView
 import social.hotmess.android.ui.components.VenueCard
 import social.hotmess.android.ui.components.cardSection
+import social.hotmess.android.ui.components.friendNames
 import social.hotmess.android.ui.components.rememberHeroCollapsed
 import social.hotmess.android.ui.openUrl
 import social.hotmess.android.ui.rememberLoader
@@ -174,7 +175,7 @@ internal fun rememberPeekMessages(lines: List<ChatLine>): List<ChatThreadMessage
     }
 }
 
-/** Friends who are at the venue too; tapping one opens Messenger. */
+/** Friends who are at the venue too, by their full names; tapping one opens Messenger. */
 @Composable
 private fun FriendsHere(friends: List<Friend>) {
     val configuration = LocalAppGraph.current.configuration
@@ -198,12 +199,14 @@ private fun FriendsHere(friends: List<Friend>) {
                         verticalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
                         Avatar(configuration.avatarUrl(friend.id), friend.name, size = Sizes.avatarLg)
+                        // Friends see each other's full names; two lines fit most, and longer ones
+                        // truncate at the end.
                         Text(
-                            friend.firstName,
+                            friend.name,
                             style = HotMessType.bodySmall,
                             color = tokens.ink,
                             textAlign = TextAlign.Center,
-                            maxLines = 1,
+                            maxLines = 2,
                             overflow = TextOverflow.Ellipsis,
                         )
                     }
@@ -215,14 +218,14 @@ private fun FriendsHere(friends: List<Friend>) {
 
 /**
  * Away from venues: the venues where friends have been lately, as venue cards with their faces top
- * left, how many top right, and their names under the venue's name.
+ * left, how many top right, and their full names (truncated to fit) under the venue's name.
  */
 private fun LazyListScope.whereFriendsAre(entries: List<FriendVenue>, navigator: Navigator) {
     cardSection("friend-venues", "Where your friends are", entries, key = { it.venue.id }) { entry ->
         VenueCard(
             entry.venue,
             onClick = { navigator.open(AppRoute.VenueDetail(entry.venue.id)) },
-            detail = entry.friends.joinToString(", ") { it.firstName },
+            detail = friendNames(entry.friends),
             pill = if (entry.friendCount == 1) "1 friend" else "${entry.friendCount} friends",
             corner = { FriendFaces(entry.friends) },
         )
