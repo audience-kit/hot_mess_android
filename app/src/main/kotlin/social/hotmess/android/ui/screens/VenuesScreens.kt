@@ -1,5 +1,8 @@
 package social.hotmess.android.ui.screens
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -7,11 +10,13 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Chat
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.rounded.OpenInNew
+import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.NearMe
 import androidx.compose.material.icons.rounded.LocationOff
 import androidx.compose.material.icons.rounded.MyLocation
 import androidx.compose.material.icons.rounded.Phone
 import androidx.compose.material.icons.rounded.Place
+import androidx.compose.material.icons.rounded.OpenInFull
 import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -21,8 +26,16 @@ import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -70,6 +83,7 @@ fun VenuesScreen(navigator: Navigator) {
     val state by loader.state.collectAsStateWithLifecycle()
     val refreshing by loader.isRefreshing.collectAsStateWithLifecycle()
     val localeId = locale?.id
+    var mapExpanded by rememberSaveable { mutableStateOf(false) }
 
     LaunchedEffect(localeId) { loader.load(localeId) { graph.api.venues(localeId) } }
 
@@ -80,11 +94,20 @@ fun VenuesScreen(navigator: Navigator) {
                     if (venues.any { it.coordinate != null }) {
                         item {
                             Card {
-                                VenueMap(
-                                    venues = venues,
-                                    onVenue = { navigator.open(AppRoute.VenueDetail(it)) },
-                                    modifier = Modifier.fillMaxWidth().height(220.dp).clip(Radius.lg),
-                                )
+                                Box {
+                                    VenueMap(
+                                        venues = venues,
+                                        onVenue = { navigator.open(AppRoute.VenueDetail(it)) },
+                                        onMapTap = { mapExpanded = true },
+                                        modifier = Modifier.fillMaxWidth().height(220.dp).clip(Radius.lg),
+                                    )
+                                    MapButton(
+                                        icon = Icons.Rounded.OpenInFull,
+                                        label = "Expand map",
+                                        onClick = { mapExpanded = true },
+                                        modifier = Modifier.align(Alignment.TopEnd),
+                                    )
+                                }
                             }
                         }
                     }
@@ -113,7 +136,48 @@ fun VenuesScreen(navigator: Navigator) {
                     }
                 }
             }
+            if (mapExpanded) {
+                FullScreenVenueMap(
+                    venues = venues,
+                    onVenue = {
+                        mapExpanded = false
+                        navigator.open(AppRoute.VenueDetail(it))
+                    },
+                    onClose = { mapExpanded = false },
+                )
+            }
         }
+    }
+}
+
+/** The venues map filling the screen. Back or the close button dismisses it. */
+@Composable
+private fun FullScreenVenueMap(venues: List<Venue>, onVenue: (String) -> Unit, onClose: () -> Unit) {
+    Dialog(onDismissRequest = onClose, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        Box(Modifier.fillMaxSize()) {
+            VenueMap(venues = venues, onVenue = onVenue, modifier = Modifier.fillMaxSize())
+            MapButton(
+                icon = Icons.Rounded.Close,
+                label = "Close map",
+                onClick = onClose,
+                modifier = Modifier.align(Alignment.TopEnd),
+            )
+        }
+    }
+}
+
+@Composable
+private fun MapButton(
+    icon: ImageVector,
+    label: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    IconButton(
+        onClick = onClick,
+        modifier = modifier.padding(8.dp).background(tokens.surfaceRaised, CircleShape),
+    ) {
+        Icon(icon, contentDescription = label, tint = tokens.ink)
     }
 }
 

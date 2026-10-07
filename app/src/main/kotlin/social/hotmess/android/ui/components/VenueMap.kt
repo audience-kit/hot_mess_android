@@ -32,14 +32,23 @@ private const val MAP_STYLE = "https://tiles.openfreemap.org/styles/liberty"
 private const val SOURCE = "venues"
 private const val LAYER = "venue-pins"
 
-/** A map of the venues with a pin each, framed to fit them. Tapping a pin opens the venue. */
+/**
+ * A map of the venues with a pin each, framed to fit them. Tapping a pin opens the venue;
+ * tapping anywhere else calls [onMapTap] when there is one.
+ */
 @Composable
-fun VenueMap(venues: List<Venue>, onVenue: (String) -> Unit, modifier: Modifier = Modifier) {
+fun VenueMap(
+    venues: List<Venue>,
+    onVenue: (String) -> Unit,
+    modifier: Modifier = Modifier,
+    onMapTap: (() -> Unit)? = null,
+) {
     val context = LocalContext.current
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     val accent = tokens.accent.toArgb()
     val stroke = tokens.surfaceRaised.toArgb()
     val currentOnVenue = rememberUpdatedState(onVenue)
+    val currentOnMapTap = rememberUpdatedState(onMapTap)
     val pins = venues.mapNotNull { venue -> venue.coordinate?.let { venue.id to LatLng(it.latitude, it.longitude) } }
 
     val mapView = remember {
@@ -87,8 +96,12 @@ fun VenueMap(venues: List<Venue>, onVenue: (String) -> Unit, modifier: Modifier 
                     map.addOnMapClickListener { latLng ->
                         val screen: PointF = map.projection.toScreenLocation(latLng)
                         val id = map.queryRenderedFeatures(screen, LAYER).firstOrNull()?.getStringProperty("id")
-                        if (id != null) currentOnVenue.value(id)
-                        id != null
+                        val onTap = currentOnMapTap.value
+                        when {
+                            id != null -> currentOnVenue.value(id)
+                            onTap != null -> onTap()
+                        }
+                        id != null || onTap != null
                     }
                     frame(map, pins.map { it.second })
                 }
