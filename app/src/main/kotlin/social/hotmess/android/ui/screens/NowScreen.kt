@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
@@ -52,6 +53,7 @@ import social.hotmess.android.ui.theme.tokens
 import social.hotmess.core.AppRoute
 import social.hotmess.core.ChatLine
 import social.hotmess.core.Friend
+import social.hotmess.core.FriendVenue
 import social.hotmess.core.Now
 import social.hotmess.core.Venue
 
@@ -81,6 +83,9 @@ fun NowScreen(navigator: Navigator) {
                     now.venue?.let { venue ->
                         item { SmallTalk(venue, navigator) }
                         item { FriendsHere(now.friends) }
+                    }
+                    if (now.venue == null && now.friendVenues.isNotEmpty()) {
+                        item { WhereFriendsAre(now.friendVenues, navigator) }
                     }
                     item {
                         Section("Events") {
@@ -177,6 +182,33 @@ private fun FriendsHere(friends: List<Friend>) {
                         Text(friend.firstName, style = HotMessType.caption, color = tokens.ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                 }
+            }
+        }
+    }
+}
+
+/** Away from venues: the venues where friends have been lately, with how many. */
+@Composable
+private fun WhereFriendsAre(entries: List<FriendVenue>, navigator: Navigator) {
+    Section("Where your friends are") {
+        CardRows(entries, divider = 72.dp) { entry ->
+            RowButton({ navigator.open(AppRoute.VenueDetail(entry.venue.id)) }) {
+                RemoteImage(entry.venue.photoUrl, Modifier.size(44.dp).clip(Radius.md))
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(entry.venue.name, style = HotMessType.subheading, color = tokens.ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(
+                        entry.friends.joinToString(", ") { it.firstName },
+                        style = HotMessType.bodySmall,
+                        color = tokens.inkMuted,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                Text(
+                    if (entry.friendCount == 1) "1 friend" else "${entry.friendCount} friends",
+                    style = HotMessType.caption,
+                    color = tokens.accentInk,
+                )
             }
         }
     }

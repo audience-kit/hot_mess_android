@@ -164,6 +164,10 @@ data class Friend(val id: String, val name: String = "", val facebookId: String?
     val messengerUrl: String? get() = facebookId?.let { "https://m.me/$it" }
 }
 
+/** A venue where some of your friends have been lately, with how many. */
+@Serializable
+data class FriendVenue(val venue: Venue, val friendCount: Int = 0, val friends: List<Friend> = emptyList())
+
 /** A line someone sent in a venue's chat room, as Now previews it. */
 @Serializable
 data class ChatLine(
@@ -188,6 +192,8 @@ data class Now(
     val events: List<Event> = emptyList(),
     /** Friends out at the venue the user is in, or at venues in their locale. */
     val friends: List<Friend> = emptyList(),
+    /** Where friends have been lately, most friends first, when the user isn't in a venue. */
+    val friendVenues: List<FriendVenue> = emptyList(),
 ) {
     val isNearVenues: Boolean get() = venues != null
 }

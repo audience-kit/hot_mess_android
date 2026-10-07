@@ -22,6 +22,7 @@ object Documents {
               venues { $VENUE_FIELDS }
               events { $EVENT_FIELDS }
               friends { id name facebookId }
+              friendVenues { venue { $VENUE_FIELDS } friendCount friends { id name facebookId } }
             }
           }
         }
