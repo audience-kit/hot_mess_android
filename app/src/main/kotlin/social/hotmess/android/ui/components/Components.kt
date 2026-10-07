@@ -6,6 +6,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
@@ -38,6 +39,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -117,6 +119,20 @@ private fun Modifier.fullBleed(gutter: Dp): Modifier = layout { measurable, cons
     val width = constraints.maxWidth + extra
     val placeable = measurable.measure(constraints.copy(minWidth = width, maxWidth = width))
     layout(constraints.maxWidth, placeable.height) { placeable.place(-extra / 2, 0) }
+}
+
+/** A `surface-raised` card with `radius-lg` and `shadow-sm`. */
+@Composable
+fun Card(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        shape = Radius.lg,
+        color = tokens.surfaceRaised,
+        contentColor = tokens.ink,
+        shadowElevation = 1.dp,
+    ) {
+        Column(content = content)
+    }
 }
 
 /** A hairline between rows in a DetailSection, inset 20 to line up with the rows' text. */
