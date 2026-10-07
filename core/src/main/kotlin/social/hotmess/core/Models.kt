@@ -40,8 +40,10 @@ data class Venue(
     val locale: LocaleSummary? = null,
     val hidden: Boolean = false,
     val order: Int = 0,
-    /** The last few lines of its chat room, oldest first; only Now asks, and only people there get them. */
+    /** The last few lines of its chat room, oldest first; Now and the venue screen ask, and only people there (or admins) get them. */
     val recentMessages: List<ChatLine> = emptyList(),
+    /** Where else to find it, like its Instagram; only the venue screen asks. */
+    val socialLinks: List<SocialLink> = emptyList(),
 ) {
     val coordinate: Coordinate? get() = point?.let(Coordinate::fromWkt)
 
@@ -78,7 +80,10 @@ data class Person(
     val facebookUrl: String? get() = facebookId?.let { "https://facebook.com/$it" }
 }
 
-/** A person with what their page shows: upcoming events, where else to find them and their tracks. */
+/**
+ * A person with what their page shows: upcoming events, where else to find them, their tracks, the
+ * people they're made of ([members], like a troupe's performers) and the ones they're part of ([groups]).
+ */
 @Serializable
 data class PersonDetail(
     val id: String,
@@ -90,9 +95,19 @@ data class PersonDetail(
     val events: List<Event> = emptyList(),
     val socialLinks: List<SocialLink> = emptyList(),
     val tracks: List<Track> = emptyList(),
+    val members: List<Person> = emptyList(),
+    val groups: List<Person> = emptyList(),
 ) {
     val person: Person
         get() = Person(id = id, name = name, facebookId = facebookId, isLiked = isLiked, pictureUrl = pictureUrl, coverUrl = coverUrl)
+
+    /** Where fans can tip them (Cash App, Venmo), each opening that app. */
+    val tipLinks: List<SocialLink>
+        get() = socialLinks.filter { it.tipApp != null && it.url != null }
+
+    /** Their social profiles, without the tip links. */
+    val profileLinks: List<SocialLink>
+        get() = socialLinks.filter { it.tipApp == null }
 }
 
 @Serializable
@@ -123,6 +138,14 @@ data class SocialLink(
         }
 
     enum class Network { FACEBOOK, INSTAGRAM, SOUNDCLOUD, SPOTIFY, APPLE_MUSIC, X }
+
+    /** The app fans tip them with, for a Cash App or Venmo link; null for a social profile. */
+    val tipApp: String?
+        get() = when (provider.lowercase(Locale.ROOT)) {
+            "cashapp" -> "Cash App"
+            "venmo" -> "Venmo"
+            else -> null
+        }
 }
 
 @Serializable
