@@ -58,6 +58,18 @@ class ModelDecodingTest {
     }
 
     @Test
+    fun musicLinksNameTheirService() {
+        val spotify = SocialLink(id = "1", handle = "artist/4Z8W", provider = "spotify")
+        val appleMusic = SocialLink(id = "2", handle = "us/artist/dugan/123", provider = "apple_music")
+        val soundcloud = SocialLink(id = "3", handle = "dugan", provider = "soundcloud")
+
+        assertEquals(SocialLink.Network.SPOTIFY, spotify.network)
+        assertEquals("Spotify", spotify.label)
+        assertEquals("Apple Music", appleMusic.label)
+        assertEquals("/dugan", soundcloud.label)
+    }
+
+    @Test
     fun recordIdsNormalizeGlobalIds() {
         val uuid = "B0F8B66A-E636-495D-9475-0F5317EA08E0"
         val global = java.util.Base64.getUrlEncoder().withoutPadding()

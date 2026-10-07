@@ -30,6 +30,7 @@ import androidx.compose.material.icons.rounded.Cancel
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.ErrorOutline
 import androidx.compose.material.icons.rounded.Image
+import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.Star
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -306,14 +307,20 @@ fun SocialLinkRow(link: SocialLink, onClick: (() -> Unit)?) {
             SocialLink.Network.INSTAGRAM -> R.drawable.social_instagram
             SocialLink.Network.SOUNDCLOUD -> R.drawable.social_soundcloud
             SocialLink.Network.X -> R.drawable.social_x
-            null -> null
+            SocialLink.Network.SPOTIFY, SocialLink.Network.APPLE_MUSIC, null -> null
         }
+        val music = link.network == SocialLink.Network.SPOTIFY || link.network == SocialLink.Network.APPLE_MUSIC
         if (glyph != null) {
             Image(painterResource(glyph), contentDescription = link.provider, modifier = Modifier.size(24.dp).clip(Radius.sm))
         } else {
-            Icon(Icons.AutoMirrored.Rounded.OpenInNew, contentDescription = link.provider, tint = tokens.inkMuted, modifier = Modifier.size(24.dp))
+            Icon(
+                if (music) Icons.Rounded.MusicNote else Icons.AutoMirrored.Rounded.OpenInNew,
+                contentDescription = link.provider,
+                tint = tokens.inkMuted,
+                modifier = Modifier.size(24.dp),
+            )
         }
-        Text("/${link.handle}", style = HotMessType.body, color = tokens.ink, modifier = Modifier.weight(1f))
+        Text(link.label, style = HotMessType.body, color = tokens.ink, modifier = Modifier.weight(1f))
         if (onClick != null) Icon(Icons.AutoMirrored.Rounded.OpenInNew, contentDescription = null, tint = tokens.inkMuted, modifier = Modifier.size(16.dp))
     }
 }
