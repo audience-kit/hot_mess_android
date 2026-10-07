@@ -233,7 +233,7 @@ fun PhotoCard(
                 .onSizeChanged { textHeight = it.height },
             verticalArrangement = Arrangement.spacedBy(2.dp),
         ) {
-            CompositionLocalProvider(LocalContentColor provides textColor) { content() }
+            CompositionLocalProvider(LocalContentColor provides textColor, LocalTextStyle provides tone.textStyle()) { content() }
         }
         Box(Modifier.align(Alignment.TopStart).padding(CornerInset)) { leading() }
         Box(Modifier.align(Alignment.TopEnd).padding(CornerInset)) { trailing() }

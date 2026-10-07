@@ -13,10 +13,16 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.material3.LocalTextStyle
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.dp
 import coil3.SingletonImageLoader
 import coil3.request.ImageRequest
 import coil3.request.SuccessResult
@@ -41,6 +47,21 @@ val PhotoTone.textColor: Color
 /** `scrim` behind light text, `scrim-light` behind dark. */
 val PhotoTone.scrimColor: Color
     get() = if (text == PhotoTone.Text.LIGHT) PhotoColors.scrim else PhotoColors.scrimLight
+
+/**
+ * The current text style with a soft shadow under light text, so letter edges hold where the scrim
+ * fades out. Dark text sits on an even, bright photo and needs none.
+ */
+@Composable
+fun PhotoTone.textStyle(): TextStyle {
+    val density = LocalDensity.current
+    val shadow = if (text == PhotoTone.Text.LIGHT) {
+        with(density) { Shadow(Color.Black.copy(alpha = 0.5f), Offset(0f, 1.dp.toPx()), blurRadius = 3.dp.toPx()) }
+    } else {
+        null
+    }
+    return LocalTextStyle.current.copy(shadow = shadow)
+}
 
 /** The colour of the back button and actions over the photo. */
 val PhotoTone.barContentColor: Color

@@ -26,6 +26,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalContentColor
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
@@ -140,7 +141,7 @@ fun HeroHeader(
                 .onSizeChanged { textHeight = it.height },
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            CompositionLocalProvider(LocalContentColor provides textColor) { content() }
+            CompositionLocalProvider(LocalContentColor provides textColor, LocalTextStyle provides tone.textStyle()) { content() }
         }
     }
 }

@@ -40,10 +40,11 @@ data class ToneRect(val left: Double, val top: Double, val width: Double, val he
  * Reads how bright a photo is behind its text and status bar, and picks a text colour and the
  * smallest scrim that keeps it readable (a port of the iOS app's ImageTone).
  *
- * Each area is shrunk to 32 pixels wide and judged by its 10th and 90th percentile luminance rather
+ * Each area is shrunk to 64 pixels wide and judged by its 10th and 95th percentile luminance rather
  * than its average, so one spotlight right behind a letter still counts. Light text wins whenever it
- * reaches the target; dark text only when the photo is bright enough to need no scrim. Anything
- * busier gets light text over a dark scrim.
+ * reaches the target; dark text only when the photo is bright and even enough to need no scrim. A
+ * busy photo (city lights, murals, crowds) always gets light text over at least [BUSY_SCRIM]:
+ * contrast against the brightest pixels alone doesn't account for letters crossing a pattern.
  */
 object ImageTone {
     /** Relative luminance of `photo-ink` (#24161d), the dark text colour. */
@@ -59,8 +60,14 @@ object ImageTone {
     const val TARGET = 4.5
     const val TARGET_HIGH_CONTRAST = 7.0
 
+    /** The least scrim behind text on a busy photo. */
+    const val BUSY_SCRIM = 0.45
+
+    /** A text band whose brightest and darkest pixels differ by this much is busy. */
+    const val BUSY_CONTRAST = 3.0
+
     /** Columns each sampled area is shrunk to. */
-    const val COLUMNS = 32
+    const val COLUMNS = 64
 
     /** The target for the viewer's contrast setting. */
     fun target(highContrast: Boolean): Double = if (highContrast) TARGET_HIGH_CONTRAST else TARGET
@@ -73,11 +80,15 @@ object ImageTone {
     fun decide(top: List<Double>, band: List<Double>, target: Double = TARGET, scrimFloor: Double = 0.0): PhotoTone {
         val sortedBand = band.sorted()
         val darkest = percentile(sortedBand, 0.1)
-        val brightest = percentile(sortedBand, 0.9)
+        val brightest = percentile(sortedBand, 0.95)
+        val busy = contrast(brightest, darkest) >= BUSY_CONTRAST
 
         val text: PhotoTone.Text
         var scrim: Double
-        if (contrast(1.0, brightest) >= target) {
+        if (busy) {
+            text = PhotoTone.Text.LIGHT
+            scrim = max(BUSY_SCRIM, scrimFor(brightest, target))
+        } else if (contrast(1.0, brightest) >= target) {
             text = PhotoTone.Text.LIGHT
             scrim = 0.0
         } else if (contrast(darkest, INK_LUMINANCE) >= target) {
