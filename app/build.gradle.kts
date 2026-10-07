@@ -33,7 +33,7 @@ data class Environment(
 val environments = mapOf(
     // The emulator reaches the host's localhost at 10.0.2.2.
     "debug" to Environment("debug", "http://10.0.2.2:3000", "", "842337999153841"),
-    "staging" to Environment("staging", "https://api-staging.audiencekit.com", "", "915436455177328", "staging"),
+    "staging" to Environment("staging", "https://api-staging.audiencekit.com", "", "1660272792277019", "staging"),
     "release" to Environment("release", "https://api.audiencekit.com", "b0f8b66a-e636-495d-9475-0f5317ea08e0", "1168782378316790"),
 )
 
