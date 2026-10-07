@@ -5,6 +5,7 @@ import android.content.Intent
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import sqip.Callback
 import sqip.CardEntry
 import sqip.CardEntryActivityResult
 import sqip.InAppPaymentsSdk
@@ -30,7 +31,11 @@ class SquareCardEntry {
     /** Takes card entry's result from the activity; false when [requestCode] is someone else's. */
     fun onActivityResult(requestCode: Int, data: Intent?): Boolean {
         if (requestCode != CardEntry.DEFAULT_CARD_ENTRY_REQUEST_CODE) return false
-        CardEntry.handleActivityResult(data) { result -> _results.tryEmit(result) }
+        CardEntry.handleActivityResult(data, object : Callback<CardEntryActivityResult> {
+            override fun onResult(result: CardEntryActivityResult) {
+                _results.tryEmit(result)
+            }
+        })
         return true
     }
 }
