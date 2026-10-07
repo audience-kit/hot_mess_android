@@ -82,7 +82,7 @@ import social.hotmess.android.ui.components.LoadStateView
 import social.hotmess.android.ui.components.Message
 import social.hotmess.android.ui.components.RemoteImage
 import social.hotmess.android.ui.components.RowButton
-import social.hotmess.android.ui.components.Section
+import social.hotmess.android.ui.components.DetailSection
 import social.hotmess.android.ui.openAppSettings
 import social.hotmess.android.ui.rememberLoader
 import social.hotmess.android.ui.theme.HotMessColors
@@ -126,7 +126,7 @@ fun DoorScreen(venueId: String?, navigator: Navigator) {
                 )
                 selected == null -> Feed {
                     item {
-                        Section("Which door?") {
+                        DetailSection("Which door?") {
                             CardRows(doors, divider = 72.dp) { door ->
                                 RowButton({ selectedId = door.id }) {
                                     RemoteImage(door.photoUrl, Modifier.size(44.dp).clip(Radius.md))

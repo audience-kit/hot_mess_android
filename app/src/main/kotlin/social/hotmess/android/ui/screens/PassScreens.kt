@@ -53,7 +53,7 @@ import social.hotmess.android.ui.components.PrimaryButton
 import social.hotmess.android.ui.components.QrCode
 import social.hotmess.android.ui.components.RemoteImage
 import social.hotmess.android.ui.components.RowButton
-import social.hotmess.android.ui.components.Section
+import social.hotmess.android.ui.components.DetailSection
 import social.hotmess.android.ui.components.rememberPassCode
 import social.hotmess.android.ui.rememberLoader
 import social.hotmess.android.ui.theme.HotMessType
@@ -121,7 +121,7 @@ fun PassScreen(id: String, navigator: Navigator) {
                 }
                 if (pass.status == AdmissionStatus.PENDING) {
                     item {
-                        Section(null) {
+                        DetailSection(null) {
                             EmptyRow("Your payment is still going through. Your code shows up here once it has.")
                             Box(Modifier.fillMaxWidth().padding(Space.s4)) {
                                 if (working) {
@@ -135,7 +135,7 @@ fun PassScreen(id: String, navigator: Navigator) {
                 }
                 if (pass.isRefundable) {
                     item {
-                        Section(null) {
+                        DetailSection(null) {
                             if (working) {
                                 Box(Modifier.fillMaxWidth().padding(Space.s3), contentAlignment = Alignment.Center) {
                                     CircularProgressIndicator(color = tokens.accent, modifier = Modifier.size(24.dp))
@@ -256,7 +256,7 @@ fun PassesScreen(navigator: Navigator) {
                 } else {
                     Feed {
                         item {
-                            Section("Your passes") {
+                            DetailSection("Your passes") {
                                 CardRows(passes, divider = 72.dp) { pass -> PassRow(pass) { navigator.openPass(pass.id) } }
                             }
                         }
