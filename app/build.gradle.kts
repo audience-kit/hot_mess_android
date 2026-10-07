@@ -22,12 +22,18 @@ data class Environment(
     val apiBaseUrl: String,
     val audienceId: String,
     val facebookAppId: String,
+    /**
+     * Staging calls api-staging.audiencekit.com, the production API under its staging host, which signs people in
+     * with Hot Mess's staging Facebook app; it also sends X-AudienceKit-Environment: staging, which does the same on
+     * any host. Debug runs against a local API and stays production.
+     */
+    val audienceKitEnvironment: String = "production",
 )
 
 val environments = mapOf(
     // The emulator reaches the host's localhost at 10.0.2.2.
     "debug" to Environment("debug", "http://10.0.2.2:3000", "", "842337999153841"),
-    "staging" to Environment("staging", "https://api.audiencekit.com", "", "915436455177328"),
+    "staging" to Environment("staging", "https://api-staging.audiencekit.com", "", "915436455177328", "staging"),
     "release" to Environment("release", "https://api.audiencekit.com", "b0f8b66a-e636-495d-9475-0f5317ea08e0", "1168782378316790"),
 )
 
@@ -95,6 +101,7 @@ android {
         buildConfigField("String", "API_BASE_URL", "\"${environment.apiBaseUrl}\"")
         buildConfigField("String", "AUDIENCE_ID", "\"${environment.audienceId}\"")
         buildConfigField("String", "FACEBOOK_APP_ID", "\"${environment.facebookAppId}\"")
+        buildConfigField("String", "AUDIENCEKIT_ENVIRONMENT", "\"${environment.audienceKitEnvironment}\"")
         resValue(
             "string",
             "app_name",
