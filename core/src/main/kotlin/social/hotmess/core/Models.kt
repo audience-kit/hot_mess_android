@@ -201,7 +201,7 @@ data class Friend(val id: String, val name: String = "", val facebookId: String?
 @Serializable
 data class FriendVenue(val venue: Venue, val friendCount: Int = 0, val friends: List<Friend> = emptyList())
 
-/** A line someone sent in a venue's chat room, as Now previews it. */
+/** A line someone sent in a venue's or locale's chat room, as Now previews it. */
 @Serializable
 data class ChatLine(
     val id: String,
@@ -227,9 +227,24 @@ data class Now(
     val friends: List<Friend> = emptyList(),
     /** Where friends have been lately, most friends first, when the user isn't in a venue. */
     val friendVenues: List<FriendVenue> = emptyList(),
+    /** The locale the user is in, or nearest, with its chat room. */
+    val locale: NowLocale? = null,
 ) {
     val isNearVenues: Boolean get() = venues != null
 }
+
+/**
+ * The user's locale as Now shows it. [chatOpen] says whether they can join its chat room: they're out in
+ * the locale and not at a venue, or they're an admin. [recentMessages] are its last few lines, oldest
+ * first, sent only to someone in the locale.
+ */
+@Serializable
+data class NowLocale(
+    val id: String,
+    val name: String? = null,
+    val chatOpen: Boolean = false,
+    val recentMessages: List<ChatLine> = emptyList(),
+)
 
 /** The oldest build the API still serves, from `POST /`. */
 @Serializable

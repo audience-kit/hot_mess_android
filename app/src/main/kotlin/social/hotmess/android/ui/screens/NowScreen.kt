@@ -61,6 +61,7 @@ import social.hotmess.core.ChatLine
 import social.hotmess.core.Friend
 import social.hotmess.core.FriendVenue
 import social.hotmess.core.Now
+import social.hotmess.core.NowLocale
 import social.hotmess.core.PhotoTone
 import social.hotmess.core.Venue
 
@@ -113,6 +114,9 @@ fun NowScreen(navigator: Navigator) {
                         item { SmallTalk(venue, navigator) }
                         item { FriendsHere(now.friends) }
                     }
+                    now.locale?.takeIf { now.venue == null && it.chatOpen }?.let { locale ->
+                        item { LocaleSmallTalk(locale, navigator) }
+                    }
                     if (now.venue == null) whereFriendsAre(now.friendVenues, navigator)
                     if (now.events.isEmpty()) {
                         item { DetailSection("Events") { EmptyRow("There's nothing coming up yet.") } }
@@ -148,6 +152,18 @@ private fun SmallTalk(venue: Venue, navigator: Navigator) {
         title = "Small talk",
         room = venue.name,
         onOpen = { navigator.openChat(venue.id, venue.name) },
+    )
+}
+
+/** Away from venues: the last few lines of the locale's chat, for everyone out in it, and the way in. */
+@Composable
+private fun LocaleSmallTalk(locale: NowLocale, navigator: Navigator) {
+    val name = locale.name ?: "your city"
+    ChatPeek(
+        rememberPeekMessages(locale.recentMessages),
+        title = "Small talk in $name",
+        room = name,
+        onOpen = { navigator.openLocaleChat(locale.id, name) },
     )
 }
 

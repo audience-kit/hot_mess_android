@@ -39,15 +39,17 @@ import social.hotmess.android.ui.components.Message
 import social.hotmess.android.ui.components.RoomBanner
 import social.hotmess.android.ui.components.RoomBannerKind
 import social.hotmess.core.ChatProtocol
+import social.hotmess.core.ChatRoom
 import social.hotmess.core.VenueChatConnection
 import social.hotmess.core.VenueMessage
 
 /**
- * The live chat room for one venue, kept across configuration changes. Only people at the venue get
- * in, so the position is reported when the room opens and every few minutes while it's open.
+ * The live chat room for one venue, or one locale, kept across configuration changes. Only people at
+ * the venue (or out in the locale) get in, so the position is reported when the room opens and every
+ * few minutes while it's open.
  */
-class VenueChatModel(private val graph: AppGraph, private val venueId: String) : ViewModel() {
-    /** AWAY: the server says this person isn't at the venue, or has left it. */
+class VenueChatModel(private val graph: AppGraph, private val room: ChatRoom) : ViewModel() {
+    /** AWAY: the server says this person isn't at the venue (or in the locale), or has left. */
     enum class Status { CONNECTING, CONNECTED, OFFLINE, AWAY }
 
     private val _messages = MutableStateFlow<List<VenueMessage>>(emptyList())
@@ -56,7 +58,7 @@ class VenueChatModel(private val graph: AppGraph, private val venueId: String) :
     private val _status = MutableStateFlow(Status.CONNECTING)
     val status: StateFlow<Status> = _status.asStateFlow()
 
-    /** They're in the room from outside the venue, which only admins can do. */
+    /** They're in the room from outside its place, which only admins can do. */
     private val _outOfRange = MutableStateFlow(false)
     val outOfRange: StateFlow<Boolean> = _outOfRange.asStateFlow()
 
@@ -81,12 +83,12 @@ class VenueChatModel(private val graph: AppGraph, private val venueId: String) :
         }
         job = viewModelScope.launch {
             _status.value = Status.CONNECTING
-            // The server checks for a recent position at the venue before letting anyone in.
+            // The server checks for a recent position at the venue (or in the locale) before letting anyone in.
             graph.location.reportAgain()
             var backoff = 1_000L
             while (true) {
                 _status.value = Status.CONNECTING
-                val current = VenueChatConnection(venueId, url, graph.session.sessionToken)
+                val current = VenueChatConnection(room, url, graph.session.sessionToken)
                 connection = current
                 var away = false
                 current.events().takeWhile { event ->
@@ -139,9 +141,10 @@ class VenueChatModel(private val graph: AppGraph, private val venueId: String) :
 }
 
 @Composable
-fun VenueChatScreen(venueId: String, venueName: String, navigator: Navigator) {
+fun VenueChatScreen(room: ChatRoom, venueName: String, navigator: Navigator) {
     val graph = LocalAppGraph.current
-    val model = viewModel(key = "chat-$venueId") { VenueChatModel(graph, venueId) }
+    val model = viewModel(key = "chat-${room.kind}-${room.id}") { VenueChatModel(graph, room) }
+    val isLocale = room.kind == ChatRoom.Kind.LOCALE
     val messages by model.messages.collectAsStateWithLifecycle()
     val status by model.status.collectAsStateWithLifecycle()
     val outOfRange by model.outOfRange.collectAsStateWithLifecycle()
@@ -163,8 +166,12 @@ fun VenueChatScreen(venueId: String, venueName: String, navigator: Navigator) {
                 Box(Modifier.weight(1f).fillMaxWidth()) {
                     Message(
                         Icons.AutoMirrored.Rounded.Chat,
-                        "Only for people at $venueName",
-                        "The room opens when you're there. Your location has to be on so Hot Mess can tell.",
+                        if (isLocale) "Only for people out in $venueName" else "Only for people at $venueName",
+                        if (isLocale) {
+                            "The room opens when you're out in $venueName and not at a venue. Venues have their own chat."
+                        } else {
+                            "The room opens when you're there. Your location has to be on so Hot Mess can tell."
+                        },
                         action = "Try again" to { model.disconnect(); model.connect() },
                     )
                 }
@@ -176,7 +183,7 @@ fun VenueChatScreen(venueId: String, venueName: String, navigator: Navigator) {
                 status != VenueChatModel.Status.CONNECTED -> RoomBannerKind.OFFLINE
                 else -> null
             }
-            if (banner != null) RoomBanner(banner, venueName)
+            if (banner != null) RoomBanner(banner, venueName, isLocale = isLocale)
             val userId = user?.id
             val thread = remember(messages, userId) {
                 // The socket's lines carry no name or time yet, so there are no names or dividers.
@@ -192,7 +199,7 @@ fun VenueChatScreen(venueId: String, venueName: String, navigator: Navigator) {
                     )
                 }
             }
-            ChatThread(thread, venueName, Modifier.weight(1f).fillMaxWidth())
+            ChatThread(thread, venueName, Modifier.weight(1f).fillMaxWidth(), isLocale = isLocale)
             ChatComposer(
                 value = draft,
                 onValueChange = { draft = it },
