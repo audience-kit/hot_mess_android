@@ -347,7 +347,7 @@ fun FriendPingCard(ping: Ping, userId: String?, actions: PingActions, onOpenTarg
 
 /**
  * On a venue or event page: friends who picked this place tonight, "I'm in" on each of their Pings,
- * and "Ping for here" when a Ping can pick it ([onPingHere] is null otherwise).
+ * and "Ping here" when a Ping can pick it ([onPingHere] is null otherwise).
  */
 @Composable
 fun PingStripSection(
@@ -390,7 +390,7 @@ fun PingStripSection(
         }
         if (onPingHere != null) {
             if (friends.isNotEmpty()) RowDivider()
-            InfoRow("Ping for here", icon = Icons.Rounded.Campaign, onClick = onPingHere)
+            InfoRow("Ping here", icon = Icons.Rounded.Campaign, onClick = onPingHere)
         }
     }
 }
@@ -398,7 +398,7 @@ fun PingStripSection(
 /**
  * The send sheet: tonight's events in your city first, then its venues, any number picked (or none for
  * "anywhere tonight?"), an optional note, and who can see it. With a Ping already out it edits that one.
- * [preselect] starts with that place picked, for "Ping for here".
+ * [preselect] starts with that place picked, for "Ping here".
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
