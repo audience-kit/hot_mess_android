@@ -230,14 +230,13 @@ fun EventScreen(id: String, navigator: Navigator) {
                     )
                 }
                 item { DetailSection("Your RSVP") { RsvpPicker(loaded.rsvp, ::choose) } }
-                val venue = loaded.venue
                 CoverOffer.of(loaded)?.let { offer ->
                     item {
                         DetailSection("Cover") {
                             CoverRow(
                                 offer,
                                 paying = checkoutState == CoverCheckout.State.Working,
-                                onPay = { venue?.let { checkout.pay(it.id, it.name) } },
+                                onPay = { loaded.venue?.let { checkout.pay(it.id, it.name) } },
                                 onShowPass = { pass ->
                                     graph.passes.put(pass)
                                     navigator.openPass(pass.id)
