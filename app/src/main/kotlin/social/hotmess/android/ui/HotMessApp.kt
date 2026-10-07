@@ -64,6 +64,7 @@ import social.hotmess.android.ui.theme.HotMessType
 import social.hotmess.android.ui.theme.tokens
 import social.hotmess.core.AppRoute
 import social.hotmess.core.AppTab
+import social.hotmess.core.ChatRoom
 
 // Routes. Each tab's root, and the detail screens any tab can push.
 @Serializable data object NowRoute
@@ -74,7 +75,8 @@ import social.hotmess.core.AppTab
 @Serializable data class VenueRoute(val id: String)
 @Serializable data class EventRoute(val id: String)
 @Serializable data class PersonRoute(val id: String)
-@Serializable data class ChatRoute(val venueId: String, val venueName: String)
+/** A chat room: a venue's, or with [locale] a locale's. */
+@Serializable data class ChatRoute(val id: String, val name: String, val locale: Boolean = false)
 
 private val AppTab.route: Any
     get() = when (this) {
@@ -107,6 +109,8 @@ private val AppTab.icon: ImageVector
 interface Navigator {
     fun open(route: AppRoute)
     fun openChat(venueId: String, venueName: String)
+    /** The locale's chat room, for people out in it who aren't at a venue. */
+    fun openLocaleChat(localeId: String, localeName: String)
     fun back()
 }
 
@@ -178,6 +182,10 @@ private fun MainShell(links: Flow<AppRoute>) {
             navController.navigate(ChatRoute(venueId, venueName))
         }
 
+        override fun openLocaleChat(localeId: String, localeName: String) {
+            navController.navigate(ChatRoute(localeId, localeName, locale = true))
+        }
+
         override fun back() {
             navController.popBackStack()
         }
@@ -223,7 +231,8 @@ private fun MainShell(links: Flow<AppRoute>) {
             composable<PersonRoute> { PersonScreen(it.toRoute<PersonRoute>().id, navigator) }
             composable<ChatRoute> {
                 val route = it.toRoute<ChatRoute>()
-                VenueChatScreen(route.venueId, route.venueName, navigator)
+                val room = if (route.locale) ChatRoom.locale(route.id) else ChatRoom.venue(route.id)
+                VenueChatScreen(room, route.name, navigator)
             }
         }
     }

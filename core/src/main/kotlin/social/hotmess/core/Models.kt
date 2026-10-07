@@ -40,8 +40,10 @@ data class Venue(
     val locale: LocaleSummary? = null,
     val hidden: Boolean = false,
     val order: Int = 0,
-    /** The last few lines of its chat room, oldest first; only Now asks, and only people there get them. */
+    /** The last few lines of its chat room, oldest first; Now and the venue screen ask, and only people there (or admins) get them. */
     val recentMessages: List<ChatLine> = emptyList(),
+    /** Where else to find it, like its Instagram; only the venue screen asks. */
+    val socialLinks: List<SocialLink> = emptyList(),
 ) {
     val coordinate: Coordinate? get() = point?.let(Coordinate::fromWkt)
 
@@ -78,7 +80,10 @@ data class Person(
     val facebookUrl: String? get() = facebookId?.let { "https://facebook.com/$it" }
 }
 
-/** A person with what their page shows: upcoming events, where else to find them and their tracks. */
+/**
+ * A person with what their page shows: upcoming events, where else to find them, their tracks, the
+ * people they're made of ([members], like a troupe's performers) and the ones they're part of ([groups]).
+ */
 @Serializable
 data class PersonDetail(
     val id: String,
@@ -90,9 +95,19 @@ data class PersonDetail(
     val events: List<Event> = emptyList(),
     val socialLinks: List<SocialLink> = emptyList(),
     val tracks: List<Track> = emptyList(),
+    val members: List<Person> = emptyList(),
+    val groups: List<Person> = emptyList(),
 ) {
     val person: Person
         get() = Person(id = id, name = name, facebookId = facebookId, isLiked = isLiked, pictureUrl = pictureUrl, coverUrl = coverUrl)
+
+    /** Where fans can tip them (Cash App, Venmo), each opening that app. */
+    val tipLinks: List<SocialLink>
+        get() = socialLinks.filter { it.tipApp != null && it.url != null }
+
+    /** Their social profiles, without the tip links. */
+    val profileLinks: List<SocialLink>
+        get() = socialLinks.filter { it.tipApp == null }
 }
 
 @Serializable
@@ -123,6 +138,14 @@ data class SocialLink(
         }
 
     enum class Network { FACEBOOK, INSTAGRAM, SOUNDCLOUD, SPOTIFY, APPLE_MUSIC, X }
+
+    /** The app fans tip them with, for a Cash App or Venmo link; null for a social profile. */
+    val tipApp: String?
+        get() = when (provider.lowercase(Locale.ROOT)) {
+            "cashapp" -> "Cash App"
+            "venmo" -> "Venmo"
+            else -> null
+        }
 }
 
 @Serializable
@@ -180,7 +203,7 @@ data class Friend(val id: String, val name: String = "", val facebookId: String?
 @Serializable
 data class FriendVenue(val venue: Venue, val friendCount: Int = 0, val friends: List<Friend> = emptyList())
 
-/** A line someone sent in a venue's chat room, as Now previews it. */
+/** A line someone sent in a venue's or locale's chat room, as Now previews it. */
 @Serializable
 data class ChatLine(
     val id: String,
@@ -319,6 +342,8 @@ data class Now(
     val friends: List<Friend> = emptyList(),
     /** Where friends have been lately, most friends first, when the user isn't in a venue. */
     val friendVenues: List<FriendVenue> = emptyList(),
+    /** The locale the user is in, or nearest, with its chat room. */
+    val locale: NowLocale? = null,
     /** The signed-in user's active Ping, if they sent one tonight. */
     val myPing: Ping? = null,
     /** Friends' active Pings, newest first. */
@@ -334,6 +359,19 @@ data class Now(
             copy(friendPings = friendPings.map { if (it.id == ping.id) ping else it })
         }
 }
+
+/**
+ * The user's locale as Now shows it. [chatOpen] says whether they can join its chat room: they're out in
+ * the locale and not at a venue, or they're an admin. [recentMessages] are its last few lines, oldest
+ * first, sent only to someone in the locale.
+ */
+@Serializable
+data class NowLocale(
+    val id: String,
+    val name: String? = null,
+    val chatOpen: Boolean = false,
+    val recentMessages: List<ChatLine> = emptyList(),
+)
 
 /** The oldest build the API still serves, from `POST /`. */
 @Serializable

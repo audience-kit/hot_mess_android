@@ -58,6 +58,25 @@ class ModelDecodingTest {
     }
 
     @Test
+    fun decodesATroupesMembersAndAPerformersGroups() {
+        val troupe = json.decodeFromString(PersonDetail.serializer(), Fixtures.TROUPE)
+
+        assertEquals(listOf("Anita Cocktail", "Ella Vator"), troupe.members.map { it.name })
+        assertEquals("https://img/anita", troupe.members.first().pictureUrl)
+        assertNull(troupe.members.last().pictureUrl, "an empty URL is no URL")
+        assertEquals("p-2", troupe.groups.single().id)
+        assertEquals("House of Glitter", troupe.groups.single().name)
+    }
+
+    @Test
+    fun aPersonWithoutMembersOrGroupsHasNone() {
+        val person = json.decodeFromString(PersonDetail.serializer(), Fixtures.PERSON)
+
+        assertTrue(person.members.isEmpty())
+        assertTrue(person.groups.isEmpty())
+    }
+
+    @Test
     fun musicLinksNameTheirService() {
         val spotify = SocialLink(id = "1", handle = "artist/4Z8W", provider = "spotify")
         val appleMusic = SocialLink(id = "2", handle = "us/artist/dugan/123", provider = "apple_music")
@@ -67,6 +86,21 @@ class ModelDecodingTest {
         assertEquals("Spotify", spotify.label)
         assertEquals("Apple Music", appleMusic.label)
         assertEquals("/dugan", soundcloud.label)
+    }
+
+    @Test
+    fun splitsTipLinksFromProfiles() {
+        val person = PersonDetail(
+            id = "p-1",
+            socialLinks = listOf(
+                SocialLink("s-1", "glitter", "instagram", "https://instagram.com/glitter"),
+                SocialLink("s-2", "GlitterTips", "cashapp", "https://cash.app/\$GlitterTips"),
+                SocialLink("s-3", "glitter-tips", "venmo", "https://venmo.com/u/glitter-tips"),
+            ),
+        )
+
+        assertEquals(listOf("Cash App", "Venmo"), person.tipLinks.map { it.tipApp })
+        assertEquals(listOf("instagram"), person.profileLinks.map { it.provider })
     }
 
     @Test
@@ -158,6 +192,15 @@ class ChatProtocolTest {
         assertTrue(frame.contains("\"command\":\"subscribe\""))
         assertTrue(frame.contains("venue_id\\\":\\\"$venue"), frame)
         assertTrue(frame.contains("\"identifier\":\"{"), "the identifier is a JSON string")
+    }
+
+    @Test
+    fun subscribesToALocaleRoom() {
+        val locale = "4e5f6071-8293-4A41-8d5e-6f7a8b9c0d1e"
+        val identifier = HotMessApi.json.parseToJsonElement(ChatProtocol.identifier(ChatRoom.locale(locale))).jsonObject
+        assertEquals("LocaleChannel", identifier["channel"]!!.jsonPrimitive.content)
+        assertEquals(locale.lowercase(), identifier["locale_id"]!!.jsonPrimitive.content)
+        assertNull(identifier["venue_id"])
     }
 
     @Test
@@ -286,6 +329,23 @@ class HotMessApiTest {
     }
 
     @Test
+    fun venueOverviewAsksForAndKeepsItsRecentChat() = runTest {
+        val (api, bodies) = api(
+            "query Venue(" to """{"data":{"venue":{"id":"v1","name":"Nyne","chatOpen":true,"events":[],
+                "recentMessages":[{"id":"m1","message":"who's here?","name":"Sam","userId":"u1","avatarUrl":"",
+                  "sentAt":"2026-10-07T08:00:00Z"}]}}}""",
+        )
+        val overview = api.venueOverview("v1")
+
+        assertTrue(bodies.single().contains("recentMessages(limit: 3)"))
+        assertTrue(overview.chatOpen)
+        val line = overview.venue.recentMessages.single()
+        assertEquals("who's here?", line.message)
+        assertEquals("Sam", line.name)
+        assertNull(line.avatarUrl)
+    }
+
+    @Test
     fun nowAwayFromVenuesCountsFriendsPerVenue() = runTest {
         val (api, _) = api(
             "ReportLocation" to """{"data":{"reportLocation":{"now":{"title":"Spokane","venues":[],"events":[],
@@ -297,6 +357,44 @@ class HotMessApiTest {
         assertEquals("Nyne", entry.venue.name)
         assertEquals(2, entry.friendCount)
         assertEquals(listOf("Alex", "Sam"), entry.friends.map { it.firstName })
+    }
+
+    @Test
+    fun nowAwayFromVenuesHasTheLocaleChat() = runTest {
+        val (api, bodies) = api(
+            "ReportLocation" to """{"data":{"reportLocation":{"now":{"title":"Seattle","venues":[],"events":[],
+                "locale":{"id":"l1","name":"Seattle","chatOpen":true,"recentMessages":[{"id":"m1",
+                  "message":"anyone out?","name":"Ada","userId":"u1","sentAt":"2026-10-07T08:00:00Z"}]}}}}}""",
+        )
+        val locale = api.now(Coordinates(47.62, -122.32)).locale!!
+
+        assertTrue(locale.chatOpen)
+        assertEquals("Seattle", locale.name)
+        assertEquals("anyone out?", locale.recentMessages.single().message)
+        assertTrue(bodies.single().contains("chatOpen"))
+    }
+
+    @Test
+    fun venueOverviewHasItsSocialLinks() = runTest {
+        val (api, bodies) = api(
+            "query Venue(" to """{"data":{"venue":{"id":"v-1","name":"The Wildrose","chatOpen":true,"events":[${Fixtures.EVENT}],
+                "socialLinks":[{"id":"s-1","handle":"thewildrosebar","provider":"instagram","url":"https://instagram.com/thewildrosebar"},
+                  {"id":"s-2","handle":"wildrose","provider":"facebook","url":""}]}}}""",
+        )
+        val overview = api.venueOverview("v-1")
+
+        assertTrue(bodies.single().contains("socialLinks"))
+        assertTrue(overview.chatOpen)
+        assertEquals(1, overview.events.size)
+        val links = overview.venue.socialLinks
+        assertEquals(listOf(SocialLink.Network.INSTAGRAM, SocialLink.Network.FACEBOOK), links.map { it.network })
+        assertEquals("https://instagram.com/thewildrosebar", links.first().url)
+        assertNull(links.last().url, "an empty URL is no URL")
+    }
+
+    @Test
+    fun aVenueWithoutLinksHasNone() {
+        assertTrue(HotMessApi.json.decodeFromString(Venue.serializer(), Fixtures.VENUE).socialLinks.isEmpty())
     }
 
     @Test
@@ -332,4 +430,8 @@ private object Fixtures {
     const val PERSON = """{"id":"p-1","name":"DJ Glitter","facebookId":null,"isLiked":false,"pictureUrl":"https://img/p",
         "coverUrl":null,"events":[$EVENT],"socialLinks":[{"id":"s-1","handle":"glitter","provider":"Instagram","url":"https://instagram.com/glitter"}],
         "tracks":[{"id":"t-1","title":"Late Night","provider":"soundcloud","providerUrl":null,"waveformUrl":null,"artworkUrl":null}]}"""
+
+    const val TROUPE = """{"id":"p-3","name":"The Glitterettes","pictureUrl":null,"coverUrl":null,"events":[],"socialLinks":[],"tracks":[],
+        "members":[{"id":"p-4","name":"Anita Cocktail","pictureUrl":"https://img/anita"},{"id":"p-5","name":"Ella Vator","pictureUrl":""}],
+        "groups":[{"id":"p-2","name":"House of Glitter","pictureUrl":null}]}"""
 }

@@ -1,6 +1,5 @@
 package social.hotmess.android.ui.screens
 
-import android.text.format.DateUtils
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -13,8 +12,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.Chat
-import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.rounded.LocationOff
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -34,6 +31,7 @@ import androidx.compose.material3.TextButton
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import social.hotmess.core.ApiError
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -47,6 +45,8 @@ import social.hotmess.android.ui.Navigator
 import social.hotmess.android.ui.ScreenScaffold
 import social.hotmess.android.ui.components.Avatar
 import social.hotmess.android.ui.components.CardRows
+import social.hotmess.android.ui.components.ChatPeek
+import social.hotmess.android.ui.components.ChatThreadMessage
 import social.hotmess.android.ui.components.EmptyRow
 import social.hotmess.android.ui.components.EventRow
 import social.hotmess.android.ui.components.Feed
@@ -54,7 +54,6 @@ import social.hotmess.android.ui.components.InfoRow
 import social.hotmess.android.ui.components.LoadStateView
 import social.hotmess.android.ui.components.RemoteImage
 import social.hotmess.android.ui.components.RowButton
-import social.hotmess.android.ui.components.RowDivider
 import social.hotmess.android.ui.components.Section
 import social.hotmess.android.ui.components.VenueRow
 import social.hotmess.android.ui.openUrl
@@ -68,6 +67,7 @@ import social.hotmess.core.ChatLine
 import social.hotmess.core.Friend
 import social.hotmess.core.FriendVenue
 import social.hotmess.core.Now
+import social.hotmess.core.NowLocale
 import social.hotmess.core.Venue
 
 /**
@@ -166,6 +166,9 @@ fun NowScreen(navigator: Navigator) {
                         item { SmallTalk(venue, navigator) }
                         item { FriendsHere(now.friends) }
                     }
+                    now.locale?.takeIf { now.venue == null && it.chatOpen }?.let { locale ->
+                        item { LocaleSmallTalk(locale, navigator) }
+                    }
                     if (now.venue == null && now.friendVenues.isNotEmpty()) {
                         item { WhereFriendsAre(now.friendVenues, navigator) }
                     }
@@ -220,35 +223,45 @@ private fun Nearby(now: Now, located: Boolean, navigator: Navigator) {
 /** The last few lines of the venue's chat, and the way into the room. */
 @Composable
 private fun SmallTalk(venue: Venue, navigator: Navigator) {
-    val configuration = LocalAppGraph.current.configuration
-    Section("Small talk") {
-        if (venue.recentMessages.isEmpty()) EmptyRow("No one's said anything yet.")
-        CardRows(venue.recentMessages, divider = 56.dp) { line ->
-            ChatPreviewRow(line, line.avatarUrl ?: line.userId.takeIf { it.isNotEmpty() }?.let(configuration::avatarUrl))
-        }
-        RowDivider()
-        InfoRow(
-            "Join the chat",
-            icon = Icons.AutoMirrored.Rounded.Chat,
-            onClick = { navigator.openChat(venue.id, venue.name) },
-            trailing = Icons.AutoMirrored.Rounded.KeyboardArrowRight,
-        )
-    }
+    ChatPeek(
+        rememberPeekMessages(venue.recentMessages),
+        title = "Small talk",
+        room = venue.name,
+        onOpen = { navigator.openChat(venue.id, venue.name) },
+    )
 }
 
+/** Away from venues: the last few lines of the locale's chat, for everyone out in it, and the way in. */
 @Composable
-private fun ChatPreviewRow(line: ChatLine, avatarUrl: String?) {
-    RowButton(null) {
-        Avatar(avatarUrl, line.name.orEmpty(), size = 28.dp)
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            line.name?.takeIf { it.isNotBlank() }?.let { Text(it, style = HotMessType.caption, color = tokens.inkMuted) }
-            Text(line.message, style = HotMessType.body, color = tokens.ink, maxLines = 2, overflow = TextOverflow.Ellipsis)
-        }
-        line.sentAt?.let {
-            Text(
-                DateUtils.getRelativeTimeSpanString(it.toEpochMilli(), System.currentTimeMillis(), DateUtils.MINUTE_IN_MILLIS).toString(),
-                style = HotMessType.caption,
-                color = tokens.inkMuted,
+private fun LocaleSmallTalk(locale: NowLocale, navigator: Navigator) {
+    val name = locale.name ?: "your city"
+    ChatPeek(
+        rememberPeekMessages(locale.recentMessages),
+        title = "Small talk in $name",
+        room = name,
+        onOpen = { navigator.openLocaleChat(locale.id, name) },
+    )
+}
+
+/**
+ * A venue's recent chat lines as ChatPeek draws them: the viewer's own on the right, and the
+ * sender's picture when the line has none.
+ */
+@Composable
+internal fun rememberPeekMessages(lines: List<ChatLine>): List<ChatThreadMessage> {
+    val graph = LocalAppGraph.current
+    val user by graph.session.user.collectAsStateWithLifecycle()
+    val viewerId = user?.id
+    return remember(lines, viewerId) {
+        lines.map { line ->
+            ChatThreadMessage(
+                id = line.id,
+                senderId = line.userId.ifEmpty { line.id },
+                senderName = line.name,
+                avatarUrl = line.avatarUrl ?: line.userId.takeIf { it.isNotEmpty() }?.let(graph.configuration::avatarUrl),
+                text = line.message,
+                sentAt = line.sentAt,
+                own = viewerId != null && line.userId.equals(viewerId, ignoreCase = true),
             )
         }
     }

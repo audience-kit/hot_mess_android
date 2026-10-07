@@ -58,6 +58,12 @@ data class HotMessColors(
     val danger: Color,
     val dangerSoft: Color,
     val onDanger: Color,
+    /** Presence dot: connected to chat now. */
+    val presenceOnline: Color,
+    /** Presence dot: not in chat, but reachable by push (drawn as a ring). */
+    val presencePush: Color,
+    /** The push ring's outline, so it reads on white in light themes. */
+    val presencePushEdge: Color,
     val isDark: Boolean,
 ) {
     /** Applies the audience's overrides of the tenant tokens for this mode. */
@@ -105,6 +111,9 @@ data class HotMessColors(
             danger = Color(0xFFB3261E),
             dangerSoft = Color(0xFFFCEBEA),
             onDanger = Color(0xFFFFFFFF),
+            presenceOnline = Color(0xFF1F9D55),
+            presencePush = Color(0xFFF5B400),
+            presencePushEdge = Color(0xFF8A5300),
             isDark = false,
         )
 
@@ -134,6 +143,9 @@ data class HotMessColors(
             danger = Color(0xFFFF8A80),
             dangerSoft = Color(0xFF3A1716),
             onDanger = Color(0xFF3A0805),
+            presenceOnline = Color(0xFF2FBF5B),
+            presencePush = Color(0xFFF5B400),
+            presencePushEdge = Color(0xFFF5B400),
             isDark = true,
         )
     }
@@ -151,11 +163,17 @@ object Space {
     val s12 = 48.dp
 }
 
-/** `radius-sm` 4, `radius-md` 6 (buttons, fields, the date tile), `radius-lg` 8 (cards, sheets). */
+/**
+ * `radius-sm` 4, `radius-md` 6 (buttons, fields, the date tile), `radius-lg` 8 (cards, sheets),
+ * `radius-bubble` 16 (chat bubbles), and the phone-only `radius-photo` 26 (photo cards, grouped
+ * panels such as ChatPeek).
+ */
 object Radius {
     val sm = RoundedCornerShape(4.dp)
     val md = RoundedCornerShape(6.dp)
     val lg = RoundedCornerShape(8.dp)
+    val bubble = RoundedCornerShape(16.dp)
+    val photo = RoundedCornerShape(26.dp)
     val pill = RoundedCornerShape(percent = 50)
 }
 

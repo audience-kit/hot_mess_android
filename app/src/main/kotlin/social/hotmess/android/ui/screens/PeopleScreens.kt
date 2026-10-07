@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.OpenInNew
+import androidx.compose.material.icons.rounded.Paid
 import androidx.compose.material.icons.rounded.People
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Text
@@ -37,6 +38,7 @@ import social.hotmess.android.ui.components.InfoRow
 import social.hotmess.android.ui.components.LoadStateView
 import social.hotmess.android.ui.components.Message
 import social.hotmess.android.ui.components.PersonRow
+import social.hotmess.android.ui.components.PrimaryButton
 import social.hotmess.android.ui.components.RemoteImage
 import social.hotmess.android.ui.components.Section
 import social.hotmess.android.ui.components.SocialLinkRow
@@ -84,7 +86,7 @@ fun PeopleScreen(navigator: Navigator) {
     }
 }
 
-/** One person: their cover and photo, where else to find them, their events and tracks. */
+/** One person: their cover and photo, where else to find them, their members and groups, their events and tracks. */
 @Composable
 fun PersonScreen(id: String, navigator: Navigator) {
     val graph = LocalAppGraph.current
@@ -98,7 +100,21 @@ fun PersonScreen(id: String, navigator: Navigator) {
         LoadStateView(state, onRetry = { loader.load(id) { graph.api.person(id) } }) { detail ->
             Feed {
                 item { Header(detail) }
-                val links = detail.socialLinks.filter { it.url != null }
+                if (detail.tipLinks.isNotEmpty()) {
+                    item {
+                        Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(Space.s2)) {
+                            detail.tipLinks.forEach { link ->
+                                PrimaryButton(
+                                    "Tip on ${link.tipApp}",
+                                    onClick = { link.url?.let(context::openUrl) },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    icon = Icons.Rounded.Paid,
+                                )
+                            }
+                        }
+                    }
+                }
+                val links = detail.profileLinks.filter { it.url != null }
                 if (links.isNotEmpty() || detail.facebookId != null) {
                     item {
                         Section("Elsewhere") {
@@ -107,6 +123,24 @@ fun PersonScreen(id: String, navigator: Navigator) {
                                 detail.person.facebookUrl?.let { url ->
                                     InfoRow("Open in Facebook", icon = Icons.AutoMirrored.Rounded.OpenInNew, onClick = { context.openUrl(url) })
                                 }
+                            }
+                        }
+                    }
+                }
+                if (detail.members.isNotEmpty()) {
+                    item {
+                        Section("Members") {
+                            CardRows(detail.members, divider = 72.dp) { member ->
+                                PersonRow(member) { navigator.open(AppRoute.PersonDetail(member.id)) }
+                            }
+                        }
+                    }
+                }
+                if (detail.groups.isNotEmpty()) {
+                    item {
+                        Section("Part of") {
+                            CardRows(detail.groups, divider = 72.dp) { group ->
+                                PersonRow(group) { navigator.open(AppRoute.PersonDetail(group.id)) }
                             }
                         }
                     }
