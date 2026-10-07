@@ -18,9 +18,10 @@ object Documents {
           reportLocation(input: { position: ${'$'}position }) {
             now {
               title imageUrl
-              venue { $VENUE_FIELDS }
+              venue { $VENUE_FIELDS recentMessages(limit: 3) { id message name userId avatarUrl sentAt } }
               venues { $VENUE_FIELDS }
               events { $EVENT_FIELDS }
+              friends { id name facebookId }
             }
           }
         }

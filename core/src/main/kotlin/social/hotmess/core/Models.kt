@@ -40,6 +40,8 @@ data class Venue(
     val locale: LocaleSummary? = null,
     val hidden: Boolean = false,
     val order: Int = 0,
+    /** The last few lines of its chat room, oldest first; only Now asks, and only people there get them. */
+    val recentMessages: List<ChatLine> = emptyList(),
 ) {
     val coordinate: Coordinate? get() = point?.let(Coordinate::fromWkt)
 
@@ -153,6 +155,27 @@ data class Event(
     val shareUrl: String get() = "https://hotmess.social/events/${id.lowercase()}"
 }
 
+/** A Facebook friend who also uses the app (from the user_friends permission). */
+@Serializable
+data class Friend(val id: String, val name: String = "", val facebookId: String? = null) {
+    val firstName: String get() = name.firstNameForDisplay()
+
+    /** Opens a Messenger thread with them, when they have a Facebook ID. */
+    val messengerUrl: String? get() = facebookId?.let { "https://m.me/$it" }
+}
+
+/** A line someone sent in a venue's chat room, as Now previews it. */
+@Serializable
+data class ChatLine(
+    val id: String,
+    val message: String = "",
+    /** The name the room showed for the sender. */
+    val name: String? = null,
+    val userId: String = "",
+    @Serializable(with = BlankAsNullSerializer::class) val avatarUrl: String? = null,
+    @Serializable(with = InstantSerializer::class) val sentAt: Instant? = null,
+)
+
 /** What's happening where the device is, from `reportLocation`. */
 @Serializable
 data class Now(
@@ -163,6 +186,8 @@ data class Now(
     /** Venues nearby, nearest first; null when the user is in a venue. */
     val venues: List<Venue>? = null,
     val events: List<Event> = emptyList(),
+    /** Friends out at the venue the user is in, or at venues in their locale. */
+    val friends: List<Friend> = emptyList(),
 ) {
     val isNearVenues: Boolean get() = venues != null
 }

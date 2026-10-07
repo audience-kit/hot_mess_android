@@ -251,6 +251,25 @@ class HotMessApiTest {
     }
 
     @Test
+    fun nowAtAVenueHasItsRecentChatAndFriends() = runTest {
+        val (api, _) = api(
+            "ReportLocation" to """{"data":{"reportLocation":{"now":{"title":"Nyne","venues":null,"events":[],
+                "venue":{"id":"v1","name":"Nyne","recentMessages":[{"id":"m1","message":"who's here?","name":"Sam",
+                  "userId":"u1","avatarUrl":"","sentAt":"2026-10-07T08:00:00Z"}]},
+                "friends":[{"id":"f1","name":"Alex Friend","facebookId":"4242"}]}}}}""",
+        )
+        val now = api.now(Coordinates(47.66, -117.41))
+
+        val line = now.venue!!.recentMessages.single()
+        assertEquals("who's here?", line.message)
+        assertEquals("Sam", line.name)
+        assertNull(line.avatarUrl)
+        assertEquals(Instant.parse("2026-10-07T08:00:00Z"), line.sentAt)
+        assertEquals("Alex", now.friends.single().firstName)
+        assertEquals("https://m.me/4242", now.friends.single().messengerUrl)
+    }
+
+    @Test
     fun missingRecordsAreNotFound() = runTest {
         val (api, _) = api("query Event" to """{"data":{"event":null}}""")
         assertFailsWith<ApiError.NotFound> { api.event("e") }
