@@ -5,7 +5,7 @@ plugins {
 
 kotlin {
     compilerOptions {
-        // Java 17 bytecode and APIs, which Android (minSdk 26) also has.
+        // Java 17 bytecode and APIs, which Android (minSdk 28) also has.
         jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
         freeCompilerArgs.add("-Xjdk-release=17")
     }
