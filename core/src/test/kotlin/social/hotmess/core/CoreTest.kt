@@ -165,6 +165,18 @@ class ChatProtocolTest {
     }
 
     @Test
+    fun readsWhetherAnAdminIsOutOfRange() {
+        assertEquals(
+            ChatProtocol.Frame.Range(outOfRange = true),
+            ChatProtocol.parse("""{"identifier":"x","message":{"type":"range","out_of_range":true}}"""),
+        )
+        assertEquals(
+            ChatProtocol.Frame.Range(outOfRange = false),
+            ChatProtocol.parse("""{"identifier":"x","message":{"type":"range","out_of_range":false}}"""),
+        )
+    }
+
+    @Test
     fun sendsOnlyTheText() {
         val frame = HotMessApi.json.parseToJsonElement(ChatProtocol.message(venue, "hi")).jsonObject
         assertEquals("""{"message":"hi"}""", frame["data"]!!.jsonPrimitive.content)

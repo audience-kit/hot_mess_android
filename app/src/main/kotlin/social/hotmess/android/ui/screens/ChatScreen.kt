@@ -22,6 +22,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Chat
 import androidx.compose.material.icons.automirrored.rounded.Send
+import androidx.compose.material.icons.rounded.LocationOff
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
@@ -81,6 +82,10 @@ class VenueChatModel(private val graph: AppGraph, private val venueId: String) :
     private val _status = MutableStateFlow(Status.CONNECTING)
     val status: StateFlow<Status> = _status.asStateFlow()
 
+    /** They're in the room from outside the venue, which only admins can do. */
+    private val _outOfRange = MutableStateFlow(false)
+    val outOfRange: StateFlow<Boolean> = _outOfRange.asStateFlow()
+
     private var connection: VenueChatConnection? = null
     private var job: Job? = null
     private var heartbeat: Job? = null
@@ -119,6 +124,7 @@ class VenueChatModel(private val graph: AppGraph, private val venueId: String) :
                         is VenueChatConnection.Event.Received -> _messages.value = _messages.value + event.message.let {
                             it.copy(avatarUrl = it.avatarUrl ?: graph.configuration.avatarUrl(it.userId))
                         }
+                        is VenueChatConnection.Event.Range -> _outOfRange.value = event.outOfRange
                         is VenueChatConnection.Event.Disconnected -> _status.value = Status.OFFLINE
                         VenueChatConnection.Event.Rejected, VenueChatConnection.Event.Left -> away = true
                     }
@@ -164,6 +170,7 @@ fun VenueChatScreen(venueId: String, venueName: String, navigator: Navigator) {
     val model = viewModel(key = "chat-$venueId") { VenueChatModel(graph, venueId) }
     val messages by model.messages.collectAsStateWithLifecycle()
     val status by model.status.collectAsStateWithLifecycle()
+    val outOfRange by model.outOfRange.collectAsStateWithLifecycle()
     val user by graph.session.user.collectAsStateWithLifecycle()
     var draft by rememberSaveable { mutableStateOf("") }
     val list = rememberLazyListState()
@@ -190,6 +197,20 @@ fun VenueChatScreen(venueId: String, venueName: String, navigator: Navigator) {
                     )
                 }
                 return@Column
+            }
+            if (outOfRange) {
+                Row(
+                    Modifier.fillMaxWidth().background(tokens.warningSoft).padding(horizontal = Space.s4, vertical = Space.s2),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(Icons.Rounded.LocationOff, contentDescription = null, tint = tokens.warning)
+                    Spacer(Modifier.width(Space.s2))
+                    Text(
+                        "You're not at $venueName. You're in this chat because you're an admin.",
+                        style = HotMessType.bodySmall,
+                        color = tokens.ink,
+                    )
+                }
             }
             if (status != VenueChatModel.Status.CONNECTED) {
                 Text(
