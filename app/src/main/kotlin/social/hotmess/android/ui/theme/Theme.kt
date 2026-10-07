@@ -23,12 +23,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import com.audiencekit.Branding
+import com.audiencekit.DesignTokens
 import com.audiencekit.RGBAColor
 import social.hotmess.android.R
 
 /**
  * The AudienceKit design system's tokens (https://claude.ai/artifact/F1mB4QrCQSwi7ZahwgPWgd) for the
- * `hot_mess` preset. The tenant layer (accent and spectrum) can be overridden by the audience's
+ * `hot_mess` preset, read from the SDK's generated [DesignTokens] so they can't drift from tokens.json. The tenant layer (accent and spectrum) can be overridden by the audience's
  * branding; everything else is locked.
  */
 @Immutable
@@ -85,82 +86,57 @@ data class HotMessColors(
     }
 
     companion object {
-        val Light = HotMessColors(
-            surface = Color(0xFFF6EFF3),
-            surfaceRaised = Color(0xFFFFFFFF),
-            surfaceSunken = Color(0xFFFAF4F7),
-            controlFill = Color(0xFFEFE4EA),
-            controlFillHover = Color(0xFFE6D7DF),
-            pressOverlay = Color(0x1A24161D),
-            border = Color(0xFFE6D3DC),
-            borderStrong = Color(0xFF937F89),
-            ink = Color(0xFF24161D),
-            inkMuted = Color(0xFF6B5360),
-            accent = Color(0xFFB8236F),
-            accentStrong = Color(0xFF951B5A),
-            accentSoft = Color(0xFFFDE6F1),
-            onAccent = Color(0xFFFFFFFF),
-            accentInk = Color(0xFFA01F61),
-            focus = Color(0xFF7A1D6E),
-            spectrum = listOf(Color(0xFFE40303), Color(0xFFFF8C00), Color(0xFFFFED00), Color(0xFF008026), Color(0xFF004DFF), Color(0xFF750787)),
-            onSpectrum = listOf(Color(0xFFFFFFFF), Color(0xFF1D2125), Color(0xFF1D2125), Color(0xFFFFFFFF), Color(0xFFFFFFFF), Color(0xFFFFFFFF)),
-            success = Color(0xFF1D7144),
-            successSoft = Color(0xFFE5F4EC),
-            warning = Color(0xFF8A5300),
-            warningSoft = Color(0xFFFDF1D9),
-            danger = Color(0xFFB3261E),
-            dangerSoft = Color(0xFFFCEBEA),
-            onDanger = Color(0xFFFFFFFF),
-            presenceOnline = Color(0xFF1F9D55),
-            presencePush = Color(0xFFF5B400),
-            presencePushEdge = Color(0xFF8A5300),
-            isDark = false,
-        )
+        val Light = from(DesignTokens.hotMess, isDark = false)
 
-        val Dark = HotMessColors(
-            surface = Color(0xFF1A1519),
-            surfaceRaised = Color(0xFF272026),
-            surfaceSunken = Color(0xFF201A1F),
-            controlFill = Color(0xFF3D3239),
-            controlFillHover = Color(0xFF4B3F47),
-            pressOverlay = Color(0x2EFFFFFF),
-            border = Color(0xFF3E333B),
-            borderStrong = Color(0xFF8A7A85),
-            ink = Color(0xFFF3E6EE),
-            inkMuted = Color(0xFFC2ADBA),
-            accent = Color(0xFFFF7AB6),
-            accentStrong = Color(0xFFFFA6CF),
-            accentSoft = Color(0xFF3B1A2C),
-            onAccent = Color(0xFF3A0A22),
-            accentInk = Color(0xFFFF93C4),
-            focus = Color(0xFFFFA6CF),
-            spectrum = listOf(Color(0xFFFF4D4D), Color(0xFFFFA133), Color(0xFFFFE94D), Color(0xFF2FBF5B), Color(0xFF4D86FF), Color(0xFFC77DFF)),
-            onSpectrum = List(6) { Color(0xFF1D2125) },
-            success = Color(0xFF5FD394),
-            successSoft = Color(0xFF12301F),
-            warning = Color(0xFFF2B84B),
-            warningSoft = Color(0xFF34270E),
-            danger = Color(0xFFFF8A80),
-            dangerSoft = Color(0xFF3A1716),
-            onDanger = Color(0xFF3A0805),
-            presenceOnline = Color(0xFF2FBF5B),
-            presencePush = Color(0xFFF5B400),
-            presencePushEdge = Color(0xFFF5B400),
-            isDark = true,
+        val Dark = from(DesignTokens.hotMessDark, isDark = true)
+
+        private fun from(t: DesignTokens.Colors, isDark: Boolean) = HotMessColors(
+            surface = t.surface.color,
+            surfaceRaised = t.surfaceRaised.color,
+            surfaceSunken = t.surfaceSunken.color,
+            controlFill = t.controlFill.color,
+            controlFillHover = t.controlFillHover.color,
+            pressOverlay = t.pressOverlay.color,
+            border = t.border.color,
+            borderStrong = t.borderStrong.color,
+            ink = t.ink.color,
+            inkMuted = t.inkMuted.color,
+            accent = t.accent.color,
+            accentStrong = t.accentStrong.color,
+            accentSoft = t.accentSoft.color,
+            onAccent = t.onAccent.color,
+            accentInk = t.accentInk.color,
+            focus = t.focus.color,
+            spectrum = listOf(t.spectrum1, t.spectrum2, t.spectrum3, t.spectrum4, t.spectrum5, t.spectrum6).map { it.color },
+            onSpectrum = listOf(t.onSpectrum1, t.onSpectrum2, t.onSpectrum3, t.onSpectrum4, t.onSpectrum5, t.onSpectrum6).map { it.color },
+            success = t.success.color,
+            successSoft = t.successSoft.color,
+            warning = t.warning.color,
+            warningSoft = t.warningSoft.color,
+            danger = t.danger.color,
+            dangerSoft = t.dangerSoft.color,
+            onDanger = t.onDanger.color,
+            presenceOnline = t.presenceOnline.color,
+            presencePush = t.presencePush.color,
+            presencePushEdge = t.presencePushEdge.color,
+            isDark = isDark,
         )
     }
 }
 
+/** A generated token as a Compose colour. */
+private val RGBAColor.color: Color get() = Color(toArgb())
+
 /** The 4px spacing scale. */
 object Space {
-    val s1 = 4.dp
-    val s2 = 8.dp
-    val s3 = 12.dp
-    val s4 = 16.dp
-    val s5 = 20.dp
-    val s6 = 24.dp
-    val s8 = 32.dp
-    val s12 = 48.dp
+    val s1 = DesignTokens.Spacing.s1.dp
+    val s2 = DesignTokens.Spacing.s2.dp
+    val s3 = DesignTokens.Spacing.s3.dp
+    val s4 = DesignTokens.Spacing.s4.dp
+    val s5 = DesignTokens.Spacing.s5.dp
+    val s6 = DesignTokens.Spacing.s6.dp
+    val s8 = DesignTokens.Spacing.s8.dp
+    val s12 = DesignTokens.Spacing.s12.dp
 }
 
 /**
@@ -169,16 +145,16 @@ object Space {
  * panels such as ChatPeek).
  */
 object Radius {
-    val sm = RoundedCornerShape(4.dp)
-    val md = RoundedCornerShape(6.dp)
-    val lg = RoundedCornerShape(8.dp)
-    val bubble = RoundedCornerShape(16.dp)
-    val photo = RoundedCornerShape(26.dp)
+    val sm = RoundedCornerShape(DesignTokens.Radius.sm.dp)
+    val md = RoundedCornerShape(DesignTokens.Radius.md.dp)
+    val lg = RoundedCornerShape(DesignTokens.Radius.lg.dp)
+    val bubble = RoundedCornerShape(DesignTokens.Radius.bubble.dp)
+    val photo = RoundedCornerShape(DesignTokens.Radius.photo.dp)
     val pill = RoundedCornerShape(percent = 50)
 }
 
 /** Feeds and audience pages are one column up to 680dp wide (`size-content-max`). */
-val ContentMaxWidth = 680.dp
+val ContentMaxWidth = DesignTokens.Size.contentMax.dp
 
 /**
  * Colours for text and fills over photos. They're the same in every theme, since what's under them
@@ -186,73 +162,73 @@ val ContentMaxWidth = 680.dp
  */
 object PhotoColors {
     /** `scrim`: behind light text; its opacity is computed per photo (ImageTone). */
-    val scrim = Color(0xFF000000)
+    val scrim = DesignTokens.hotMess.scrim.color
 
     /** `scrim-light`: behind dark `photo-ink` text, when that still needs a scrim. */
-    val scrimLight = Color(0xFFFFFFFF)
+    val scrimLight = DesignTokens.hotMess.scrimLight.color
 
     /** `glass`: rgba(28,20,26,0.55), the fill of pills and badges on photos. */
-    val glass = Color(0x8C1C141A)
+    val glass = DesignTokens.hotMess.glass.color
 
     /** `on-photo`: text and icons over photos, glass pills and scrims. */
-    val onPhoto = Color(0xFFFFFFFF)
+    val onPhoto = DesignTokens.hotMess.onPhoto.color
 
     /** `photo-ink`: dark text over photos bright enough to carry it without a scrim. */
-    val photoInk = Color(0xFF24161D)
+    val photoInk = DesignTokens.hotMess.photoInk.color
 
     /** `photo-placeholder`: hero and photo card fill while the image loads. */
-    val placeholder = Color(0xFF291F26)
+    val placeholder = DesignTokens.hotMess.photoPlaceholder.color
 }
 
 /** The design system's `size` tokens: heights the platforms share, in dp. */
 object Sizes {
     /** HeroHeader body height below the status and top bars. */
-    val hero = 256.dp
+    val hero = DesignTokens.Size.hero.dp
 
     /** Venue and event photo cards. */
-    val photoCard = 132.dp
+    val photoCard = DesignTokens.Size.photoCard.dp
 
     /** Featured event photo cards. */
-    val photoCardFeatured = 180.dp
+    val photoCardFeatured = DesignTokens.Size.photoCardFeatured.dp
 
     /** Person cards (blurred picture behind a sharp 56 avatar). */
-    val personCard = 84.dp
+    val personCard = DesignTokens.Size.personCard.dp
 
     /** FriendFaces stack, overlapping by 7. */
-    val avatarXs = 26.dp
+    val avatarXs = DesignTokens.Size.avatarXs.dp
 
     /** Chat bubbles and chat lines. */
-    val avatarSm = 28.dp
+    val avatarSm = DesignTokens.Size.avatarSm.dp
 
     /** Person cards, FriendStrip. */
-    val avatarLg = 56.dp
+    val avatarLg = DesignTokens.Size.avatarLg.dp
 
     /** Minimum NightCalendar cell height. */
-    val calendarCell = 44.dp
+    val calendarCell = DesignTokens.Size.calendarCell.dp
 
     /** Inline map on the Venues tab. */
-    val mapInline = 220.dp
+    val mapInline = DesignTokens.Size.mapInline.dp
 }
 
 /** The design system's `opacity` tokens. */
 object Opacity {
     /** Upper clamp on a computed photo scrim. */
-    const val scrimMax = 0.75f
+    const val scrimMax = DesignTokens.Opacity.scrimMax
 
     /** Lower clamp on a photo scrim with high contrast text or reduced transparency (otherwise 0). */
-    const val scrimFloor = 0.3f
+    const val scrimFloor = DesignTokens.Opacity.scrimFloor
 
     /** NightCalendar level 1: `accent` at this opacity. */
-    const val busy1 = 0.25f
+    const val busy1 = DesignTokens.Opacity.busy1
 
     /** NightCalendar level 2: `accent` at this opacity, `ink` text. */
-    const val busy2 = 0.6f
+    const val busy2 = DesignTokens.Opacity.busy2
 
     /** Past nights in the calendar. */
-    const val past = 0.35f
+    const val past = DesignTokens.Opacity.past
 
     /** The white ring around avatars that sit on photos. */
-    const val ring = 0.9f
+    const val ring = DesignTokens.Opacity.ring
 
     /**
      * A quiet glyph standing in for something missing, like RemoteImage's empty photo icon. Android
@@ -271,16 +247,24 @@ private fun figtree(weight: Int) = Font(
 /** Figtree (variable, 300 to 900) for everything. */
 val Figtree = FontFamily(figtree(400), figtree(600), figtree(700), figtree(800))
 
+private fun style(t: DesignTokens.TypeStyle) = TextStyle(
+    fontFamily = Figtree,
+    fontSize = t.fontSize.sp,
+    lineHeight = t.lineHeight.sp,
+    fontWeight = FontWeight(t.fontWeight),
+    letterSpacing = t.letterSpacing.em,
+)
+
 /** The design system's type scale. */
 object HotMessType {
-    val display = TextStyle(fontFamily = Figtree, fontSize = 32.sp, lineHeight = 36.sp, fontWeight = FontWeight(800), letterSpacing = (-0.02).em)
-    val title = TextStyle(fontFamily = Figtree, fontSize = 24.sp, lineHeight = 28.sp, fontWeight = FontWeight.Bold, letterSpacing = (-0.01).em)
-    val heading = TextStyle(fontFamily = Figtree, fontSize = 17.sp, lineHeight = 22.sp, fontWeight = FontWeight.Bold)
-    val subheading = TextStyle(fontFamily = Figtree, fontSize = 15.sp, lineHeight = 20.sp, fontWeight = FontWeight.SemiBold)
-    val body = TextStyle(fontFamily = Figtree, fontSize = 15.sp, lineHeight = 20.sp, fontWeight = FontWeight.Normal)
-    val bodySmall = TextStyle(fontFamily = Figtree, fontSize = 13.sp, lineHeight = 16.sp, fontWeight = FontWeight.Normal)
-    val label = TextStyle(fontFamily = Figtree, fontSize = 15.sp, lineHeight = 20.sp, fontWeight = FontWeight.SemiBold)
-    val caption = TextStyle(fontFamily = Figtree, fontSize = 12.sp, lineHeight = 16.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.04.em)
+    val display = style(DesignTokens.Typography.display)
+    val title = style(DesignTokens.Typography.title)
+    val heading = style(DesignTokens.Typography.heading)
+    val subheading = style(DesignTokens.Typography.subheading)
+    val body = style(DesignTokens.Typography.body)
+    val bodySmall = style(DesignTokens.Typography.bodySm)
+    val label = style(DesignTokens.Typography.label)
+    val caption = style(DesignTokens.Typography.caption)
 }
 
 private val typography = Typography(
