@@ -84,7 +84,7 @@ fun PeopleScreen(navigator: Navigator) {
     }
 }
 
-/** One person: their cover and photo, where else to find them, their events and tracks. */
+/** One person: their cover and photo, where else to find them, their members and groups, their events and tracks. */
 @Composable
 fun PersonScreen(id: String, navigator: Navigator) {
     val graph = LocalAppGraph.current
@@ -107,6 +107,24 @@ fun PersonScreen(id: String, navigator: Navigator) {
                                 detail.person.facebookUrl?.let { url ->
                                     InfoRow("Open in Facebook", icon = Icons.AutoMirrored.Rounded.OpenInNew, onClick = { context.openUrl(url) })
                                 }
+                            }
+                        }
+                    }
+                }
+                if (detail.members.isNotEmpty()) {
+                    item {
+                        Section("Members") {
+                            CardRows(detail.members, divider = 72.dp) { member ->
+                                PersonRow(member) { navigator.open(AppRoute.PersonDetail(member.id)) }
+                            }
+                        }
+                    }
+                }
+                if (detail.groups.isNotEmpty()) {
+                    item {
+                        Section("Part of") {
+                            CardRows(detail.groups, divider = 72.dp) { group ->
+                                PersonRow(group) { navigator.open(AppRoute.PersonDetail(group.id)) }
                             }
                         }
                     }

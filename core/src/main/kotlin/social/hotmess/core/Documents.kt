@@ -42,7 +42,11 @@ object Documents {
 
     val VENUE: String = """
         query Venue(${'$'}id: ID!) {
-          venue(id: ${'$'}id) { $VENUE_FIELDS chatOpen events { $EVENT_FIELDS } }
+          venue(id: ${'$'}id) {
+            $VENUE_FIELDS chatOpen
+            events { $EVENT_FIELDS }
+            socialLinks { id handle provider url }
+          }
         }
     """.trimIndent()
 
@@ -58,6 +62,8 @@ object Documents {
             $PERSON_FIELDS
             events { $EVENT_FIELDS }
             socialLinks { id handle provider url }
+            members { id name pictureUrl }
+            groups { id name pictureUrl }
             tracks { id title provider providerUrl waveformUrl artworkUrl }
           }
         }

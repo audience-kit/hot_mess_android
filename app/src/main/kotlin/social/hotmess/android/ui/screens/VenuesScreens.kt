@@ -55,6 +55,7 @@ import social.hotmess.android.ui.components.InfoRow
 import social.hotmess.android.ui.components.LoadStateView
 import social.hotmess.android.ui.components.RowDivider
 import social.hotmess.android.ui.components.Section
+import social.hotmess.android.ui.components.SocialLinkRow
 import social.hotmess.android.ui.components.VenueMap
 import social.hotmess.android.ui.components.VenueRow
 import social.hotmess.android.ui.dial
@@ -181,7 +182,7 @@ private fun MapButton(
     }
 }
 
-/** One venue: its photo, how to get there, its chat room and what's on. */
+/** One venue: its photo, how to get there, where else to find it, its chat room and what's on. */
 @Composable
 fun VenueScreen(id: String, navigator: Navigator) {
     val graph = LocalAppGraph.current
@@ -236,6 +237,14 @@ fun VenueScreen(id: String, navigator: Navigator) {
                             InfoRow("Open in Facebook", icon = Icons.AutoMirrored.Rounded.OpenInNew, onClick = { context.openUrl(facebook) })
                         } else {
                             InfoRow("Share", icon = Icons.Rounded.Share, onClick = { context.share(loaded.shareUrl, loaded.name) })
+                        }
+                    }
+                }
+                val links = loaded.socialLinks.filter { it.url != null }
+                if (links.isNotEmpty()) {
+                    item {
+                        Section("Elsewhere") {
+                            CardRows(links) { link -> SocialLinkRow(link) { link.url?.let(context::openUrl) } }
                         }
                     }
                 }

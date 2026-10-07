@@ -207,6 +207,7 @@ private data class VenueNode(
     val isLiked: Boolean = false,
     val chatOpen: Boolean = false,
     val events: List<Event> = emptyList(),
+    val socialLinks: List<SocialLink> = emptyList(),
 ) {
     fun venue() = Venue(
         id = id,
@@ -220,6 +221,7 @@ private data class VenueNode(
         heroUrl = heroUrl,
         point = point,
         isLiked = isLiked,
+        socialLinks = socialLinks,
     )
 }
 
