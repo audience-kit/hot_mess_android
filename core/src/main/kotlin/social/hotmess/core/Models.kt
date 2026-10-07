@@ -102,17 +102,27 @@ data class SocialLink(
     val provider: String = "",
     @Serializable(with = BlankAsNullSerializer::class) val url: String? = null,
 ) {
-    /** The network, for picking a glyph: facebook, instagram, soundcloud, x, or null for anything else. */
+    /** The network, for picking a glyph: facebook, instagram, soundcloud, spotify, apple music, x, or null for anything else. */
     val network: Network?
         get() = when (provider.lowercase(Locale.ROOT)) {
             "facebook" -> Network.FACEBOOK
             "instagram" -> Network.INSTAGRAM
             "soundcloud" -> Network.SOUNDCLOUD
+            "spotify" -> Network.SPOTIFY
+            "apple_music" -> Network.APPLE_MUSIC
             "twitter", "x" -> Network.X
             else -> null
         }
 
-    enum class Network { FACEBOOK, INSTAGRAM, SOUNDCLOUD, X }
+    /** What the row says: the service for Spotify and Apple Music, whose handles are URL paths, else "/handle". */
+    val label: String
+        get() = when (network) {
+            Network.SPOTIFY -> "Spotify"
+            Network.APPLE_MUSIC -> "Apple Music"
+            else -> "/$handle"
+        }
+
+    enum class Network { FACEBOOK, INSTAGRAM, SOUNDCLOUD, SPOTIFY, APPLE_MUSIC, X }
 }
 
 @Serializable
