@@ -8,6 +8,9 @@ object Documents {
     const val VENUE_FIELDS: String =
         "id name address description phone distance point facebookId photoUrl heroUrl isLiked"
 
+    /** A venue's last few chat lines, oldest first; empty unless the viewer is at the venue or an admin. */
+    const val RECENT_MESSAGES: String = "recentMessages(limit: 3) { id message name userId avatarUrl sentAt }"
+
     const val PERSON_FIELDS: String = "id name facebookId isLiked pictureUrl coverUrl"
 
     const val EVENT_FIELDS: String =
@@ -18,7 +21,7 @@ object Documents {
           reportLocation(input: { position: ${'$'}position }) {
             now {
               title imageUrl
-              venue { $VENUE_FIELDS recentMessages(limit: 3) { id message name userId avatarUrl sentAt } }
+              venue { $VENUE_FIELDS $RECENT_MESSAGES }
               venues { $VENUE_FIELDS }
               events { $EVENT_FIELDS }
               friends { id name facebookId }
@@ -44,6 +47,7 @@ object Documents {
         query Venue(${'$'}id: ID!) {
           venue(id: ${'$'}id) {
             $VENUE_FIELDS chatOpen
+            $RECENT_MESSAGES
             events { $EVENT_FIELDS }
             socialLinks { id handle provider url }
           }

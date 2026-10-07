@@ -165,13 +165,15 @@ object Space {
 
 /**
  * `radius-sm` 4, `radius-md` 6 (buttons, fields, the date tile), `radius-lg` 8 (cards, sheets),
- * `radius-bubble` 16 (chat bubbles).
+ * `radius-bubble` 16 (chat bubbles), and the phone-only `radius-photo` 26 (photo cards, grouped
+ * panels such as ChatPeek).
  */
 object Radius {
     val sm = RoundedCornerShape(4.dp)
     val md = RoundedCornerShape(6.dp)
     val lg = RoundedCornerShape(8.dp)
     val bubble = RoundedCornerShape(16.dp)
+    val photo = RoundedCornerShape(26.dp)
     val pill = RoundedCornerShape(percent = 50)
 }
 

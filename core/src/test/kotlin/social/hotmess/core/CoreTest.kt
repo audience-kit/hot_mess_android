@@ -320,6 +320,23 @@ class HotMessApiTest {
     }
 
     @Test
+    fun venueOverviewAsksForAndKeepsItsRecentChat() = runTest {
+        val (api, bodies) = api(
+            "query Venue(" to """{"data":{"venue":{"id":"v1","name":"Nyne","chatOpen":true,"events":[],
+                "recentMessages":[{"id":"m1","message":"who's here?","name":"Sam","userId":"u1","avatarUrl":"",
+                  "sentAt":"2026-10-07T08:00:00Z"}]}}}""",
+        )
+        val overview = api.venueOverview("v1")
+
+        assertTrue(bodies.single().contains("recentMessages(limit: 3)"))
+        assertTrue(overview.chatOpen)
+        val line = overview.venue.recentMessages.single()
+        assertEquals("who's here?", line.message)
+        assertEquals("Sam", line.name)
+        assertNull(line.avatarUrl)
+    }
+
+    @Test
     fun nowAwayFromVenuesCountsFriendsPerVenue() = runTest {
         val (api, _) = api(
             "ReportLocation" to """{"data":{"reportLocation":{"now":{"title":"Spokane","venues":[],"events":[],

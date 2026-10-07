@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.Chat
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.rounded.OpenInNew
 import androidx.compose.material.icons.rounded.Close
@@ -47,6 +46,7 @@ import social.hotmess.android.ui.Navigator
 import social.hotmess.android.ui.ScreenScaffold
 import social.hotmess.android.ui.components.Card
 import social.hotmess.android.ui.components.CardRows
+import social.hotmess.android.ui.components.ChatPeek
 import social.hotmess.android.ui.components.EmptyRow
 import social.hotmess.android.ui.components.EventRow
 import social.hotmess.android.ui.components.Feed
@@ -250,14 +250,12 @@ fun VenueScreen(id: String, navigator: Navigator) {
                 }
                 if (overview.chatOpen) {
                     item {
-                        Section("Chat") {
-                            InfoRow(
-                                "Join the room",
-                                icon = Icons.AutoMirrored.Rounded.Chat,
-                                onClick = { navigator.openChat(loaded.id, loaded.name) },
-                                trailing = Icons.AutoMirrored.Rounded.KeyboardArrowRight,
-                            )
-                        }
+                        ChatPeek(
+                            rememberPeekMessages(loaded.recentMessages),
+                            title = "Chat",
+                            room = loaded.name,
+                            onOpen = { navigator.openChat(loaded.id, loaded.name) },
+                        )
                     }
                 }
                 loaded.coordinate?.takeIf { graph.configuration.isTestBuild }?.let { coordinate ->
@@ -286,7 +284,7 @@ private fun PretendHere(name: String, latitude: Double, longitude: Double, onRep
     val location = LocalAppGraph.current.location
     val simulated by location.simulatedVenue.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
-    // Reload once the visit is reported, so the chat row (chatOpen) catches up.
+    // Reload once the visit is reported, so the chat peek (chatOpen) catches up.
     fun after(job: Job?) {
         job ?: return
         scope.launch {
