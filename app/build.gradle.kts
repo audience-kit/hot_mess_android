@@ -55,6 +55,7 @@ android {
             "fbEmail" to "FB_TEST_ANDROID_EMAIL",
             "fbPassword" to "FB_TEST_ANDROID_PASSWORD",
             "fbName" to "FB_TEST_ANDROID_NAME",
+            "fbAppId" to "FB_TEST_APP_ID",
         ).forEach { (argument, variable) ->
             providers.environmentVariable(variable).orNull?.takeIf { it.isNotEmpty() }?.let {
                 testInstrumentationRunnerArguments[argument] = Base64.getEncoder().encodeToString(it.toByteArray())

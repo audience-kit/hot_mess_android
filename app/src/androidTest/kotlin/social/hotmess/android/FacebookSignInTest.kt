@@ -23,7 +23,8 @@ import org.junit.runner.RunWith
  * with the page's reason when Facebook refuses.
  *
  * The test user comes from the `fbEmail`, `fbPassword` and optional `fbName` runner arguments (see
- * scripts/facebook-signin-test.sh); without them the test is skipped. Sign-in opens in a Chrome
+ * scripts/facebook-signin-test.sh); without them the test is skipped. The optional `fbAppId` is the
+ * Facebook app the test users belong to, which has to be the build's. Sign-in opens in a Chrome
  * Custom Tab, which shares Chrome's Facebook cookies, so Chrome mustn't be signed in to Facebook as
  * someone else.
  */
@@ -36,6 +37,7 @@ class FacebookSignInTest {
     private val email = argument("fbEmail")
     private val password = argument("fbPassword")
     private val name = argument("fbName")
+    private val testUsersAppId = argument("fbAppId")
 
     @Before
     fun wake() {
@@ -49,6 +51,13 @@ class FacebookSignInTest {
             "Set FB_TEST_ANDROID_EMAIL and FB_TEST_ANDROID_PASSWORD to a Facebook test user to sign in",
             email != null && password != null,
         )
+        // Facebook test users belong to one Facebook app and can't log in to another.
+        if (testUsersAppId != null && testUsersAppId != BuildConfig.FACEBOOK_APP_ID) {
+            fail(
+                "The test users belong to Facebook app $testUsersAppId, but this build signs in with " +
+                    "${BuildConfig.FACEBOOK_APP_ID}. Add them to that app, or use test users of it.",
+            )
+        }
 
         launch()
         signOutIfSignedIn()

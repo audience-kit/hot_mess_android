@@ -55,11 +55,12 @@ page), which scans passes with the camera.
 
 ## Facebook sign-in test
 
-`FacebookSignInTest` (`app/src/androidTest`) signs in on a connected phone as a Facebook test user of
-app 713525445368431 and checks the Me tab shows them. `scripts/facebook-signin-test.sh` loads
-`FB_TEST_ANDROID_EMAIL`, `FB_TEST_ANDROID_PASSWORD` and `FB_TEST_ANDROID_NAME` from
-`~/.config/audience-kit/fb_test_users.env` and runs it on the Staging build; without them it's
-skipped. Sign-in uses Chrome's Facebook cookies, so log out of facebook.com in Chrome first. Like any
+`FacebookSignInTest` (`app/src/androidTest`) signs in on a connected phone as a Facebook test user and
+checks the Me tab shows them. `scripts/facebook-signin-test.sh` loads `FB_TEST_ANDROID_EMAIL`,
+`FB_TEST_ANDROID_PASSWORD` and `FB_TEST_ANDROID_NAME` from `~/.config/audience-kit/fb_test_users.env`
+and runs it on the Staging build; without them it's skipped. Facebook test users only work with their
+own app, so they have to be test users of the Staging build's app (1660272792277019). With
+`FB_TEST_APP_ID` set to the app they belong to, the test stops early when that isn't the build's. Sign-in uses Chrome's Facebook cookies, so log out of facebook.com in Chrome first. Like any
 connected test run, it uninstalls the app when it finishes.
 
 ## CI
