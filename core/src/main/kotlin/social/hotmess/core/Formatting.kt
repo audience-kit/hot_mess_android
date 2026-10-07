@@ -17,10 +17,13 @@ object Formatting {
         return "$day $hour$meridiem"
     }
 
-    /** "Fri 9pm · The Wildrose", or just the time when the venue isn't known. */
+    /** "Fri 9pm · The Wildrose", or "Fri 9pm · To be announced" when the venue isn't set yet. */
     fun eventSubtitle(event: Event, zone: ZoneId = ZoneId.systemDefault(), locale: Locale = Locale.getDefault()): String =
-        listOfNotNull(shortTime(event.startAt, zone, locale), event.venue?.name?.takeIf { it.isNotBlank() })
+        listOf(shortTime(event.startAt, zone, locale), event.venue?.name?.takeIf { it.isNotBlank() } ?: TO_BE_ANNOUNCED)
             .joinToString(" · ")
+
+    /** Where an event with no venue yet is. */
+    const val TO_BE_ANNOUNCED = "To be announced"
 
     /** "Oct 6, 2026, 9:00 PM" for the event screen's start and end rows. */
     fun dateTime(instant: Instant, zone: ZoneId = ZoneId.systemDefault(), locale: Locale = Locale.getDefault()): String =

@@ -210,9 +210,14 @@ fun EventScreen(id: String, navigator: Navigator) {
                         }
                     }
                 }
-                loaded.venue?.let { venue ->
-                    item {
-                        Section("Venue") { VenueRow(venue) { navigator.open(AppRoute.VenueDetail(venue.id)) } }
+                item {
+                    Section("Venue") {
+                        val venue = loaded.venue
+                        if (venue != null) {
+                            VenueRow(venue) { navigator.open(AppRoute.VenueDetail(venue.id)) }
+                        } else {
+                            InfoRow(Formatting.TO_BE_ANNOUNCED)
+                        }
                     }
                 }
                 if (loaded.people.isNotEmpty()) {
