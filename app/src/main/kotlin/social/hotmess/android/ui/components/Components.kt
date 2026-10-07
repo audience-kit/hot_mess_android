@@ -6,12 +6,10 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -23,6 +21,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.OpenInNew
@@ -38,7 +38,6 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -47,6 +46,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -63,67 +63,69 @@ import social.hotmess.android.ui.theme.Opacity
 import social.hotmess.android.ui.theme.Radius
 import social.hotmess.android.ui.theme.Space
 import social.hotmess.android.ui.theme.tokens
-import social.hotmess.core.Event
-import social.hotmess.core.Formatting
 import social.hotmess.core.LoadState
-import social.hotmess.core.Person
 import social.hotmess.core.Rsvp
 import social.hotmess.core.SocialLink
 import social.hotmess.core.Track
-import social.hotmess.core.Venue
 import social.hotmess.core.initialsForDisplay
 import kotlin.math.absoluteValue
 
 // The shared pieces every screen is built from: the `surface` wash with white `surface-raised`
 // cards on it, rows inside the cards split by hairline `border` dividers, and the list rows.
 
-/** A feed on the wash: one column up to 680dp, cards `space-4` apart. */
+/**
+ * A feed on the wash: one column up to 680dp with `space-4` gutters, sections `space-4` apart.
+ * [top] is the space above the first item.
+ */
 @Composable
-fun Feed(modifier: Modifier = Modifier, content: LazyListScope.() -> Unit) {
+fun Feed(
+    modifier: Modifier = Modifier,
+    state: LazyListState = rememberLazyListState(),
+    top: Dp = Space.s4,
+    content: LazyListScope.() -> Unit,
+) {
     Box(modifier.fillMaxSize().background(tokens.surface), contentAlignment = Alignment.TopCenter) {
         LazyColumn(
             modifier = Modifier.widthIn(max = ContentMaxWidth).fillMaxSize(),
-            contentPadding = PaddingValues(horizontal = Space.s4, vertical = Space.s4),
+            state = state,
+            contentPadding = PaddingValues(start = Space.s4, end = Space.s4, top = top, bottom = Space.s4),
             verticalArrangement = Arrangement.spacedBy(Space.s4),
             content = content,
         )
     }
 }
 
-/** A titled card: the heading sits on the wash, the rows in a `surface-raised` card under it. */
+/** A [Feed] that opens on a full-bleed [hero] (a HeroHeader) running up to the top edge. */
 @Composable
-fun Section(title: String?, modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
-    Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(Space.s2)) {
-        if (title != null) {
-            Text(title, style = HotMessType.heading, color = tokens.ink, modifier = Modifier.padding(horizontal = Space.s1))
-        }
-        Card(content = content)
+fun HeroFeed(
+    state: LazyListState,
+    hero: @Composable () -> Unit,
+    modifier: Modifier = Modifier,
+    content: LazyListScope.() -> Unit,
+) {
+    Feed(modifier, state = state, top = 0.dp) {
+        item(key = "hero") { Box(Modifier.fullBleed(Space.s4)) { hero() } }
+        content()
     }
 }
 
-/** A `surface-raised` card with `radius-lg` and `shadow-sm`. */
-@Composable
-fun Card(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
-    Surface(
-        modifier = modifier.fillMaxWidth(),
-        shape = Radius.lg,
-        color = tokens.surfaceRaised,
-        contentColor = tokens.ink,
-        shadowElevation = 1.dp,
-    ) {
-        Column(content = content)
-    }
+/** Lays this out [gutter] wider on each side, out over the feed's side padding. */
+private fun Modifier.fullBleed(gutter: Dp): Modifier = layout { measurable, constraints ->
+    val extra = (gutter * 2).roundToPx()
+    val width = constraints.maxWidth + extra
+    val placeable = measurable.measure(constraints.copy(minWidth = width, maxWidth = width))
+    layout(constraints.maxWidth, placeable.height) { placeable.place(-extra / 2, 0) }
 }
 
-/** A hairline between rows in a card. */
+/** A hairline between rows in a DetailSection, inset 20 to line up with the rows' text. */
 @Composable
-fun RowDivider(inset: Dp = Space.s4) {
+fun RowDivider(inset: Dp = DetailInset) {
     HorizontalDivider(Modifier.padding(start = inset), thickness = 1.dp, color = tokens.border)
 }
 
-/** Rows in a card, with dividers between them. */
+/** Rows in a DetailSection, with dividers between them. */
 @Composable
-fun <T> CardRows(items: List<T>, divider: Dp = Space.s4, row: @Composable (T) -> Unit) {
+fun <T> CardRows(items: List<T>, divider: Dp = DetailInset, row: @Composable (T) -> Unit) {
     items.forEachIndexed { index, item ->
         if (index > 0) RowDivider(divider)
         row(item)
@@ -138,22 +140,28 @@ fun RowButton(onClick: (() -> Unit)?, modifier: Modifier = Modifier, content: @C
             .fillMaxWidth()
             .heightIn(min = 48.dp)
             .then(if (onClick != null) Modifier.clickable(role = Role.Button, onClick = onClick) else Modifier)
-            .padding(horizontal = Space.s4, vertical = Space.s3),
+            .padding(DetailRowPadding),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(Space.s3),
         content = content,
     )
 }
 
-/** Muted text in a card for an empty section. */
+/** Muted text in a DetailSection, for an empty section or a note. */
 @Composable
 fun EmptyRow(text: String) {
     Text(
         text,
         style = HotMessType.body,
         color = tokens.inkMuted,
-        modifier = Modifier.fillMaxWidth().padding(horizontal = Space.s4, vertical = Space.s3),
+        modifier = Modifier.fillMaxWidth().padding(DetailRowPadding),
     )
+}
+
+/** Plain text as a DetailSection row, such as a description. */
+@Composable
+fun TextRow(text: String) {
+    Text(text, style = HotMessType.body, color = tokens.ink, modifier = Modifier.fillMaxWidth().padding(DetailRowPadding))
 }
 
 /** A label on the left and a muted value on the right, optionally with an icon and an action. */
@@ -226,79 +234,6 @@ fun Avatar(
                 ring = presenceRing,
                 modifier = Modifier.align(Alignment.BottomEnd).offset(x = 1.dp, y = 1.dp),
             )
-        }
-    }
-}
-
-/** The event date tile: the month as a caption over the day. */
-@Composable
-fun DateBadge(event: Event) {
-    Column(
-        Modifier
-            .width(48.dp)
-            .clip(Radius.md)
-            .background(tokens.accentSoft)
-            .padding(vertical = Space.s1)
-            .semantics { contentDescription = Formatting.dateTime(event.startAt) },
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Text(Formatting.monthAbbreviation(event.startAt), style = HotMessType.caption, color = tokens.accentInk)
-        Text(Formatting.dayOfMonth(event.startAt), style = HotMessType.title, color = tokens.ink)
-    }
-}
-
-@Composable
-fun EventRow(event: Event, onClick: () -> Unit) {
-    RowButton(onClick) {
-        DateBadge(event)
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Text(event.name, style = HotMessType.subheading, color = tokens.ink, maxLines = 2, overflow = TextOverflow.Ellipsis)
-            Text(Formatting.eventSubtitle(event), style = HotMessType.bodySmall, color = tokens.inkMuted, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        }
-        if (event.rsvp != Rsvp.UNSURE) {
-            Icon(event.rsvp.icon, contentDescription = event.rsvp.title, tint = tokens.accentInk, modifier = Modifier.size(20.dp))
-        }
-    }
-}
-
-/** An event with its cover photo above, for the Featured section. */
-@Composable
-fun FeaturedEventRow(event: Event, onClick: () -> Unit) {
-    Column(Modifier.fillMaxWidth().clickable(role = Role.Button, onClick = onClick)) {
-        RemoteImage(event.coverPhotoUrl, Modifier.fillMaxWidth().height(160.dp))
-        EventRow(event, onClick)
-    }
-}
-
-@Composable
-fun VenueRow(venue: Venue, onClick: () -> Unit) {
-    RowButton(onClick) {
-        RemoteImage(venue.photoUrl, Modifier.size(56.dp).clip(Radius.md))
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Text(venue.name, style = HotMessType.subheading, color = tokens.ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(
-                venue.summary ?: venue.locale?.displayName ?: "No address yet",
-                style = HotMessType.bodySmall,
-                color = tokens.inkMuted,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-        venue.distance?.let {
-            Text(Formatting.distance(it), style = HotMessType.bodySmall, color = tokens.inkMuted)
-        }
-    }
-}
-
-@Composable
-fun PersonRow(person: Person, onClick: () -> Unit) {
-    RowButton(onClick) {
-        Avatar(person.pictureUrl, person.name)
-        Column(Modifier.weight(1f)) {
-            Text(person.name, style = HotMessType.subheading, color = tokens.ink)
-            person.role?.takeIf { it.isNotBlank() }?.let {
-                Text(it, style = HotMessType.bodySmall, color = tokens.inkMuted)
-            }
         }
     }
 }
@@ -470,10 +405,4 @@ fun Message(icon: ImageVector, title: String, text: String, action: Pair<String,
             }
         }
     }
-}
-
-/** A full-width header photo for a detail screen. */
-@Composable
-fun HeroImage(url: String?, modifier: Modifier = Modifier) {
-    RemoteImage(url, modifier.fillMaxWidth().aspectRatio(16f / 9f).clip(Radius.lg))
 }

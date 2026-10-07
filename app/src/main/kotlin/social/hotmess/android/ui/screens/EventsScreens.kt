@@ -1,7 +1,6 @@
 package social.hotmess.android.ui.screens
 
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.OpenInNew
 import androidx.compose.material.icons.rounded.CalendarMonth
@@ -23,40 +22,43 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.unit.dp
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import social.hotmess.android.ui.LocalAppGraph
 import social.hotmess.android.ui.Navigator
 import social.hotmess.android.ui.ScreenScaffold
-import social.hotmess.android.ui.components.Card
-import social.hotmess.android.ui.components.CardRows
-import social.hotmess.android.ui.components.EventRow
-import social.hotmess.android.ui.components.FeaturedEventRow
+import social.hotmess.android.ui.components.DetailSection
+import social.hotmess.android.ui.components.EmptyRow
+import social.hotmess.android.ui.components.EventCard
 import social.hotmess.android.ui.components.Feed
-import social.hotmess.android.ui.components.HeroImage
+import social.hotmess.android.ui.components.HeroFeed
+import social.hotmess.android.ui.components.HeroHeader
+import social.hotmess.android.ui.components.HeroScaffold
 import social.hotmess.android.ui.components.InfoRow
 import social.hotmess.android.ui.components.LoadStateView
 import social.hotmess.android.ui.components.Message
 import social.hotmess.android.ui.components.NightCalendarView
-import social.hotmess.android.ui.components.PersonRow
+import social.hotmess.android.ui.components.PersonCard
 import social.hotmess.android.ui.components.RowDivider
 import social.hotmess.android.ui.components.RsvpPicker
-import social.hotmess.android.ui.components.Section
-import social.hotmess.android.ui.components.VenueRow
+import social.hotmess.android.ui.components.VenueCard
+import social.hotmess.android.ui.components.cardSection
+import social.hotmess.android.ui.components.rememberHeroCollapsed
 import social.hotmess.android.ui.openUrl
 import social.hotmess.android.ui.rememberLoader
 import social.hotmess.android.ui.share
 import social.hotmess.android.ui.theme.HotMessType
-import social.hotmess.android.ui.theme.Space
-import social.hotmess.android.ui.theme.tokens
 import social.hotmess.core.ApiError
 import social.hotmess.core.AppRoute
 import social.hotmess.core.Event
 import social.hotmess.core.EventListing
 import social.hotmess.core.Formatting
 import social.hotmess.core.NightCalendar
+import social.hotmess.core.PhotoTone
 import social.hotmess.core.Rsvp
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
@@ -100,39 +102,26 @@ fun EventsScreen(navigator: Navigator) {
                         NightCalendar.of(listing.allEvents, firstDayOfWeek = WeekFields.of(Locale.getDefault()).firstDayOfWeek)
                     }
                     val night = nights.nights.firstOrNull { it.date == selectedNight }
+                    val open = { event: Event -> navigator.open(AppRoute.EventDetail(event.id)) }
                     Feed {
                         item(key = "calendar") {
-                            Card { NightCalendarView(nights, selectedNight) { selectedNight = it } }
+                            DetailSection { NightCalendarView(nights, selectedNight) { selectedNight = it } }
                         }
                         if (night != null) {
-                            item(key = "night-${night.date}") {
-                                Section(night.date.format(DateTimeFormatter.ofPattern("EEEE, MMMM d", Locale.getDefault()))) {
-                                    if (night.events.isEmpty()) {
-                                        Text(
-                                            "Nothing on this night yet.",
-                                            style = HotMessType.body,
-                                            color = tokens.inkMuted,
-                                            modifier = Modifier.padding(Space.s4),
-                                        )
-                                    } else {
-                                        CardRows(night.events, divider = 76.dp) { event ->
-                                            EventRow(event) { navigator.open(AppRoute.EventDetail(event.id)) }
-                                        }
-                                    }
+                            val title = night.date.format(DateTimeFormatter.ofPattern("EEEE, MMMM d", Locale.getDefault()))
+                            if (night.events.isEmpty()) {
+                                item(key = "night-${night.date}") {
+                                    DetailSection(title) { EmptyRow("Nothing on this night yet.") }
+                                }
+                            } else {
+                                cardSection("night-${night.date}", title, night.events, key = { it.id }) { event ->
+                                    EventCard(event, onClick = { open(event) })
                                 }
                             }
                         } else {
-                            items(listing.sections.filter { it.events.isNotEmpty() }, key = { it.id }) { section ->
-                                Section(section.title) {
-                                    if (section.id == "featured") {
-                                        CardRows(section.events, divider = 0.dp) { event ->
-                                            FeaturedEventRow(event) { navigator.open(AppRoute.EventDetail(event.id)) }
-                                        }
-                                    } else {
-                                        CardRows(section.events, divider = 76.dp) { event ->
-                                            EventRow(event) { navigator.open(AppRoute.EventDetail(event.id)) }
-                                        }
-                                    }
+                            listing.sections.filter { it.events.isNotEmpty() }.forEach { section ->
+                                cardSection(section.id, section.title, section.events, key = { it.id }) { event ->
+                                    EventCard(event, onClick = { open(event) })
                                 }
                             }
                         }
@@ -172,8 +161,13 @@ fun EventScreen(id: String, navigator: Navigator) {
     }
 
     val event = state.valueOrNull
-    ScreenScaffold(
+    val listState = rememberLazyListState()
+    val scrolled by rememberHeroCollapsed(listState)
+    var heroTone by remember { mutableStateOf(PhotoTone.PLACEHOLDER) }
+    HeroScaffold(
         title = event?.name ?: "Event",
+        tone = heroTone,
+        collapsed = event == null || scrolled,
         onBack = navigator::back,
         actions = {
             if (event != null) {
@@ -182,23 +176,32 @@ fun EventScreen(id: String, navigator: Navigator) {
                 }
             }
         },
-    ) {
+    ) { topInset ->
         LoadStateView(state, onRetry = { loader.load(id) { graph.api.event(id) } }) { loaded ->
-            Feed {
-                loaded.coverPhotoUrl?.let { url -> item { HeroImage(url) } }
-                item {
-                    Section(null) {
+            HeroFeed(
+                listState,
+                hero = {
+                    HeroHeader(loaded.coverPhotoUrl, topInset, onTone = { heroTone = it }) {
+                        Text(
+                            "${Formatting.monthAbbreviation(loaded.startAt)} ${Formatting.dayOfMonth(loaded.startAt)} · ${Formatting.shortTime(loaded.startAt)}".uppercase(),
+                            style = HotMessType.caption,
+                        )
                         Text(
                             loaded.name,
                             style = HotMessType.title,
-                            color = tokens.ink,
-                            modifier = Modifier.padding(Space.s4),
+                            maxLines = 3,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.semantics { heading() },
                         )
+                        loaded.venue?.name?.takeIf { it.isNotBlank() }?.let {
+                            Text(it, style = HotMessType.subheading, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
                     }
-                }
-                item { Section("Your RSVP") { RsvpPicker(loaded.rsvp, ::choose) } }
+                },
+            ) {
+                item { DetailSection("Your RSVP") { RsvpPicker(loaded.rsvp, ::choose) } }
                 item {
-                    Section("When") {
+                    DetailSection("When") {
                         InfoRow("Starts", Formatting.dateTime(loaded.startAt))
                         loaded.endAt?.let {
                             RowDivider()
@@ -210,24 +213,16 @@ fun EventScreen(id: String, navigator: Navigator) {
                         }
                     }
                 }
-                item {
-                    Section("Venue") {
-                        val venue = loaded.venue
-                        if (venue != null) {
-                            VenueRow(venue) { navigator.open(AppRoute.VenueDetail(venue.id)) }
-                        } else {
-                            InfoRow(Formatting.TO_BE_ANNOUNCED)
-                        }
+                val venue = loaded.venue
+                if (venue != null) {
+                    cardSection("venue", "Venue", listOf(venue), key = { it.id }) {
+                        VenueCard(it, onClick = { navigator.open(AppRoute.VenueDetail(it.id)) })
                     }
+                } else {
+                    item { DetailSection("Venue") { EmptyRow(Formatting.TO_BE_ANNOUNCED) } }
                 }
-                if (loaded.people.isNotEmpty()) {
-                    item {
-                        Section("Lineup") {
-                            CardRows(loaded.people, divider = 72.dp) { person ->
-                                PersonRow(person) { navigator.open(AppRoute.PersonDetail(person.id)) }
-                            }
-                        }
-                    }
+                cardSection("lineup", "Lineup", loaded.people, key = { it.id }) { person ->
+                    PersonCard(person, onClick = { navigator.open(AppRoute.PersonDetail(person.id)) })
                 }
             }
         }
