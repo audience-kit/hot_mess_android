@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.OpenInNew
+import androidx.compose.material.icons.rounded.Paid
 import androidx.compose.material.icons.rounded.People
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Text
@@ -37,6 +38,7 @@ import social.hotmess.android.ui.components.InfoRow
 import social.hotmess.android.ui.components.LoadStateView
 import social.hotmess.android.ui.components.Message
 import social.hotmess.android.ui.components.PersonRow
+import social.hotmess.android.ui.components.PrimaryButton
 import social.hotmess.android.ui.components.RemoteImage
 import social.hotmess.android.ui.components.Section
 import social.hotmess.android.ui.components.SocialLinkRow
@@ -98,7 +100,21 @@ fun PersonScreen(id: String, navigator: Navigator) {
         LoadStateView(state, onRetry = { loader.load(id) { graph.api.person(id) } }) { detail ->
             Feed {
                 item { Header(detail) }
-                val links = detail.socialLinks.filter { it.url != null }
+                if (detail.tipLinks.isNotEmpty()) {
+                    item {
+                        Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(Space.s2)) {
+                            detail.tipLinks.forEach { link ->
+                                PrimaryButton(
+                                    "Tip on ${link.tipApp}",
+                                    onClick = { link.url?.let(context::openUrl) },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    icon = Icons.Rounded.Paid,
+                                )
+                            }
+                        }
+                    }
+                }
+                val links = detail.profileLinks.filter { it.url != null }
                 if (links.isNotEmpty() || detail.facebookId != null) {
                     item {
                         Section("Elsewhere") {
