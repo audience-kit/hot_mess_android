@@ -94,7 +94,7 @@ class ImageToneTest {
 
         assertEquals(ToneRect(50.0, 50.0, 100.0, 50.0), rect)
         assertNull(ImageTone.imageRect(ToneRect(0.0, 200.0, 100.0, 50.0), 200, 100, 100.0, 100.0))
-        assertEquals(8, ImageTone.rows(400.0, 100.0))
+        assertEquals(16, ImageTone.rows(400.0, 100.0))
         assertEquals(4, ImageTone.rows(400.0, 10.0))
     }
 }
