@@ -30,6 +30,7 @@ import kotlinx.coroutines.launch
 import social.hotmess.android.ui.LocalAppGraph
 import social.hotmess.android.ui.Navigator
 import social.hotmess.android.ui.ScreenScaffold
+import social.hotmess.android.ui.components.Card
 import social.hotmess.android.ui.components.CardRows
 import social.hotmess.android.ui.components.EventRow
 import social.hotmess.android.ui.components.FeaturedEventRow
@@ -38,6 +39,7 @@ import social.hotmess.android.ui.components.HeroImage
 import social.hotmess.android.ui.components.InfoRow
 import social.hotmess.android.ui.components.LoadStateView
 import social.hotmess.android.ui.components.Message
+import social.hotmess.android.ui.components.NightCalendarView
 import social.hotmess.android.ui.components.PersonRow
 import social.hotmess.android.ui.components.RowDivider
 import social.hotmess.android.ui.components.RsvpPicker
@@ -54,9 +56,17 @@ import social.hotmess.core.AppRoute
 import social.hotmess.core.Event
 import social.hotmess.core.EventListing
 import social.hotmess.core.Formatting
+import social.hotmess.core.NightCalendar
 import social.hotmess.core.Rsvp
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
+import java.time.temporal.WeekFields
+import java.util.Locale
 
-/** What's on in the city you're in: a couple of featured nights, then everything upcoming. */
+/**
+ * What's on in the city you're in: a four-week calendar of how busy each night is, then a couple of
+ * featured nights and everything upcoming, or just the night picked on the calendar.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun EventsScreen(navigator: Navigator) {
@@ -78,6 +88,7 @@ fun EventsScreen(navigator: Navigator) {
             )
             return@ScreenScaffold
         }
+        var selectedNight by remember(current.id) { mutableStateOf<LocalDate?>(null) }
         LaunchedEffect(current.id) { loader.load(current.id) { graph.api.events(current.id) } }
 
         LoadStateView(state, onRetry = { loader.load(current.id) { graph.api.events(current.id) } }) { listing ->
@@ -85,16 +96,42 @@ fun EventsScreen(navigator: Navigator) {
                 if (listing.isEmpty) {
                     Message(Icons.Rounded.CalendarMonth, "Nothing on yet", "There are no upcoming events in ${current.name}. Check back soon.")
                 } else {
+                    val nights = remember(listing) {
+                        NightCalendar.of(listing.allEvents, firstDayOfWeek = WeekFields.of(Locale.getDefault()).firstDayOfWeek)
+                    }
+                    val night = nights.nights.firstOrNull { it.date == selectedNight }
                     Feed {
-                        items(listing.sections.filter { it.events.isNotEmpty() }, key = { it.id }) { section ->
-                            Section(section.title) {
-                                if (section.id == "featured") {
-                                    CardRows(section.events, divider = 0.dp) { event ->
-                                        FeaturedEventRow(event) { navigator.open(AppRoute.EventDetail(event.id)) }
+                        item(key = "calendar") {
+                            Card { NightCalendarView(nights, selectedNight) { selectedNight = it } }
+                        }
+                        if (night != null) {
+                            item(key = "night-${night.date}") {
+                                Section(night.date.format(DateTimeFormatter.ofPattern("EEEE, MMMM d", Locale.getDefault()))) {
+                                    if (night.events.isEmpty()) {
+                                        Text(
+                                            "Nothing on this night yet.",
+                                            style = HotMessType.body,
+                                            color = tokens.inkMuted,
+                                            modifier = Modifier.padding(Space.s4),
+                                        )
+                                    } else {
+                                        CardRows(night.events, divider = 76.dp) { event ->
+                                            EventRow(event) { navigator.open(AppRoute.EventDetail(event.id)) }
+                                        }
                                     }
-                                } else {
-                                    CardRows(section.events, divider = 76.dp) { event ->
-                                        EventRow(event) { navigator.open(AppRoute.EventDetail(event.id)) }
+                                }
+                            }
+                        } else {
+                            items(listing.sections.filter { it.events.isNotEmpty() }, key = { it.id }) { section ->
+                                Section(section.title) {
+                                    if (section.id == "featured") {
+                                        CardRows(section.events, divider = 0.dp) { event ->
+                                            FeaturedEventRow(event) { navigator.open(AppRoute.EventDetail(event.id)) }
+                                        }
+                                    } else {
+                                        CardRows(section.events, divider = 76.dp) { event ->
+                                            EventRow(event) { navigator.open(AppRoute.EventDetail(event.id)) }
+                                        }
                                     }
                                 }
                             }

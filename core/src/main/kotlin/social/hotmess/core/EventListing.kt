@@ -6,6 +6,9 @@ data class EventSection(val id: String, val title: String, val events: List<Even
 data class EventListing(val sections: List<EventSection> = emptyList()) {
     val isEmpty: Boolean get() = sections.all { it.events.isEmpty() }
 
+    /** Every event across the sections, once each, soonest first. */
+    val allEvents: List<Event> get() = sections.flatMap { it.events }.distinctBy { it.id }.sortedBy { it.startAt }
+
     companion object {
         /**
          * Splits upcoming events the way the iOS app does: up to two events with a cover photo as
