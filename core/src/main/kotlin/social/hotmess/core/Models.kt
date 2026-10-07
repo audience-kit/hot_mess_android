@@ -93,6 +93,14 @@ data class PersonDetail(
 ) {
     val person: Person
         get() = Person(id = id, name = name, facebookId = facebookId, isLiked = isLiked, pictureUrl = pictureUrl, coverUrl = coverUrl)
+
+    /** Where fans can tip them (Cash App, Venmo), each opening that app. */
+    val tipLinks: List<SocialLink>
+        get() = socialLinks.filter { it.tipApp != null && it.url != null }
+
+    /** Their social profiles, without the tip links. */
+    val profileLinks: List<SocialLink>
+        get() = socialLinks.filter { it.tipApp == null }
 }
 
 @Serializable
@@ -123,6 +131,14 @@ data class SocialLink(
         }
 
     enum class Network { FACEBOOK, INSTAGRAM, SOUNDCLOUD, SPOTIFY, APPLE_MUSIC, X }
+
+    /** The app fans tip them with, for a Cash App or Venmo link; null for a social profile. */
+    val tipApp: String?
+        get() = when (provider.lowercase(Locale.ROOT)) {
+            "cashapp" -> "Cash App"
+            "venmo" -> "Venmo"
+            else -> null
+        }
 }
 
 @Serializable

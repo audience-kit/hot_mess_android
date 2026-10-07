@@ -70,6 +70,21 @@ class ModelDecodingTest {
     }
 
     @Test
+    fun splitsTipLinksFromProfiles() {
+        val person = PersonDetail(
+            id = "p-1",
+            socialLinks = listOf(
+                SocialLink("s-1", "glitter", "instagram", "https://instagram.com/glitter"),
+                SocialLink("s-2", "GlitterTips", "cashapp", "https://cash.app/\$GlitterTips"),
+                SocialLink("s-3", "glitter-tips", "venmo", "https://venmo.com/u/glitter-tips"),
+            ),
+        )
+
+        assertEquals(listOf("Cash App", "Venmo"), person.tipLinks.map { it.tipApp })
+        assertEquals(listOf("instagram"), person.profileLinks.map { it.provider })
+    }
+
+    @Test
     fun recordIdsNormalizeGlobalIds() {
         val uuid = "B0F8B66A-E636-495D-9475-0F5317EA08E0"
         val global = java.util.Base64.getUrlEncoder().withoutPadding()
