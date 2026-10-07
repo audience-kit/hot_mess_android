@@ -8,6 +8,8 @@ import androidx.compose.material.icons.automirrored.rounded.Chat
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.rounded.OpenInNew
 import androidx.compose.material.icons.rounded.NearMe
+import androidx.compose.material.icons.rounded.LocationOff
+import androidx.compose.material.icons.rounded.MyLocation
 import androidx.compose.material.icons.rounded.Phone
 import androidx.compose.material.icons.rounded.Place
 import androidx.compose.material.icons.rounded.Share
@@ -166,6 +168,9 @@ fun VenueScreen(id: String, navigator: Navigator) {
                         }
                     }
                 }
+                loaded.coordinate?.takeIf { graph.configuration.isTestBuild }?.let { coordinate ->
+                    item { PretendHere(loaded.name, coordinate.latitude, coordinate.longitude) }
+                }
                 item {
                     Section("Events") {
                         if (overview.events.isEmpty()) EmptyRow("There's nothing coming up here yet.")
@@ -176,5 +181,20 @@ fun VenueScreen(id: String, navigator: Navigator) {
                 }
             }
         }
+    }
+}
+
+/** Test builds only: report the venue's own position, so the app and the API treat you as inside it. */
+@Composable
+private fun PretendHere(name: String, latitude: Double, longitude: Double) {
+    val location = LocalAppGraph.current.location
+    val simulated by location.simulatedVenue.collectAsStateWithLifecycle()
+    Section("Testing") {
+        if (simulated == name) {
+            InfoRow("Stop pretending", icon = Icons.Rounded.LocationOff, onClick = location::stopSimulating)
+        } else {
+            InfoRow("Pretend I'm here", icon = Icons.Rounded.MyLocation, onClick = { location.simulate(latitude, longitude, name) })
+        }
+        EmptyRow("Test builds only. Reports this venue's location instead of yours until you stop.")
     }
 }

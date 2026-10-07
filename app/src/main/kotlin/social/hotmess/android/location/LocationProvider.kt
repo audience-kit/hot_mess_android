@@ -32,7 +32,7 @@ enum class LocationAccess { NOT_REQUESTED, ALLOWED, DENIED }
 class LocationProvider(
     private val context: Context,
     private val api: HotMessApi,
-    configuration: AppConfiguration,
+    private val configuration: AppConfiguration,
     private val scope: CoroutineScope,
 ) {
     private val _coordinates = MutableStateFlow<Coordinates?>(null)
@@ -43,6 +43,13 @@ class LocationProvider(
 
     private val _access = MutableStateFlow(currentAccess(asked = false))
     val access: StateFlow<LocationAccess> = _access.asStateFlow()
+
+    private val _simulatedVenue = MutableStateFlow<String?>(null)
+
+    /** Test builds only: the venue the app is pretending to be at, whose position is reported instead of the device's. */
+    val simulatedVenue: StateFlow<String?> = _simulatedVenue.asStateFlow()
+
+    private var lastRealLocation: Location? = null
 
     private val manager = context.getSystemService(LocationManager::class.java)
     private val beacons = configuration.beaconUuid?.let { BeaconScanner(context, it, ::onBeacon) }
@@ -84,6 +91,28 @@ class LocationProvider(
         }
     }
 
+    /**
+     * Reports this position as the device's until [stopSimulating], so a test build can be "at" a
+     * venue from anywhere. The API puts the user at whichever venue's envelope contains the point.
+     */
+    fun simulate(latitude: Double, longitude: Double, venueName: String) {
+        if (!configuration.isTestBuild) return
+        _simulatedVenue.value = venueName
+        _coordinates.value = Coordinates(latitude = latitude, longitude = longitude)
+        scope.launch {
+            refreshLocale()
+            reportPosition()
+        }
+    }
+
+    /** Goes back to the device's real position. */
+    fun stopSimulating() {
+        if (_simulatedVenue.value == null) return
+        _simulatedVenue.value = null
+        val real = lastRealLocation
+        if (real != null) update(real) else _coordinates.value = null
+    }
+
     @SuppressLint("MissingPermission")
     private fun beginMonitoring() {
         if (isMonitoring) return
@@ -111,6 +140,8 @@ class LocationProvider(
     }
 
     private fun update(location: Location) {
+        lastRealLocation = location
+        if (_simulatedVenue.value != null) return
         val previous = _coordinates.value
         _coordinates.value = Coordinates(
             latitude = location.latitude,
@@ -125,6 +156,7 @@ class LocationProvider(
     }
 
     private fun onBeacon(major: Int, minor: Int) {
+        if (_simulatedVenue.value != null) return
         // Only attach beacon identifiers to a position we actually have.
         val position = _coordinates.value ?: return
         if (position.beaconMajor == major && position.beaconMinor == minor) return

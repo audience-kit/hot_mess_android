@@ -16,6 +16,8 @@ data class AppConfiguration(
     val beaconUuid: String? = BuildConfig.BEACON_UUID.ifBlank { null },
     val versionName: String = BuildConfig.VERSION_NAME,
     val versionCode: Int = BuildConfig.VERSION_CODE,
+    /** Staging and debug builds, which get testing aids such as pretending to be at a venue. */
+    val isTestBuild: Boolean = BuildConfig.DEBUG || environment != AudienceKitEnvironment.PRODUCTION,
 ) {
     /** How the AudienceKit SDK reaches the Hot Mess audience. */
     val audienceKit: AudienceKitConfiguration

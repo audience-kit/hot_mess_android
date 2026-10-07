@@ -15,6 +15,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Chat
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
+import androidx.compose.material.icons.rounded.LocationOff
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Text
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
@@ -69,6 +70,7 @@ fun NowScreen(navigator: Navigator) {
     val loader = rememberLoader<Now>("now")
     val state by loader.state.collectAsStateWithLifecycle()
     val refreshing by loader.isRefreshing.collectAsStateWithLifecycle()
+    val simulated by graph.location.simulatedVenue.collectAsStateWithLifecycle()
 
     LaunchedEffect(coordinates) { loader.load(coordinates) { graph.api.now(coordinates) } }
 
@@ -76,6 +78,13 @@ fun NowScreen(navigator: Navigator) {
         LoadStateView(state, onRetry = { loader.load(coordinates, refresh = false) { graph.api.now(coordinates) } }) { now ->
             PullToRefreshBox(refreshing, onRefresh = { loader.load(coordinates, refresh = true) { graph.api.now(coordinates) } }) {
                 Feed {
+                    simulated?.let { name ->
+                        item {
+                            Section("Pretending to be at $name") {
+                                InfoRow("Stop pretending", icon = Icons.Rounded.LocationOff, onClick = graph.location::stopSimulating)
+                            }
+                        }
+                    }
                     now.imageUrl?.let { url ->
                         item { RemoteImage(url, Modifier.fillMaxWidth().height(160.dp).clip(Radius.lg)) }
                     }
