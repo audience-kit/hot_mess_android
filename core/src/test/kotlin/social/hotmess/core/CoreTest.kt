@@ -161,6 +161,15 @@ class ChatProtocolTest {
     }
 
     @Test
+    fun subscribesToALocaleRoom() {
+        val locale = "4e5f6071-8293-4A41-8d5e-6f7a8b9c0d1e"
+        val identifier = HotMessApi.json.parseToJsonElement(ChatProtocol.identifier(ChatRoom.locale(locale))).jsonObject
+        assertEquals("LocaleChannel", identifier["channel"]!!.jsonPrimitive.content)
+        assertEquals(locale.lowercase(), identifier["locale_id"]!!.jsonPrimitive.content)
+        assertNull(identifier["venue_id"])
+    }
+
+    @Test
     fun readsServerFrames() {
         assertEquals(ChatProtocol.Frame.Connected, ChatProtocol.parse("""{"type":"welcome"}"""))
         assertEquals(ChatProtocol.Frame.Connected, ChatProtocol.parse("""{"type":"confirm_subscription","identifier":"x"}"""))
@@ -297,6 +306,21 @@ class HotMessApiTest {
         assertEquals("Nyne", entry.venue.name)
         assertEquals(2, entry.friendCount)
         assertEquals(listOf("Alex", "Sam"), entry.friends.map { it.firstName })
+    }
+
+    @Test
+    fun nowAwayFromVenuesHasTheLocaleChat() = runTest {
+        val (api, bodies) = api(
+            "ReportLocation" to """{"data":{"reportLocation":{"now":{"title":"Seattle","venues":[],"events":[],
+                "locale":{"id":"l1","name":"Seattle","chatOpen":true,"recentMessages":[{"id":"m1",
+                  "message":"anyone out?","name":"Ada","userId":"u1","sentAt":"2026-10-07T08:00:00Z"}]}}}}}""",
+        )
+        val locale = api.now(Coordinates(47.62, -122.32)).locale!!
+
+        assertTrue(locale.chatOpen)
+        assertEquals("Seattle", locale.name)
+        assertEquals("anyone out?", locale.recentMessages.single().message)
+        assertTrue(bodies.single().contains("chatOpen"))
     }
 
     @Test

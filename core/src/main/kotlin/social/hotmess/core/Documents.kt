@@ -20,6 +20,7 @@ object Documents {
               title imageUrl
               venue { $VENUE_FIELDS recentMessages(limit: 3) { id message name userId avatarUrl sentAt } }
               venues { $VENUE_FIELDS }
+              locale { id name chatOpen recentMessages(limit: 3) { id message name userId avatarUrl sentAt } }
               events { $EVENT_FIELDS }
               friends { id name facebookId }
               friendVenues { venue { $VENUE_FIELDS } friendCount friends { id name facebookId } }

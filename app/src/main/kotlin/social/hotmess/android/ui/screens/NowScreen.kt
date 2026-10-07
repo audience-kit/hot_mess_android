@@ -56,6 +56,7 @@ import social.hotmess.core.ChatLine
 import social.hotmess.core.Friend
 import social.hotmess.core.FriendVenue
 import social.hotmess.core.Now
+import social.hotmess.core.NowLocale
 import social.hotmess.core.Venue
 
 /**
@@ -92,6 +93,9 @@ fun NowScreen(navigator: Navigator) {
                     now.venue?.let { venue ->
                         item { SmallTalk(venue, navigator) }
                         item { FriendsHere(now.friends) }
+                    }
+                    now.locale?.takeIf { now.venue == null && it.chatOpen }?.let { locale ->
+                        item { LocaleSmallTalk(locale, navigator) }
                     }
                     if (now.venue == null && now.friendVenues.isNotEmpty()) {
                         item { WhereFriendsAre(now.friendVenues, navigator) }
@@ -142,6 +146,26 @@ private fun SmallTalk(venue: Venue, navigator: Navigator) {
             "Join the chat",
             icon = Icons.AutoMirrored.Rounded.Chat,
             onClick = { navigator.openChat(venue.id, venue.name) },
+            trailing = Icons.AutoMirrored.Rounded.KeyboardArrowRight,
+        )
+    }
+}
+
+/** Away from venues: the last few lines of the locale's chat, for everyone out in it, and the way in. */
+@Composable
+private fun LocaleSmallTalk(locale: NowLocale, navigator: Navigator) {
+    val configuration = LocalAppGraph.current.configuration
+    val name = locale.name ?: "your city"
+    Section("Small talk in $name") {
+        if (locale.recentMessages.isEmpty()) EmptyRow("No one's said anything yet.")
+        CardRows(locale.recentMessages, divider = 56.dp) { line ->
+            ChatPreviewRow(line, line.avatarUrl ?: line.userId.takeIf { it.isNotEmpty() }?.let(configuration::avatarUrl))
+        }
+        RowDivider()
+        InfoRow(
+            "Join the chat",
+            icon = Icons.AutoMirrored.Rounded.Chat,
+            onClick = { navigator.openLocaleChat(locale.id, name) },
             trailing = Icons.AutoMirrored.Rounded.KeyboardArrowRight,
         )
     }
