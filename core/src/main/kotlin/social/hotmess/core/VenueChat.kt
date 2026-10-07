@@ -52,6 +52,11 @@ data class VenueMessage(
     val endsAt: Instant? = null,
     /** The announcement pinned under the room's title. */
     val pinned: Boolean = false,
+    /**
+     * The sender isn't in the room but a notification reaches them (a yellow dot). The server only
+     * says so about the viewer's friends, and to admins.
+     */
+    val reachable: Boolean = false,
 ) {
     fun isOutgoing(currentUserId: String?): Boolean = currentUserId != null && userId.equals(currentUserId, ignoreCase = true)
 
@@ -132,6 +137,12 @@ data class ChatRoom(val kind: Kind, val id: String) {
  * and go. Newer servers add to the roster `people` (everyone in the room, with `name`, `avatar_url` and
  * whether they're the joiner's `friend`) and `friends` (all the joiner's friends, by full name), and to
  * an online presence frame the newcomer's `name` and `avatar_url`. Every one of those is optional.
+ *
+ * Newer servers also send, on joining, `{"type":"history","messages":[<line>, …],"pinned":<line>|null}`
+ * (the room's recent lines, oldest first, and the announcement pinned under its title however old);
+ * `{"type":"pin","id":…,"pinned":true,"announcement":<line>}` or `{"type":"pin","id":…,"pinned":false}`
+ * as announcements are pinned and unpinned; and `"presence":"push"`, on a presence frame or a line, for a
+ * friend outside the room whom a notification reaches.
  */
 object ChatProtocol {
     // Lenient, so an id sent as a number still reads as a string rather than dropping the line.
@@ -165,13 +176,23 @@ object ChatProtocol {
             val friends: List<Friend> = emptyList(),
         ) : Frame
 
-        /** Someone (by lowercase user id) came into the room or left it; a newcomer with their [name] and [avatarUrl] when sent. */
+        /**
+         * Someone (by lowercase user id) came into the room or left it; a newcomer with their [name] and
+         * [avatarUrl] when sent. Someone who left but whom a notification reaches is [reachable].
+         */
         data class PresenceChanged(
             val userId: String,
             val online: Boolean,
             val name: String? = null,
             val avatarUrl: String? = null,
+            val reachable: Boolean = false,
         ) : Frame
+
+        /** The room's recent lines, oldest first, and its pinned announcement, sent on joining. */
+        data class History(val messages: List<VenueMessage>, val pinned: VenueMessage? = null) : Frame
+
+        /** An announcement (by [id]) was pinned, with the [announcement], or unpinned (null). */
+        data class Pin(val id: String, val announcement: VenueMessage?) : Frame
     }
 
     /** Action Cable names a subscription by a JSON *string*, not an object. */
@@ -207,6 +228,8 @@ object ChatProtocol {
                     "range" -> return Frame.Range((message["out_of_range"] as? JsonPrimitive)?.booleanOrNull ?: false)
                     "roster" -> return roster(message)
                     "presence" -> return presence(message)
+                    "history" -> return history(message)
+                    "pin" -> return pin(message)
                 }
                 val payload = runCatching { json.decodeFromJsonElement(IncomingMessage.serializer(), message) }.getOrNull()
                     ?: return null
@@ -237,6 +260,23 @@ object ChatProtocol {
         return Frame.Roster(online.mapNotNull { (it as? JsonPrimitive)?.contentOrNull?.lowercase() }.toSet(), people, friends)
     }
 
+    private fun line(element: kotlinx.serialization.json.JsonElement?): VenueMessage? {
+        val message = element as? JsonObject ?: return null
+        return runCatching { json.decodeFromJsonElement(IncomingMessage.serializer(), message) }.getOrNull()?.toMessage()
+    }
+
+    /** A malformed line drops only itself. */
+    private fun history(message: JsonObject): Frame = Frame.History(
+        (message["messages"] as? JsonArray).orEmpty().mapNotNull(::line),
+        line(message["pinned"]),
+    )
+
+    private fun pin(message: JsonObject): Frame? {
+        val id = message.string("id") ?: return null
+        val pinned = (message["pinned"] as? JsonPrimitive)?.booleanOrNull ?: false
+        return Frame.Pin(id, if (pinned) line(message["announcement"]) else null)
+    }
+
     private fun presence(message: JsonObject): Frame? {
         val userId = message.string("user_id") ?: return null
         val presence = message.string("presence") ?: return null
@@ -246,6 +286,7 @@ object ChatProtocol {
             online,
             name = if (online) message.string("name") else null,
             avatarUrl = if (online) message.string("avatar_url") else null,
+            reachable = presence.equals("push", ignoreCase = true),
         )
     }
 
@@ -283,6 +324,7 @@ object ChatProtocol {
         val event: IncomingEvent? = null,
         @SerialName("ends_at") val endsAt: String? = null,
         val pinned: Boolean? = null,
+        val presence: String? = null,
     ) {
         fun toMessage(): VenueMessage {
             val base = VenueMessage(body = message, userId = userId, avatarUrl = avatarUrl.blankToNull())
@@ -298,6 +340,7 @@ object ChatProtocol {
                 event = event?.id.blankToNull()?.let { SharedEvent(it, event?.name.blankToNull(), event?.startAt?.let(InstantSerializer::parse)) },
                 endsAt = endsAt?.let(InstantSerializer::parse),
                 pinned = pinned ?: false,
+                reachable = presence.equals("push", ignoreCase = true),
             )
         }
     }
@@ -339,7 +382,11 @@ class VenueChatConnection(
             val online: Boolean,
             val name: String? = null,
             val avatarUrl: String? = null,
+            val reachable: Boolean = false,
         ) : Event
+
+        data class History(val messages: List<VenueMessage>, val pinned: VenueMessage?) : Event
+        data class Pin(val id: String, val announcement: VenueMessage?) : Event
     }
 
     @Volatile private var socket: WebSocket? = null
@@ -364,7 +411,10 @@ class VenueChatConnection(
                     is ChatProtocol.Frame.Message -> trySend(Event.Received(frame.message))
                     is ChatProtocol.Frame.Range -> trySend(Event.Range(frame.outOfRange))
                     is ChatProtocol.Frame.Roster -> trySend(Event.Roster(frame.online, frame.people, frame.friends))
-                    is ChatProtocol.Frame.PresenceChanged -> trySend(Event.PresenceChanged(frame.userId, frame.online, frame.name, frame.avatarUrl))
+                    is ChatProtocol.Frame.PresenceChanged ->
+                        trySend(Event.PresenceChanged(frame.userId, frame.online, frame.name, frame.avatarUrl, frame.reachable))
+                    is ChatProtocol.Frame.History -> trySend(Event.History(frame.messages, frame.pinned))
+                    is ChatProtocol.Frame.Pin -> trySend(Event.Pin(frame.id, frame.announcement))
                     null -> Unit
                 }
             }

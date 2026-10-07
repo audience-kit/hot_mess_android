@@ -76,6 +76,13 @@ class VenueChatModel(private val graph: AppGraph, private val room: ChatRoom) : 
     private val _people = MutableStateFlow(RoomPeople())
     val people: StateFlow<RoomPeople> = _people.asStateFlow()
 
+    /**
+     * People outside the room whom a notification reaches, by lowercase user id: a yellow dot. The room
+     * only says so about the viewer's friends, and to admins.
+     */
+    private val _reachable = MutableStateFlow<Set<String>>(emptySet())
+    val reachable: StateFlow<Set<String>> = _reachable.asStateFlow()
+
     private var connection: VenueChatConnection? = null
     private var job: Job? = null
     private var heartbeat: Job? = null
@@ -118,16 +125,22 @@ class VenueChatModel(private val graph: AppGraph, private val room: ChatRoom) : 
                             graph.api.friends.record(event.friends)
                             _people.value = _people.value.roster(event.online, event.people)
                         }
-                        is VenueChatConnection.Event.PresenceChanged -> _people.value =
-                            if (event.online) {
+                        is VenueChatConnection.Event.PresenceChanged -> {
+                            _people.value = if (event.online) {
                                 _people.value.joined(event.userId, event.name, event.avatarUrl)
                             } else {
                                 _people.value.left(event.userId)
                             }
+                            val id = event.userId.lowercase()
+                            _reachable.value = if (event.reachable) _reachable.value + id else _reachable.value - id
+                        }
+                        is VenueChatConnection.Event.History -> history(event.messages, event.pinned)
+                        is VenueChatConnection.Event.Pin -> pin(event.id, event.announcement)
                         is VenueChatConnection.Event.Disconnected -> {
                             _status.value = Status.OFFLINE
                             // The next roster says who's here; until then nobody is known to be.
                             _people.value = RoomPeople()
+                            _reachable.value = emptySet()
                         }
                         VenueChatConnection.Event.Rejected, VenueChatConnection.Event.Left -> away = true
                     }
@@ -151,16 +164,40 @@ class VenueChatModel(private val graph: AppGraph, private val room: ChatRoom) : 
      * to the sender's own face. A line the room sends again (by its id) replaces the first copy.
      */
     private fun receive(message: VenueMessage) {
-        val line = if (message.avatarUrl != null || message.isPostedAsVenue) {
-            message
-        } else {
-            message.copy(avatarUrl = graph.configuration.avatarUrl(message.userId))
-        }
+        val line = withAvatar(message)
+        if (line.reachable && !line.isPostedAsVenue) _reachable.value = _reachable.value + line.userId.lowercase()
         // An older server's roster has no names: a line someone sends names them in "Here now".
         if (!line.isPostedAsVenue) _people.value = _people.value.described(line.userId, line.name, line.avatarUrl)
         val current = _messages.value
         val index = current.indexOfFirst { it.id == line.id }
         _messages.value = if (index >= 0) current.toMutableList().also { it[index] = line } else current + line
+    }
+
+    private fun withAvatar(message: VenueMessage): VenueMessage =
+        if (message.avatarUrl != null || message.isPostedAsVenue) {
+            message
+        } else {
+            message.copy(avatarUrl = graph.configuration.avatarUrl(message.userId))
+        }
+
+    /**
+     * What the room sent on joining replaces what was shown, so a reconnect doesn't repeat lines. A
+     * pinned announcement older than the lines the room shows goes first, so its bar has it.
+     */
+    private fun history(messages: List<VenueMessage>, pinned: VenueMessage?) {
+        val lines = messages.map(::withAvatar)
+        val older = pinned?.takeIf { p -> lines.none { it.id == p.id } }?.let(::withAvatar)
+        _messages.value = listOfNotNull(older) + lines
+        _reachable.value = lines.filter { it.reachable && !it.isPostedAsVenue }.map { it.userId.lowercase() }.toSet()
+    }
+
+    /** An announcement was pinned (replacing whichever was) or unpinned. */
+    private fun pin(id: String, announcement: VenueMessage?) {
+        val lines = _messages.value.map { line ->
+            val pinned = announcement != null && line.id == id
+            if (line.pinned == pinned) line else line.copy(pinned = pinned)
+        }
+        _messages.value = if (announcement != null && lines.none { it.id == id }) lines + withAvatar(announcement) else lines
     }
 
     fun disconnect() {
@@ -170,6 +207,7 @@ class VenueChatModel(private val graph: AppGraph, private val room: ChatRoom) : 
         heartbeat = null
         connection = null
         _people.value = RoomPeople()
+        _reachable.value = emptySet()
     }
 
     fun send(body: String): Boolean {
@@ -194,6 +232,7 @@ fun VenueChatScreen(room: ChatRoom, venueName: String, navigator: Navigator) {
     val status by model.status.collectAsStateWithLifecycle()
     val outOfRange by model.outOfRange.collectAsStateWithLifecycle()
     val people by model.people.collectAsStateWithLifecycle()
+    val reachable by model.reachable.collectAsStateWithLifecycle()
     val user by graph.session.user.collectAsStateWithLifecycle()
     var draft by rememberSaveable { mutableStateOf("") }
 
@@ -239,7 +278,10 @@ fun VenueChatScreen(room: ChatRoom, venueName: String, navigator: Navigator) {
             }
             HereNowStrip(hereNow)
             val thread = remember(messages, userId, people) { messages.map { it.threadMessage(userId, friends) } }
-            val presence = remember(people) { people.ids.associateWith { Presence.ONLINE } }
+            // Green for everyone in the room, yellow for friends outside it whom a notification reaches.
+            val presence = remember(people, reachable) {
+                reachable.associateWith { Presence.PUSH } + people.ids.associateWith { Presence.ONLINE }
+            }
             ChatThread(
                 thread,
                 venueName,
