@@ -42,6 +42,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import social.hotmess.android.payments.CoverCheckout
+import social.hotmess.android.payments.CoverCheckoutFailure
+import social.hotmess.android.payments.rememberCoverCheckout
 import social.hotmess.android.ui.LocalAppGraph
 import social.hotmess.android.ui.Navigator
 import social.hotmess.android.ui.components.Avatar
@@ -57,6 +60,8 @@ import social.hotmess.android.ui.components.HeroHeader
 import social.hotmess.android.ui.components.HeroScaffold
 import social.hotmess.android.ui.components.InfoRow
 import social.hotmess.android.ui.components.LoadStateView
+import social.hotmess.android.ui.components.PassCard
+import social.hotmess.android.ui.components.SkipTheLineCard
 import social.hotmess.android.ui.components.VenueCard
 import social.hotmess.android.ui.components.cardSection
 import social.hotmess.android.ui.components.friendNames
@@ -69,6 +74,8 @@ import social.hotmess.android.ui.theme.Space
 import social.hotmess.android.ui.theme.tokens
 import social.hotmess.core.AppRoute
 import social.hotmess.core.ChatLine
+import social.hotmess.core.CoverAction
+import social.hotmess.core.CoverOffer
 import social.hotmess.core.Friend
 import social.hotmess.core.FriendVenue
 import social.hotmess.core.Now
@@ -124,6 +131,12 @@ fun NowScreen(navigator: Navigator) {
         }
     }
 
+    val checkout = rememberCoverCheckout { pass ->
+        loader.load(coordinates, refresh = true) { graph.api.nowOrPings(coordinates) }
+        navigator.openPass(pass.id)
+    }
+    val checkoutState by checkout.state.collectAsStateWithLifecycle()
+
     val listState = rememberLazyListState()
     val scrolled by rememberHeroCollapsed(listState)
     var heroTone by remember { mutableStateOf(PhotoTone.PLACEHOLDER) }
@@ -159,6 +172,26 @@ fun NowScreen(navigator: Navigator) {
                         item {
                             DetailSection("Pretending to be at $name") {
                                 InfoRow("Stop pretending", icon = Icons.Rounded.LocationOff, onClick = { graph.location.stopSimulating() })
+                            }
+                        }
+                    }
+                    // At a venue with a cover tonight: your pass front and center, or the way to skip the line.
+                    now.venue?.let { venue ->
+                        val offer = CoverOffer.of(venue)
+                        val pass = offer?.pass
+                        when {
+                            pass != null -> item(key = "pass") {
+                                PassCard(pass, venue.name) {
+                                    graph.passes.put(pass)
+                                    navigator.openPass(pass.id)
+                                }
+                            }
+                            offer != null && offer.action == CoverAction.PAY -> item(key = "cover") {
+                                SkipTheLineCard(
+                                    offer,
+                                    paying = checkoutState == CoverCheckout.State.Working,
+                                    onPay = { checkout.pay(venue.id, venue.name) },
+                                )
                             }
                         }
                     }
@@ -204,6 +237,7 @@ fun NowScreen(navigator: Navigator) {
         }
     }
 
+    CoverCheckoutFailure(checkout)
     if (sheetOpen) {
         PingSheet(
             preselect = null,

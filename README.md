@@ -1,6 +1,7 @@
 # Hot Mess for Android
 
-The Hot Mess app for Android: what's on near you, venues, people, event RSVPs and venue chat. It
+The Hot Mess app for Android: what's on near you, venues, people, event RSVPs, venue chat and paying
+cover. It
 matches the iOS app (audience-kit/hot_mess_ios) and is built with Jetpack Compose on the
 AudienceKit Kotlin SDK, styled with the AudienceKit design system's `hot_mess` preset.
 
@@ -9,7 +10,8 @@ AudienceKit Kotlin SDK, styled with the AudienceKit design system's `hot_mess` p
 - `core/`: plain Kotlin. The GraphQL documents, models, API calls, deep links, formatting and the
   venue chat protocol. Its tests run without an Android SDK: `./gradlew :core:test`.
 - `app/`: the Android app. Theme and components (`ui/theme`, `ui/components`), screens
-  (`ui/screens`), sign-in and branding (`session`), location and beacons (`location`), push (`push`).
+  (`ui/screens`), sign-in and branding (`session`), location and beacons (`location`), push (`push`),
+  and paying cover with Stripe's payment sheet (`payments`).
 - `design/`: the script that draws the launcher icons from the iOS silhouette.
 
 ## Setup
@@ -41,6 +43,15 @@ for `public_profile`, `email` and `user_friends`, like the iOS app. It opens Fac
 in a Custom Tab, which redirects to `fbconnect://cct.<application id>` with a code that the API
 exchanges. Each Facebook app needs an Android platform listing this app's package names and key
 hashes, and the redirect has to be accepted as a Valid OAuth Redirect URI.
+
+## Cover charge
+
+Venues that take cover in the app show "Pay cover" on their page, their events tonight and Now.
+`buyCover` starts the payment, Stripe's payment sheet (with Google Pay) takes it as a direct charge on
+the venue's own Stripe account, and `confirmCover` turns the pass on. A pass's QR code is made on the
+phone from its secret every 30 seconds (`CoverPass` in the SDK), so it works with no signal at the
+door. Passes are on the Me tab. People who work a venue's door get Door mode there (and on the venue's
+page), which scans passes with the camera.
 
 ## Facebook sign-in test
 

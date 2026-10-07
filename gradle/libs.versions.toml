@@ -16,6 +16,9 @@ coil = "3.6.3"
 browser = "1.8.0"
 maplibre = "13.6.1"
 firebase-messaging = "24.1.0"
+stripe = "23.22.0"
+zxing = "3.5.4"
+camerax = "1.4.2"
 junit = "4.13.2"
 androidx-test-runner = "1.7.0"
 androidx-test-junit = "1.3.0"
@@ -47,6 +50,11 @@ coil-compose = { module = "io.coil-kt.coil3:coil-compose", version.ref = "coil" 
 coil-network-okhttp = { module = "io.coil-kt.coil3:coil-network-okhttp", version.ref = "coil" }
 maplibre = { module = "org.maplibre.gl:android-sdk-opengl", version.ref = "maplibre" }
 firebase-messaging = { module = "com.google.firebase:firebase-messaging", version.ref = "firebase-messaging" }
+stripe-android = { module = "com.stripe:stripe-android", version.ref = "stripe" }
+zxing-core = { module = "com.google.zxing:core", version.ref = "zxing" }
+androidx-camera-camera2 = { module = "androidx.camera:camera-camera2", version.ref = "camerax" }
+androidx-camera-lifecycle = { module = "androidx.camera:camera-lifecycle", version.ref = "camerax" }
+androidx-camera-view = { module = "androidx.camera:camera-view", version.ref = "camerax" }
 junit = { module = "junit:junit", version.ref = "junit" }
 androidx-test-runner = { module = "androidx.test:runner", version.ref = "androidx-test-runner" }
 androidx-test-junit = { module = "androidx.test.ext:junit", version.ref = "androidx-test-junit" }

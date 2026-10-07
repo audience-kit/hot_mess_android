@@ -29,9 +29,13 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
+import social.hotmess.android.payments.CoverCheckout
+import social.hotmess.android.payments.CoverCheckoutFailure
+import social.hotmess.android.payments.rememberCoverCheckout
 import social.hotmess.android.ui.LocalAppGraph
 import social.hotmess.android.ui.Navigator
 import social.hotmess.android.ui.ScreenScaffold
+import social.hotmess.android.ui.components.CoverRow
 import social.hotmess.android.ui.components.DetailSection
 import social.hotmess.android.ui.components.EmptyRow
 import social.hotmess.android.ui.components.EventCard
@@ -55,6 +59,7 @@ import social.hotmess.android.ui.share
 import social.hotmess.android.ui.theme.HotMessType
 import social.hotmess.core.ApiError
 import social.hotmess.core.AppRoute
+import social.hotmess.core.CoverOffer
 import social.hotmess.core.Event
 import social.hotmess.core.EventListing
 import social.hotmess.core.Formatting
@@ -147,6 +152,11 @@ fun EventScreen(id: String, navigator: Navigator) {
 
     LaunchedEffect(id) { loader.load(id) { graph.api.event(id) } }
 
+    val checkout = rememberCoverCheckout { pass ->
+        loader.load(id, refresh = true) { graph.api.event(id) }
+        navigator.openPass(pass.id)
+    }
+    val checkoutState by checkout.state.collectAsStateWithLifecycle()
     val userId = rememberUserId()
     var pingHere by rememberSaveable { mutableStateOf(false) }
     val actions = rememberPingActions { ping ->
@@ -220,6 +230,22 @@ fun EventScreen(id: String, navigator: Navigator) {
                     )
                 }
                 item { DetailSection("Your RSVP") { RsvpPicker(loaded.rsvp, ::choose) } }
+                val venue = loaded.venue
+                CoverOffer.of(loaded)?.let { offer ->
+                    item {
+                        DetailSection("Cover") {
+                            CoverRow(
+                                offer,
+                                paying = checkoutState == CoverCheckout.State.Working,
+                                onPay = { venue?.let { checkout.pay(it.id, it.name) } },
+                                onShowPass = { pass ->
+                                    graph.passes.put(pass)
+                                    navigator.openPass(pass.id)
+                                },
+                            )
+                        }
+                    }
+                }
                 item {
                     DetailSection("When") {
                         InfoRow("Starts", Formatting.dateTime(loaded.startAt))
@@ -248,6 +274,7 @@ fun EventScreen(id: String, navigator: Navigator) {
         }
     }
 
+    CoverCheckoutFailure(checkout)
     if (pingHere && event != null) {
         PingSheet(
             preselect = PingPick.EventPick(event),

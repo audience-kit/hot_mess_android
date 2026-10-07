@@ -1,5 +1,7 @@
 package social.hotmess.core
 
+import com.audiencekit.Queries
+
 /**
  * The GraphQL documents the app runs against the audience's endpoint. Fields decode straight into
  * the models in Models.kt; ask for a field there before using it here.
@@ -10,6 +12,10 @@ object Documents {
 
     /** A venue's last few chat lines, oldest first; empty unless the viewer is at the venue or an admin. */
     const val RECENT_MESSAGES: String = "recentMessages(limit: 3) { id message name userId avatarUrl sentAt }"
+
+    /** Tonight's cover at a venue and the user's pass for it. */
+    const val VENUE_COVER_FIELDS: String =
+        "coverCharge { ${Queries.COVER_CHARGE_FIELDS} } viewerAdmission { ${Queries.ADMISSION_FIELDS} }"
 
     const val PERSON_FIELDS: String = "id name facebookId isLiked pictureUrl coverUrl"
 
@@ -30,7 +36,7 @@ object Documents {
           reportLocation(input: { position: ${'$'}position }) {
             now {
               title imageUrl
-              venue { $VENUE_FIELDS $RECENT_MESSAGES }
+              venue { $VENUE_FIELDS $RECENT_MESSAGES $VENUE_COVER_FIELDS }
               venues { $VENUE_FIELDS }
               locale { id name chatOpen recentMessages(limit: 3) { id message name userId avatarUrl sentAt } }
               events { $EVENT_FIELDS }
@@ -58,8 +64,9 @@ object Documents {
     val VENUE: String = """
         query Venue(${'$'}id: ID!) {
           venue(id: ${'$'}id) {
-            $VENUE_FIELDS chatOpen
+            $VENUE_FIELDS chatOpen canWorkDoor
             $RECENT_MESSAGES
+            $VENUE_COVER_FIELDS
             events { $EVENT_FIELDS }
             socialLinks { id handle provider url }
             friendPings { $PING_FIELDS }
@@ -94,7 +101,13 @@ object Documents {
 
     val EVENT: String = """
         query Event(${'$'}id: ID!) {
-          event(id: ${'$'}id) { $EVENT_FIELDS people { $PERSON_FIELDS } friendPings { $PING_FIELDS } }
+          event(id: ${'$'}id) {
+            $EVENT_FIELDS
+            coverCharge { ${Queries.COVER_CHARGE_FIELDS} }
+            venue { id $VENUE_COVER_FIELDS }
+            people { $PERSON_FIELDS }
+            friendPings { $PING_FIELDS }
+          }
         }
     """.trimIndent()
 

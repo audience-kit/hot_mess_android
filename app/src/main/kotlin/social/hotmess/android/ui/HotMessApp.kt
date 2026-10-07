@@ -48,12 +48,15 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.serialization.Serializable
 import social.hotmess.android.location.LocationAccess
 import social.hotmess.android.session.AuthState
+import social.hotmess.android.ui.screens.DoorScreen
 import social.hotmess.android.ui.screens.EventScreen
 import social.hotmess.android.ui.screens.EventsScreen
 import social.hotmess.android.ui.screens.LaunchScreen
 import social.hotmess.android.ui.screens.LoginScreen
 import social.hotmess.android.ui.screens.MeScreen
 import social.hotmess.android.ui.screens.NowScreen
+import social.hotmess.android.ui.screens.PassScreen
+import social.hotmess.android.ui.screens.PassesScreen
 import social.hotmess.android.ui.screens.PeopleScreen
 import social.hotmess.android.ui.screens.PersonScreen
 import social.hotmess.android.ui.screens.UpdateRequiredScreen
@@ -77,6 +80,11 @@ import social.hotmess.core.ChatRoom
 @Serializable data class PersonRoute(val id: String)
 /** A chat room: a venue's, or with [locale] a locale's. */
 @Serializable data class ChatRoute(val id: String, val name: String, val locale: Boolean = false)
+/** A cover pass, with its live QR code. */
+@Serializable data class PassRoute(val id: String)
+@Serializable data object PassesRoute
+/** Door mode, at [venueId] or a door the user picks. */
+@Serializable data class DoorRoute(val venueId: String? = null)
 
 private val AppTab.route: Any
     get() = when (this) {
@@ -111,6 +119,11 @@ interface Navigator {
     fun openChat(venueId: String, venueName: String)
     /** The locale's chat room, for people out in it who aren't at a venue. */
     fun openLocaleChat(localeId: String, localeName: String)
+    /** A cover pass, full screen. */
+    fun openPass(admissionId: String)
+    fun openPasses()
+    /** Door mode, at [venueId] or a door to pick. */
+    fun openDoor(venueId: String? = null)
     fun back()
 }
 
@@ -186,6 +199,18 @@ private fun MainShell(links: Flow<AppRoute>) {
             navController.navigate(ChatRoute(localeId, localeName, locale = true))
         }
 
+        override fun openPass(admissionId: String) {
+            navController.navigate(PassRoute(admissionId)) { launchSingleTop = true }
+        }
+
+        override fun openPasses() {
+            navController.navigate(PassesRoute) { launchSingleTop = true }
+        }
+
+        override fun openDoor(venueId: String?) {
+            navController.navigate(DoorRoute(venueId)) { launchSingleTop = true }
+        }
+
         override fun back() {
             navController.popBackStack()
         }
@@ -207,13 +232,14 @@ private fun MainShell(links: Flow<AppRoute>) {
 
     AskForPermissions()
 
-    val inChat = destination?.hasRoute(ChatRoute::class) == true
+    // Chat, a pass and Door mode take the whole screen.
+    val fullScreen = destination?.let { it.hasRoute(ChatRoute::class) || it.hasRoute(PassRoute::class) || it.hasRoute(DoorRoute::class) } == true
 
     Scaffold(
         containerColor = tokens.surface,
         contentWindowInsets = WindowInsets(0),
         bottomBar = {
-            if (!inChat) {
+            if (!fullScreen) {
                 NavigationBar(containerColor = tokens.surfaceRaised, tonalElevation = 0.dp) {
                     AppTab.entries.forEach { tab -> TabItem(tab, selected = tab == selectedTab) { selectTab(tab) } }
                 }
@@ -225,7 +251,7 @@ private fun MainShell(links: Flow<AppRoute>) {
             composable<EventsRoute> { EventsScreen(navigator) }
             composable<VenuesRoute> { VenuesScreen(navigator) }
             composable<PeopleRoute> { PeopleScreen(navigator) }
-            composable<MeRoute> { MeScreen() }
+            composable<MeRoute> { MeScreen(navigator) }
             composable<VenueRoute> { VenueScreen(it.toRoute<VenueRoute>().id, navigator) }
             composable<EventRoute> { EventScreen(it.toRoute<EventRoute>().id, navigator) }
             composable<PersonRoute> { PersonScreen(it.toRoute<PersonRoute>().id, navigator) }
@@ -234,6 +260,9 @@ private fun MainShell(links: Flow<AppRoute>) {
                 val room = if (route.locale) ChatRoom.locale(route.id) else ChatRoom.venue(route.id)
                 VenueChatScreen(room, route.name, navigator)
             }
+            composable<PassRoute> { PassScreen(it.toRoute<PassRoute>().id, navigator) }
+            composable<PassesRoute> { PassesScreen(navigator) }
+            composable<DoorRoute> { DoorScreen(it.toRoute<DoorRoute>().venueId, navigator) }
         }
     }
 }

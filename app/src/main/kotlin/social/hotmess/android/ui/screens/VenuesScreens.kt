@@ -18,6 +18,7 @@ import androidx.compose.material.icons.rounded.NearMe
 import androidx.compose.material.icons.rounded.OpenInFull
 import androidx.compose.material.icons.rounded.Phone
 import androidx.compose.material.icons.rounded.Place
+import androidx.compose.material.icons.rounded.QrCodeScanner
 import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -46,11 +47,15 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import social.hotmess.android.payments.CoverCheckout
+import social.hotmess.android.payments.CoverCheckoutFailure
+import social.hotmess.android.payments.rememberCoverCheckout
 import social.hotmess.android.ui.LocalAppGraph
 import social.hotmess.android.ui.Navigator
 import social.hotmess.android.ui.ScreenScaffold
 import social.hotmess.android.ui.components.CardRows
 import social.hotmess.android.ui.components.ChatPeek
+import social.hotmess.android.ui.components.CoverRow
 import social.hotmess.android.ui.components.DetailSection
 import social.hotmess.android.ui.components.EmptyRow
 import social.hotmess.android.ui.components.EventCard
@@ -77,6 +82,7 @@ import social.hotmess.android.ui.theme.Radius
 import social.hotmess.android.ui.theme.Sizes
 import social.hotmess.android.ui.theme.tokens
 import social.hotmess.core.AppRoute
+import social.hotmess.core.CoverOffer
 import social.hotmess.core.Formatting
 import social.hotmess.core.PhotoTone
 import social.hotmess.core.PingPick
@@ -191,6 +197,11 @@ fun VenueScreen(id: String, navigator: Navigator) {
 
     LaunchedEffect(id) { loader.load(id) { graph.api.venueOverview(id) } }
 
+    val checkout = rememberCoverCheckout { pass ->
+        loader.load(id, refresh = true) { graph.api.venueOverview(id) }
+        navigator.openPass(pass.id)
+    }
+    val checkoutState by checkout.state.collectAsStateWithLifecycle()
     val userId = rememberUserId()
     var pingHere by rememberSaveable { mutableStateOf(false) }
     val actions = rememberPingActions { ping ->
@@ -235,6 +246,33 @@ fun VenueScreen(id: String, navigator: Navigator) {
                     }
                 },
             ) {
+                val offer = CoverOffer.of(loaded)
+                if (offer != null || loaded.canWorkDoor) {
+                    item {
+                        DetailSection("Cover") {
+                            if (offer != null) {
+                                CoverRow(
+                                    offer,
+                                    paying = checkoutState == CoverCheckout.State.Working,
+                                    onPay = { checkout.pay(loaded.id, loaded.name) },
+                                    onShowPass = { pass ->
+                                        graph.passes.put(pass)
+                                        navigator.openPass(pass.id)
+                                    },
+                                )
+                            }
+                            if (loaded.canWorkDoor) {
+                                if (offer != null) RowDivider()
+                                InfoRow(
+                                    "Work the door",
+                                    icon = Icons.Rounded.QrCodeScanner,
+                                    onClick = { navigator.openDoor(loaded.id) },
+                                    trailing = Icons.AutoMirrored.Rounded.KeyboardArrowRight,
+                                )
+                            }
+                        }
+                    }
+                }
                 item {
                     PingStripSection(
                         pings = overview.friendPings,
@@ -312,6 +350,7 @@ fun VenueScreen(id: String, navigator: Navigator) {
         }
     }
 
+    CoverCheckoutFailure(checkout)
     val here = venue
     if (pingHere && here != null) {
         PingSheet(

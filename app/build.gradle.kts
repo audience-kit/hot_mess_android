@@ -155,6 +155,11 @@ dependencies {
     implementation(libs.androidx.fragment)
     implementation(libs.maplibre)
     implementation(libs.firebase.messaging)
+    // Cover charge: Stripe's payment sheet takes the payment, and Door mode scans passes with the camera.
+    implementation(libs.stripe.android)
+    implementation(libs.androidx.camera.camera2)
+    implementation(libs.androidx.camera.lifecycle)
+    implementation(libs.androidx.camera.view)
 
     testImplementation(libs.junit)
 

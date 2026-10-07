@@ -1,6 +1,8 @@
 package social.hotmess.core
 
+import com.audiencekit.Admission
 import com.audiencekit.Coordinate
+import com.audiencekit.CoverCharge
 import com.audiencekit.GlobalID
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.SerialName
@@ -44,6 +46,12 @@ data class Venue(
     val recentMessages: List<ChatLine> = emptyList(),
     /** Where else to find it, like its Instagram; only the venue screen asks. */
     val socialLinks: List<SocialLink> = emptyList(),
+    /** Tonight's cover, or null when there's none; only the venue screen, the event screen and Now ask. */
+    val coverCharge: CoverCharge? = null,
+    /** The user's cover for tonight, paid or being paid; asked for alongside [coverCharge]. */
+    val viewerAdmission: Admission? = null,
+    /** Whether the user can scan passes at its door; only the venue screen asks. */
+    val canWorkDoor: Boolean = false,
 ) {
     val coordinate: Coordinate? get() = point?.let(Coordinate::fromWkt)
 
@@ -182,6 +190,8 @@ data class Event(
     val venue: Venue? = null,
     /** Who's hosting or playing; only the event screen asks for it. */
     val people: List<Person> = emptyList(),
+    /** The cover at its venue that night; null when there's none or it sells tickets. Only the event screen asks. */
+    val coverCharge: CoverCharge? = null,
     /** Friends' active Pings that pick this event; only the event screen asks for it. */
     val friendPings: List<Ping> = emptyList(),
 ) {
