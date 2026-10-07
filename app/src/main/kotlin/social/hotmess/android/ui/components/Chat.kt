@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -36,21 +37,28 @@ import androidx.compose.material.icons.automirrored.rounded.Chat
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.rounded.ArrowUpward
 import androidx.compose.material.icons.rounded.LocationOff
+import androidx.compose.material.icons.rounded.PushPin
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.takeOrElse
@@ -60,22 +68,32 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.min
+import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import social.hotmess.android.ui.theme.ContentMaxWidth
 import social.hotmess.android.ui.theme.HotMessTheme
 import social.hotmess.android.ui.theme.HotMessType
 import social.hotmess.android.ui.theme.Radius
 import social.hotmess.android.ui.theme.Space
 import social.hotmess.android.ui.theme.tokens
+import social.hotmess.core.ChatKind
+import social.hotmess.core.ChatRole
 import social.hotmess.core.Formatting
+import social.hotmess.core.SharedEvent
 import java.time.Duration
 import java.time.Instant
 
@@ -132,11 +150,49 @@ data class ChatThreadMessage(
     /** Shown above the first bubble of an incoming group, when known. */
     val senderName: String?,
     val avatarUrl: String?,
+    /** The message in words; for a rich message its summary, which shows when [rich] can't be drawn. */
     val text: String,
     /** When it was sent; without it there's no time divider before it and no 5-minute grouping cut. */
     val sentAt: Instant?,
     val own: Boolean,
-)
+    /** Who the sender is in the room: a RoleTag after their name, and an `accent-soft` bubble for venue and host. */
+    val role: ChatRole? = null,
+    /** Posted as the venue: its name and photo in a rounded square, with no presence. */
+    val asPlace: Boolean = false,
+    /** A rich message's card, drawn in place of the bubble; null for plain text. */
+    val rich: RichContent? = null,
+) {
+    /** Whether the room still shows it: a special disappears at its end time. */
+    fun isShowing(at: Instant): Boolean {
+        val content = rich ?: return true
+        val ends = content.endsAt ?: return true
+        return content.kind != ChatKind.SPECIAL || ends.isAfter(at)
+    }
+}
+
+/**
+ * What a rich message (RichMessage) shows besides its summary: an announcement's [title], [body] and
+ * optional photo, a shared [event], a photo with its caption ([body]), or a special's [title] and [body]
+ * until [endsAt]. [pinned] marks the announcement pinned under the room's title.
+ */
+data class RichContent(
+    val kind: ChatKind,
+    val title: String? = null,
+    val body: String? = null,
+    val photoUrl: String? = null,
+    val event: SharedEvent? = null,
+    val endsAt: Instant? = null,
+    val pinned: Boolean = false,
+) {
+    /** Whether it has what its card needs; otherwise the summary shows as a bubble. */
+    val drawable: Boolean
+        get() = when (kind) {
+            ChatKind.TEXT -> false
+            ChatKind.ANNOUNCEMENT, ChatKind.SPECIAL -> !title.isNullOrBlank()
+            ChatKind.EVENT -> event != null
+            ChatKind.PHOTO -> photoUrl != null
+        }
+}
 
 private sealed interface ThreadEntry {
     val key: String
@@ -165,12 +221,17 @@ private fun dividerBefore(messages: List<ChatThreadMessage>, index: Int): Boolea
     return between >= DividerGap
 }
 
-/** Same sender, same side, under 5 minutes apart (or untimed), and no divider between them. */
+/**
+ * Same sender, side and role, under 5 minutes apart (or untimed), and no divider between them. Rich
+ * messages stand alone, each with its sender's name and avatar.
+ */
 private fun sameGroup(messages: List<ChatThreadMessage>, index: Int): Boolean {
     if (index == 0) return false
     val previous = messages[index - 1]
     val message = messages[index]
     if (previous.senderId != message.senderId || previous.own != message.own) return false
+    if (previous.role != message.role || previous.asPlace != message.asPlace) return false
+    if (previous.rich != null || message.rich != null) return false
     if (dividerBefore(messages, index)) return false
     val between = gap(previous, message) ?: return true
     return between < GroupGap
@@ -191,9 +252,11 @@ private fun threadEntries(messages: List<ChatThreadMessage>): List<ThreadEntry> 
 
 /**
  * A chat room's transcript, oldest first and kept scrolled to the newest message: bubbles grouped
- * by sender (under 5 minutes apart), the sender's name above an incoming group and their avatar
- * beside its last bubble, and a time divider at the top and after any 15-minute gap. Empty, it
- * says hello to everyone in [roomName], or out in it when [isLocale] (a city's room).
+ * by sender (under 5 minutes apart), the sender's name (and RoleTag) above an incoming group and their
+ * avatar beside its last bubble, and a time divider at the top and after any 15-minute gap. Rich
+ * messages stand alone as RichMessage cards; a special disappears at its end time; the pinned
+ * announcement also shows as a PinnedBar on top, which scrolls to it. [onOpenEvent] opens a shared
+ * event by id. Empty, it says hello to everyone in [roomName], or out in it when [isLocale] (a city's room).
  */
 @Composable
 fun ChatThread(
@@ -203,26 +266,54 @@ fun ChatThread(
     presence: Map<String, Presence> = emptyMap(),
     state: LazyListState = rememberLazyListState(),
     isLocale: Boolean = false,
+    onOpenEvent: (String) -> Unit = {},
 ) {
-    Box(modifier.background(tokens.surface)) {
-        if (messages.isEmpty()) {
-            Message(
-                Icons.AutoMirrored.Rounded.Chat,
-                "Say hello.",
-                if (isLocale) "Everyone out in $roomName can see what you write here." else "Everyone at $roomName can see what you write here.",
-            )
-        } else {
-            Transcript(messages, presence, state)
+    val clock by rememberMinuteClock()
+    val visible = remember(messages, clock) { messages.filter { it.isShowing(clock) } }
+    val entries = remember(visible) { threadEntries(visible) }
+    val pinned = remember(visible) { visible.lastOrNull { it.rich?.kind == ChatKind.ANNOUNCEMENT && it.rich?.pinned == true } }
+    val scope = rememberCoroutineScope()
+    Column(modifier.background(tokens.surface)) {
+        if (pinned != null) {
+            PinnedBar(pinned.senderName, pinned.rich?.title ?: pinned.text) {
+                val index = entries.indexOfFirst { it.key == pinned.id }
+                if (index >= 0) scope.launch { state.animateScrollToItem(index) }
+            }
+        }
+        Box(Modifier.weight(1f).fillMaxWidth()) {
+            if (visible.isEmpty()) {
+                Message(
+                    Icons.AutoMirrored.Rounded.Chat,
+                    "Say hello.",
+                    if (isLocale) "Everyone out in $roomName can see what you write here." else "Everyone at $roomName can see what you write here.",
+                )
+            } else {
+                Transcript(entries, presence, state, onOpenEvent)
+            }
         }
     }
 }
 
+/** Now, updated every minute, so specials leave the room when they end. */
 @Composable
-private fun BoxScope.Transcript(messages: List<ChatThreadMessage>, presence: Map<String, Presence>, state: LazyListState) {
-    val entries = remember(messages) { threadEntries(messages) }
+private fun rememberMinuteClock(): State<Instant> = produceState(Instant.now()) {
+    while (true) {
+        delay(60_000L)
+        value = Instant.now()
+    }
+}
+
+@Composable
+private fun BoxScope.Transcript(
+    entries: List<ThreadEntry>,
+    presence: Map<String, Presence>,
+    state: LazyListState,
+    onOpenEvent: (String) -> Unit,
+) {
     LaunchedEffect(entries.size) { if (entries.isNotEmpty()) state.animateScrollToItem(entries.lastIndex) }
     BoxWithConstraints(Modifier.fillMaxSize().widthIn(max = ContentMaxWidth).align(Alignment.TopCenter)) {
         val bubbleMax = min(280.dp, maxWidth * 0.75f)
+        val richMax = min(320.dp, maxWidth * 0.85f)
         LazyColumn(
             state = state,
             modifier = Modifier.fillMaxSize(),
@@ -231,7 +322,13 @@ private fun BoxScope.Transcript(messages: List<ChatThreadMessage>, presence: Map
             items(entries, key = { it.key }) { entry ->
                 when (entry) {
                     is ThreadEntry.Divider -> TimeDivider(entry.label)
-                    is ThreadEntry.BubbleEntry -> BubbleRow(entry, bubbleMax, presence[entry.message.senderId])
+                    is ThreadEntry.BubbleEntry -> BubbleRow(
+                        entry,
+                        bubbleMax,
+                        presence[entry.message.senderId],
+                        richMax = richMax,
+                        onOpenEvent = onOpenEvent,
+                    )
                 }
             }
         }
@@ -257,8 +354,11 @@ private fun BubbleRow(
     groupGap: Dp = Space.s2,
     maxLines: Int = Int.MAX_VALUE,
     ring: Color = Color.Unspecified,
+    richMax: Dp = bubbleMax,
+    onOpenEvent: (String) -> Unit = {},
 ) {
     val message = entry.message
+    val rich = message.rich?.takeIf { it.drawable }
     Row(
         Modifier.fillMaxWidth().padding(bottom = if (entry.last) groupGap else 2.dp),
         horizontalArrangement = if (message.own) Arrangement.End else Arrangement.Start,
@@ -266,33 +366,65 @@ private fun BubbleRow(
     ) {
         if (!message.own) {
             if (entry.last) {
-                Avatar(message.avatarUrl, message.senderName.orEmpty(), size = 28.dp, presence = presence, presenceRing = ring)
+                Avatar(
+                    message.avatarUrl,
+                    message.senderName.orEmpty(),
+                    size = 28.dp,
+                    // A place shows no presence, in a rounded square so it never looks like a person.
+                    presence = if (message.asPlace) null else presence,
+                    presenceRing = ring,
+                    shape = if (message.asPlace) Radius.md else CircleShape,
+                )
             } else {
                 Spacer(Modifier.width(28.dp))
             }
             Spacer(Modifier.width(Space.s2))
         }
-        Column(horizontalAlignment = if (message.own) Alignment.End else Alignment.Start) {
+        Column(
+            modifier = if (rich != null) Modifier.widthIn(max = richMax).fillMaxWidth() else Modifier,
+            horizontalAlignment = if (message.own) Alignment.End else Alignment.Start,
+        ) {
             val name = message.senderName?.takeIf { it.isNotBlank() }
-            if (!message.own && entry.first && name != null) {
-                Text(
-                    name,
-                    style = HotMessType.caption,
-                    color = tokens.inkMuted,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.widthIn(max = bubbleMax).padding(start = Space.s3, bottom = 2.dp),
+            if (!message.own && entry.first && (name != null || message.role != null)) {
+                Row(
+                    Modifier.widthIn(max = if (rich != null) richMax else bubbleMax).padding(start = Space.s3, bottom = 2.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    if (name != null) {
+                        Text(
+                            name,
+                            style = HotMessType.caption,
+                            color = tokens.inkMuted,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f, fill = false),
+                        )
+                    }
+                    RoleTag(message.role)
+                }
+            }
+            if (rich != null) {
+                RichMessage(rich, message.senderName, onOpenEvent = onOpenEvent)
+            } else {
+                ChatBubble(
+                    message.text,
+                    own = message.own,
+                    last = entry.last,
+                    maxWidth = bubbleMax,
+                    maxLines = maxLines,
+                    tinted = !message.own && (message.role == ChatRole.VENUE || message.role == ChatRole.HOST),
                 )
             }
-            ChatBubble(message.text, own = message.own, last = entry.last, maxWidth = bubbleMax, maxLines = maxLines)
         }
     }
 }
 
 /**
  * One chat bubble: `accent` / `on-accent` for your own, `surface-raised` / `ink` with a small
- * shadow for everyone else's. The last bubble of a group drops its corner nearest the sender to
- * `radius-sm`. [maxLines] clamps the text with an ellipsis (ChatPeek shows two).
+ * shadow for everyone else's, or `accent-soft` / `ink` with no shadow when [tinted] (the venue's and
+ * hosts'). The last bubble of a group drops its corner nearest the sender to `radius-sm`. [maxLines]
+ * clamps the text with an ellipsis (ChatPeek shows two).
  */
 @Composable
 fun ChatBubble(
@@ -302,12 +434,18 @@ fun ChatBubble(
     modifier: Modifier = Modifier,
     maxWidth: Dp = 280.dp,
     maxLines: Int = Int.MAX_VALUE,
+    tinted: Boolean = false,
 ) {
     val tail = CornerSize(4.dp)
     val shape = when {
         !last -> Radius.bubble
         own -> Radius.bubble.copy(bottomEnd = tail)
         else -> Radius.bubble.copy(bottomStart = tail)
+    }
+    val fill = when {
+        own -> tokens.accent
+        tinted -> tokens.accentSoft
+        else -> tokens.surfaceRaised
     }
     Text(
         text,
@@ -317,11 +455,186 @@ fun ChatBubble(
         overflow = TextOverflow.Ellipsis,
         modifier = modifier
             .widthIn(max = maxWidth)
-            .then(if (own) Modifier else Modifier.shadow(1.dp, shape))
+            .then(if (own || tinted) Modifier else Modifier.shadow(1.dp, shape))
             .clip(shape)
-            .background(if (own) tokens.accent else tokens.surfaceRaised)
+            .background(fill)
             .padding(horizontal = Space.s3, vertical = Space.s2),
     )
+}
+
+/**
+ * Who a sender is in the room, as a word after their name: "Venue" in solid `accent`, "Host" in
+ * `accent-soft` with `accent-ink`, "Staff" in `control-fill`. Nothing for everyone else.
+ */
+@Composable
+fun RoleTag(role: ChatRole?, modifier: Modifier = Modifier) {
+    role ?: return
+    val (fill, ink) = when (role) {
+        ChatRole.VENUE -> tokens.accent to tokens.onAccent
+        ChatRole.HOST -> tokens.accentSoft to tokens.accentInk
+        ChatRole.STAFF -> tokens.controlFill to tokens.ink
+    }
+    Text(
+        role.label,
+        style = RoleTagText,
+        color = ink,
+        maxLines = 1,
+        modifier = modifier.clip(Radius.pill).background(fill).padding(horizontal = 6.dp),
+    )
+}
+
+private val RoleTagText = HotMessType.caption.copy(fontSize = 11.sp, lineHeight = 16.sp, letterSpacing = 0.02.em)
+private val RichOverline = HotMessType.caption.copy(fontSize = 11.sp, lineHeight = 14.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 0.06.em)
+
+/**
+ * What hosts, the venue and staff can post besides text (design system RichMessage), each standing
+ * alone in the room:
+ * - announcement: an `accent-soft` card with an optional 16:9 photo, an "Announcement" overline
+ *   ("Pinned announcement" when pinned), the title and the body;
+ * - event: the shared event as a photo card that opens it, with the caption under it;
+ * - photo: a 4:3 photo up to 240 wide with its caption;
+ * - special: an `accent-soft` card with a dashed `accent-ink` edge, a "Special · until 11pm"
+ *   overline, the title and the body.
+ * [author] names the sender for the photo's description.
+ */
+@Composable
+fun RichMessage(content: RichContent, author: String?, modifier: Modifier = Modifier, onOpenEvent: (String) -> Unit = {}) {
+    val body = content.body?.takeIf { it.isNotBlank() }
+    when (content.kind) {
+        ChatKind.PHOTO -> Column(
+            modifier
+                .widthIn(max = 240.dp)
+                .shadow(1.dp, Radius.bubble)
+                .clip(Radius.bubble)
+                .background(tokens.surfaceRaised),
+        ) {
+            val description = body ?: author?.let { "Photo from $it" } ?: "Photo"
+            RemoteImage(
+                content.photoUrl,
+                Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(4f / 3f)
+                    .semantics {
+                        contentDescription = description
+                        role = Role.Image
+                    },
+            )
+            if (body != null) {
+                Text(
+                    body,
+                    style = HotMessType.body,
+                    color = tokens.ink,
+                    modifier = Modifier.padding(start = Space.s3, end = Space.s3, top = Space.s2, bottom = 10.dp),
+                )
+            }
+        }
+        ChatKind.EVENT -> Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            val event = content.event ?: return@Column
+            val start = event.startAt
+            PhotoCard(
+                url = null,
+                onClick = { onOpenEvent(event.id) },
+                topClearance = if (start != null) 68.dp else 52.dp,
+                leading = {
+                    if (start != null) {
+                        GlassPill(
+                            shape = Radius.md,
+                            padding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                            modifier = Modifier.semantics(mergeDescendants = true) { contentDescription = Formatting.dateTime(start) },
+                        ) {
+                            Column(Modifier.widthIn(min = 30.dp).clearAndSetSemantics { }, horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text(Formatting.monthAbbreviation(start), style = HotMessType.caption)
+                                Text(Formatting.dayOfMonth(start), style = HotMessType.heading)
+                            }
+                        }
+                    }
+                },
+            ) {
+                Text(event.name ?: "An event", style = HotMessType.heading, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                if (start != null) Text(Formatting.shortTime(start), style = HotMessType.subheading, maxLines = 1)
+            }
+            if (body != null) {
+                Text(body, style = HotMessType.body, color = tokens.ink, modifier = Modifier.padding(horizontal = Space.s1))
+            }
+        }
+        ChatKind.ANNOUNCEMENT -> Column(modifier.fillMaxWidth().clip(Radius.bubble).background(tokens.accentSoft)) {
+            if (content.photoUrl != null) {
+                RemoteImage(content.photoUrl, Modifier.fillMaxWidth().aspectRatio(16f / 9f))
+            }
+            RichText(if (content.pinned) "Pinned announcement" else "Announcement", content.title, body)
+        }
+        ChatKind.SPECIAL -> {
+            val edge = tokens.accentInk
+            val overline = content.endsAt?.let { "Special · until ${Formatting.clock(it)}" } ?: "Special"
+            Column(
+                modifier
+                    .fillMaxWidth()
+                    .clip(Radius.bubble)
+                    .background(tokens.accentSoft)
+                    .drawBehind {
+                        val stroke = 1.5.dp.toPx()
+                        val radius = 16.dp.toPx() - stroke / 2f
+                        drawRoundRect(
+                            edge,
+                            topLeft = Offset(stroke / 2f, stroke / 2f),
+                            size = Size(size.width - stroke, size.height - stroke),
+                            cornerRadius = CornerRadius(radius, radius),
+                            style = Stroke(width = stroke, pathEffect = PathEffect.dashPathEffect(floatArrayOf(4.dp.toPx(), 3.dp.toPx()))),
+                        )
+                    },
+            ) {
+                RichText(overline, content.title, body)
+            }
+        }
+        ChatKind.TEXT -> Unit
+    }
+}
+
+/** A rich card's words: the overline in `accent-ink`, then the title and body in `ink`. */
+@Composable
+private fun RichText(overline: String, title: String?, body: String?) {
+    Column(Modifier.padding(start = 14.dp, end = 14.dp, top = 10.dp, bottom = Space.s3)) {
+        Text(overline.uppercase(), style = RichOverline, color = tokens.accentInk)
+        if (!title.isNullOrBlank()) {
+            Text(title, style = HotMessType.heading, color = tokens.ink, modifier = Modifier.padding(top = 2.dp))
+        }
+        if (body != null) {
+            Text(body, style = HotMessType.body, color = tokens.ink, modifier = Modifier.padding(top = 2.dp))
+        }
+    }
+}
+
+/**
+ * The pinned announcement under a room's title: a pin, the sender in bold and the announcement's
+ * title on one line, on `accent-soft`. Tapping it runs [onOpen], which scrolls to the announcement.
+ */
+@Composable
+fun PinnedBar(author: String?, title: String, modifier: Modifier = Modifier, onOpen: () -> Unit) {
+    Row(
+        modifier
+            .fillMaxWidth()
+            .background(tokens.accentSoft)
+            .clickable(role = Role.Button, onClickLabel = "Show the announcement", onClick = onOpen)
+            .padding(horizontal = Space.s4, vertical = Space.s2),
+        horizontalArrangement = Arrangement.spacedBy(Space.s2),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(Icons.Rounded.PushPin, contentDescription = "Pinned", tint = tokens.accentInk, modifier = Modifier.size(16.dp))
+        Text(
+            buildAnnotatedString {
+                if (!author.isNullOrBlank()) {
+                    withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(author) }
+                    append(" ")
+                }
+                append(title)
+            },
+            style = HotMessType.bodySmall,
+            color = tokens.ink,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
+        )
+    }
 }
 
 /** Why the reader is (or isn't fully) in a room. Only one shows; range wins. */
@@ -533,8 +846,9 @@ fun ChatPeek(
 }
 
 /**
- * A flat, bubble-less chat line (the admin transcript's ChatLine): a 28 avatar, then the name and a
- * pre-formatted time on one caption line, then the text in two lines.
+ * A flat, bubble-less chat line (the admin transcript's ChatLine): a 28 avatar, then the name (with
+ * its RoleTag) and a pre-formatted time on one caption line, then the text in two lines. Rich messages
+ * pass their summary as [text].
  */
 @Composable
 fun ChatLineRow(
@@ -545,6 +859,7 @@ fun ChatLineRow(
     modifier: Modifier = Modifier,
     presence: Presence? = null,
     maxLines: Int = 2,
+    role: ChatRole? = null,
 ) {
     val name = author?.takeIf { it.isNotBlank() } ?: "Someone"
     Row(
@@ -554,7 +869,7 @@ fun ChatLineRow(
     ) {
         Avatar(avatarUrl, author.orEmpty(), size = 28.dp, presence = presence)
         Column(Modifier.weight(1f)) {
-            Row(horizontalArrangement = Arrangement.spacedBy(Space.s2)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(Space.s2), verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     name,
                     style = HotMessType.caption.copy(fontWeight = FontWeight.SemiBold),
@@ -563,6 +878,7 @@ fun ChatLineRow(
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f, fill = false),
                 )
+                RoleTag(role)
                 if (time != null) Text(time, style = HotMessType.caption, color = tokens.inkMuted, maxLines = 1)
             }
             Text(
@@ -602,6 +918,45 @@ private fun ChatThreadPreview() {
             var draft by remember { mutableStateOf("") }
             ChatComposer(draft, { draft = it }, onSend = {}, sendEnabled = draft.isNotBlank())
         }
+    }
+}
+
+private val previewRichMessages = listOf(
+    ChatThreadMessage(
+        "r1", "venue", "Neighbours", null, "Announcement: Coat check closes at midnight", previewStart, own = false,
+        role = ChatRole.VENUE, asPlace = true,
+        rich = RichContent(
+            ChatKind.ANNOUNCEMENT,
+            title = "Coat check closes at midnight",
+            body = "Grab your things before the late set. Lost and found is at the front door.",
+            pinned = true,
+        ),
+    ),
+    ChatThreadMessage("r2", "aurora", "Aurora B.", null, "Noted, thanks!", previewStart.plusSeconds(60), own = false),
+    ChatThreadMessage("r3", "kiko", "DJ Kiko", null, "Next week I'm back with the disco set", previewStart.plusSeconds(180), own = false, role = ChatRole.HOST),
+    ChatThreadMessage(
+        "r4", "kiko", "DJ Kiko", null, "Shared an event: Sunset Social", previewStart.plusSeconds(200), own = false,
+        role = ChatRole.HOST,
+        rich = RichContent(ChatKind.EVENT, body = "Come through", event = SharedEvent("e1", "Sunset Social", previewStart.plusSeconds(8 * 86_400L))),
+    ),
+    ChatThreadMessage(
+        "r5", "venue", "Neighbours", null, "Special: Two for one wells", previewStart.plusSeconds(300), own = false,
+        role = ChatRole.VENUE, asPlace = true,
+        rich = RichContent(ChatKind.SPECIAL, title = "Two for one wells", body = "At the back bar", endsAt = Instant.now().plusSeconds(3_600)),
+    ),
+    ChatThreadMessage("r6", "sam", "Sam O.", null, "Be kind in here, folks.", previewStart.plusSeconds(360), own = false, role = ChatRole.STAFF),
+)
+
+@Preview(name = "Roles and rich messages", widthDp = 360, heightDp = 760)
+@Composable
+private fun ChatThreadRichPreview() {
+    HotMessTheme(darkTheme = false) {
+        ChatThread(
+            previewRichMessages,
+            "Neighbours",
+            Modifier.fillMaxSize(),
+            presence = mapOf("kiko" to Presence.ONLINE, "aurora" to Presence.ONLINE),
+        )
     }
 }
 

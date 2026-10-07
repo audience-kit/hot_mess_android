@@ -41,7 +41,12 @@ class AppGraph(context: Context, val configuration: AppConfiguration = AppConfig
 
     init {
         scope.launch {
-            session.state.collect { if (it == AuthState.SignedOut) passes.clear() }
+            session.state.collect {
+                if (it == AuthState.SignedOut) {
+                    passes.clear()
+                    api.friends.clear()
+                }
+            }
         }
     }
 

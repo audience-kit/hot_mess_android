@@ -329,6 +329,7 @@ fun VenueScreen(id: String, navigator: Navigator) {
                             title = "Chat",
                             room = loaded.name,
                             onOpen = { navigator.openChat(loaded.id, loaded.name) },
+                            presence = remember(loaded.recentMessages) { peekPresence(loaded.recentMessages) },
                         )
                     }
                 }
