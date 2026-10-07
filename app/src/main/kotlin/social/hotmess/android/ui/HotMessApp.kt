@@ -168,6 +168,8 @@ private fun MainShell(links: Flow<AppRoute>) {
                     is AppRoute.VenueDetail -> VenueRoute(route.id)
                     is AppRoute.EventDetail -> EventRoute(route.id)
                     is AppRoute.PersonDetail -> PersonRoute(route.id)
+                    // A tab of its own, not a screen to push: getting to the tab is all it needs.
+                    is AppRoute.NowPing -> return
                 },
             )
         }

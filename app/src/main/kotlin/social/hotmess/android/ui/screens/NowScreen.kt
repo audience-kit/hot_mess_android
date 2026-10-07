@@ -16,12 +16,24 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Chat
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.rounded.LocationOff
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Text
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.material.icons.rounded.Campaign
+import androidx.compose.material3.Icon
+import androidx.compose.material3.TextButton
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.launch
+import social.hotmess.core.ApiError
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -72,16 +84,77 @@ fun NowScreen(navigator: Navigator) {
     val refreshing by loader.isRefreshing.collectAsStateWithLifecycle()
     val simulated by graph.location.simulatedVenue.collectAsStateWithLifecycle()
 
-    LaunchedEffect(coordinates) { loader.load(coordinates) { graph.api.now(coordinates) } }
+    LaunchedEffect(coordinates) { loader.load(coordinates) { graph.api.nowOrPings(coordinates) } }
 
-    ScreenScaffold(title = state.valueOrNull?.title?.takeIf { it.isNotBlank() } ?: "Now") {
-        LoadStateView(state, onRetry = { loader.load(coordinates, refresh = false) { graph.api.now(coordinates) } }) { now ->
-            PullToRefreshBox(refreshing, onRefresh = { loader.load(coordinates, refresh = true) { graph.api.now(coordinates) } }) {
+    // A Ping push arrived or was tapped: reload, keeping what's on screen meanwhile.
+    val latestCoordinates by rememberUpdatedState(coordinates)
+    LaunchedEffect(Unit) {
+        graph.pingUpdates.collect {
+            val near = latestCoordinates
+            loader.load(near, refresh = true) { graph.api.nowOrPings(near) }
+        }
+    }
+
+    val userId = rememberUserId()
+    val scope = rememberCoroutineScope()
+    var sheetOpen by rememberSaveable { mutableStateOf(false) }
+    var ending by rememberSaveable { mutableStateOf(false) }
+    var endError by rememberSaveable { mutableStateOf<String?>(null) }
+    val actions = rememberPingActions { ping -> loader.update { it.replacingPing(ping) } }
+
+    fun endPing() {
+        ending = true
+        scope.launch {
+            try {
+                graph.api.endPing()
+                loader.update { it.copy(myPing = null) }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                endError = ApiError.of(e).message ?: "Try again in a moment."
+            } finally {
+                ending = false
+            }
+        }
+    }
+
+    ScreenScaffold(
+        title = state.valueOrNull?.title?.takeIf { it.isNotBlank() } ?: "Now",
+        actions = {
+            TextButton(onClick = { sheetOpen = true }) {
+                Icon(Icons.Rounded.Campaign, contentDescription = null, tint = tokens.accentInk, modifier = Modifier.size(20.dp))
+                Text("Ping", style = HotMessType.label, color = tokens.accentInk, modifier = Modifier.padding(start = Space.s1))
+            }
+        },
+    ) {
+        LoadStateView(state, onRetry = { loader.load(coordinates, refresh = false) { graph.api.nowOrPings(coordinates) } }) { now ->
+            PullToRefreshBox(refreshing, onRefresh = { loader.load(coordinates, refresh = true) { graph.api.nowOrPings(coordinates) } }) {
                 Feed {
                     simulated?.let { name ->
                         item {
                             Section("Pretending to be at $name") {
                                 InfoRow("Stop pretending", icon = Icons.Rounded.LocationOff, onClick = { graph.location.stopSimulating() })
+                            }
+                        }
+                    }
+                    now.myPing?.let { ping ->
+                        item(key = "my-ping") { MyPingCard(ping, onEdit = { sheetOpen = true }, onEnd = ::endPing, ending = ending) }
+                    }
+                    if (now.friendPings.isNotEmpty()) {
+                        item(key = "friend-pings-title") {
+                            Text(
+                                "Friends going out tonight",
+                                style = HotMessType.heading,
+                                color = tokens.ink,
+                                modifier = Modifier.padding(horizontal = Space.s1),
+                            )
+                        }
+                        now.friendPings.forEach { ping ->
+                            item(key = "ping-${ping.id}") {
+                                FriendPingCard(ping, userId, actions) { target ->
+                                    target.event?.let { navigator.open(AppRoute.EventDetail(it.id)) }
+                                        ?: target.venue?.let { navigator.open(AppRoute.VenueDetail(it.id)) }
+                                }
                             }
                         }
                     }
@@ -107,6 +180,22 @@ fun NowScreen(navigator: Navigator) {
                 }
             }
         }
+    }
+
+    if (sheetOpen) {
+        PingSheet(
+            preselect = null,
+            onDismiss = { sheetOpen = false },
+            onSent = { ping -> loader.update { it.replacingPing(ping) } },
+        )
+    }
+    endError?.let { message ->
+        AlertDialog(
+            onDismissRequest = { endError = null },
+            confirmButton = { TextButton(onClick = { endError = null }) { Text("OK") } },
+            title = { Text("Couldn't end your ping") },
+            text = { Text(message) },
+        )
     }
 }
 

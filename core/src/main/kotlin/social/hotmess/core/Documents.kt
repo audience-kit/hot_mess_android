@@ -13,6 +13,15 @@ object Documents {
     const val EVENT_FIELDS: String =
         "id name startAt endAt facebookId coverPhotoUrl isFeatured viewerRsvp venue { $VENUE_FIELDS }"
 
+    const val FRIEND_FIELDS: String = "id name facebookId"
+
+    /** A Ping with its picks and who's in. Picks carry enough of the venue or event for a row. */
+    const val PING_FIELDS: String =
+        "id note createdAt expiresAt isMine joined reach user { $FRIEND_FIELDS } via { $FRIEND_FIELDS } " +
+            "targets { id venue { id name photoUrl } event { id name startAt venue { id name } } " +
+            "joins { id targetId user { $FRIEND_FIELDS } } } " +
+            "joins { id targetId user { $FRIEND_FIELDS } }"
+
     val REPORT_LOCATION: String = """
         mutation ReportLocation(${'$'}position: CoordinatesInput!) {
           reportLocation(input: { position: ${'$'}position }) {
@@ -23,6 +32,8 @@ object Documents {
               events { $EVENT_FIELDS }
               friends { id name facebookId }
               friendVenues { venue { $VENUE_FIELDS } friendCount friends { id name facebookId } }
+              myPing { $PING_FIELDS }
+              friendPings { $PING_FIELDS }
             }
           }
         }
@@ -42,7 +53,7 @@ object Documents {
 
     val VENUE: String = """
         query Venue(${'$'}id: ID!) {
-          venue(id: ${'$'}id) { $VENUE_FIELDS chatOpen events { $EVENT_FIELDS } }
+          venue(id: ${'$'}id) { $VENUE_FIELDS chatOpen events { $EVENT_FIELDS } friendPings { $PING_FIELDS } }
         }
     """.trimIndent()
 
@@ -71,7 +82,52 @@ object Documents {
 
     val EVENT: String = """
         query Event(${'$'}id: ID!) {
-          event(id: ${'$'}id) { $EVENT_FIELDS people { $PERSON_FIELDS } }
+          event(id: ${'$'}id) { $EVENT_FIELDS people { $PERSON_FIELDS } friendPings { $PING_FIELDS } }
+        }
+    """.trimIndent()
+
+    val MY_PING: String = """
+        query MyPing {
+          myPing { $PING_FIELDS }
+        }
+    """.trimIndent()
+
+    val FRIEND_PINGS: String = """
+        query FriendPings {
+          friendPings { $PING_FIELDS }
+        }
+    """.trimIndent()
+
+    val SEND_PING: String = """
+        mutation SendPing(${'$'}venueIds: [ID!], ${'$'}eventIds: [ID!], ${'$'}note: String, ${'$'}localeId: ID, ${'$'}reach: PingReach) {
+          sendPing(input: { venueIds: ${'$'}venueIds, eventIds: ${'$'}eventIds, note: ${'$'}note, localeId: ${'$'}localeId, reach: ${'$'}reach }) {
+            ping { $PING_FIELDS }
+          }
+        }
+    """.trimIndent()
+
+    val JOIN_PING: String = """
+        mutation JoinPing(${'$'}pingId: ID!, ${'$'}targetId: ID) {
+          joinPing(input: { pingId: ${'$'}pingId, targetId: ${'$'}targetId }) { ping { $PING_FIELDS } }
+        }
+    """.trimIndent()
+
+    val LEAVE_PING: String = """
+        mutation LeavePing(${'$'}pingId: ID!) {
+          leavePing(input: { pingId: ${'$'}pingId }) { ping { $PING_FIELDS } }
+        }
+    """.trimIndent()
+
+    val END_PING: String = """
+        mutation EndPing {
+          endPing(input: {}) { ended }
+        }
+    """.trimIndent()
+
+    /** The SDK's registerDevice, plus which app the token is for; Android builds are never sandboxed. */
+    val REGISTER_DEVICE: String = """
+        mutation RegisterDevice(${'$'}notificationToken: String!, ${'$'}appId: String, ${'$'}sandbox: Boolean) {
+          registerDevice(input: { notificationToken: ${'$'}notificationToken, appId: ${'$'}appId, sandbox: ${'$'}sandbox }) { registered }
         }
     """.trimIndent()
 }
