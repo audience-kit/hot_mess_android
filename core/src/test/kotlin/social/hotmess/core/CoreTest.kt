@@ -205,6 +205,7 @@ class FormattingTest {
     fun eventSubtitleJoinsWithAMiddleDot() {
         val event = Event(id = "e", startAt = Instant.parse("2026-10-10T04:00:00Z"), venue = Venue(id = "v", name = "The Wildrose"))
         assertEquals("Fri 9pm · The Wildrose", Formatting.eventSubtitle(event, zone, Locale.US))
+        assertEquals("Fri 9pm · To be announced", Formatting.eventSubtitle(event.copy(venue = null), zone, Locale.US))
     }
 
     @Test
