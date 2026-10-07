@@ -22,6 +22,7 @@ import social.hotmess.android.AppConfiguration
 import social.hotmess.android.session.SessionStore
 import social.hotmess.core.AppLocale
 import social.hotmess.core.HotMessApi
+import social.hotmess.core.PositionTracker
 
 enum class LocationAccess { NOT_REQUESTED, ALLOWED, DENIED }
 
@@ -32,7 +33,7 @@ enum class LocationAccess { NOT_REQUESTED, ALLOWED, DENIED }
 class LocationProvider(
     private val context: Context,
     private val api: HotMessApi,
-    private val configuration: AppConfiguration,
+    configuration: AppConfiguration,
     private val scope: CoroutineScope,
 ) {
     private val _coordinates = MutableStateFlow<Coordinates?>(null)
@@ -49,7 +50,7 @@ class LocationProvider(
     /** Test builds only: the venue the app is pretending to be at, whose position is reported instead of the device's. */
     val simulatedVenue: StateFlow<String?> = _simulatedVenue.asStateFlow()
 
-    private var lastRealLocation: Location? = null
+    private val tracker = PositionTracker(configuration.isTestBuild)
 
     private val manager = context.getSystemService(LocationManager::class.java)
     private val beacons = configuration.beaconUuid?.let { BeaconScanner(context, it, ::onBeacon) }
@@ -96,9 +97,8 @@ class LocationProvider(
      * venue from anywhere. The API puts the user at whichever venue's envelope contains the point.
      */
     fun simulate(latitude: Double, longitude: Double, venueName: String) {
-        if (!configuration.isTestBuild) return
-        _simulatedVenue.value = venueName
-        _coordinates.value = Coordinates(latitude = latitude, longitude = longitude)
+        if (!tracker.simulate(latitude, longitude, venueName)) return
+        publish()
         scope.launch {
             refreshLocale()
             reportPosition()
@@ -107,10 +107,18 @@ class LocationProvider(
 
     /** Goes back to the device's real position. */
     fun stopSimulating() {
-        if (_simulatedVenue.value == null) return
-        _simulatedVenue.value = null
-        val real = lastRealLocation
-        if (real != null) update(real) else _coordinates.value = null
+        if (!tracker.stopSimulating()) return
+        publish()
+        if (tracker.current == null) return
+        scope.launch {
+            refreshLocale()
+            reportPosition()
+        }
+    }
+
+    private fun publish() {
+        _coordinates.value = tracker.current
+        _simulatedVenue.value = tracker.simulatedVenue
     }
 
     @SuppressLint("MissingPermission")
@@ -140,15 +148,8 @@ class LocationProvider(
     }
 
     private fun update(location: Location) {
-        lastRealLocation = location
-        if (_simulatedVenue.value != null) return
-        val previous = _coordinates.value
-        _coordinates.value = Coordinates(
-            latitude = location.latitude,
-            longitude = location.longitude,
-            beaconMajor = previous?.beaconMajor,
-            beaconMinor = previous?.beaconMinor,
-        )
+        if (!tracker.deviceFix(location.latitude, location.longitude)) return
+        publish()
         scope.launch {
             refreshLocale()
             reportPosition()
@@ -156,11 +157,8 @@ class LocationProvider(
     }
 
     private fun onBeacon(major: Int, minor: Int) {
-        if (_simulatedVenue.value != null) return
-        // Only attach beacon identifiers to a position we actually have.
-        val position = _coordinates.value ?: return
-        if (position.beaconMajor == major && position.beaconMinor == minor) return
-        _coordinates.value = position.copy(beaconMajor = major, beaconMinor = minor)
+        if (!tracker.beacon(major, minor)) return
+        publish()
         scope.launch { reportPosition() }
     }
 
