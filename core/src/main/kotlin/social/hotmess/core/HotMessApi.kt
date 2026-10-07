@@ -1,11 +1,17 @@
 package social.hotmess.core
 
 import com.audiencekit.APIRequest
+import com.audiencekit.Admission
 import com.audiencekit.AudienceKitClient
 import com.audiencekit.AudienceKitException
 import com.audiencekit.Coordinates
+import com.audiencekit.CoverCharge
+import com.audiencekit.CoverPurchase
 import com.audiencekit.DeviceDescription
+import com.audiencekit.DoorNight
+import com.audiencekit.DoorVenue
 import com.audiencekit.RSVPState
+import com.audiencekit.ScanResult
 import com.audiencekit.graphQLVariables
 import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.KSerializer
@@ -104,6 +110,33 @@ class HotMessApi(val client: AudienceKitClient) {
 
     // endregion
 
+    // region Cover charge
+
+    /**
+     * Starts paying tonight's cover at a venue: the pass, pending until paid, and what Stripe's payment
+     * sheet needs. Asking again the same night returns the same pass and payment.
+     */
+    suspend fun buyCover(venueId: String): CoverPurchase = mutate { client.buyCover(venueId) }
+
+    /** Checks the payment with Stripe once the payment sheet finishes, so the pass works straight away. */
+    suspend fun confirmCover(admissionId: String): Admission = mutate { client.confirmCover(admissionId) }
+
+    suspend fun refundAdmission(admissionId: String): Admission = mutate { client.refundAdmission(admissionId) }
+
+    /** The user's passes, newest first. */
+    suspend fun admissions(): List<Admission> = call { client.admissions() }
+
+    /** Venues whose door the user can work; empty for almost everyone. */
+    suspend fun doorVenues(): List<DoorVenue> = call { client.doorVenues() }
+
+    /** Tonight's counts at a venue's door. */
+    suspend fun door(venueId: String): DoorNight? = call { client.venueDoor(venueId) }?.door
+
+    /** Checks a scanned pass at a venue's door. */
+    suspend fun scan(venueId: String, code: String): ScanResult = mutate { client.scanAdmission(venueId, code) }
+
+    // endregion
+
     // region Session
 
     /** The oldest Android build the API still serves, or null when it doesn't say. */
@@ -132,6 +165,21 @@ class HotMessApi(val client: AudienceKitClient) {
         serializer: KSerializer<T>,
         variables: Map<String, JsonElement>? = null,
     ): T = call { client.graphQL(document, serializer, variables, json = json) }
+
+    /**
+     * [call] for the cover mutations, whose errors are written for people ("The Wildrose doesn't take
+     * cover in the app yet"), so they're shown as they are.
+     */
+    private suspend fun <T> mutate(block: suspend () -> T): T =
+        try {
+            block()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: AudienceKitException.GraphQL) {
+            throw ApiError.Other(e.errors.firstOrNull()?.message ?: "Something went wrong.")
+        } catch (e: AudienceKitException) {
+            throw ApiError.from(e)
+        }
 
     private suspend fun <T> call(block: suspend () -> T): T =
         try {
@@ -206,6 +254,9 @@ private data class VenueNode(
     val point: String? = null,
     val isLiked: Boolean = false,
     val chatOpen: Boolean = false,
+    val canWorkDoor: Boolean = false,
+    val coverCharge: CoverCharge? = null,
+    val viewerAdmission: Admission? = null,
     val recentMessages: List<ChatLine> = emptyList(),
     val events: List<Event> = emptyList(),
     val socialLinks: List<SocialLink> = emptyList(),
@@ -224,6 +275,9 @@ private data class VenueNode(
         isLiked = isLiked,
         socialLinks = socialLinks,
         recentMessages = recentMessages,
+        coverCharge = coverCharge,
+        viewerAdmission = viewerAdmission,
+        canWorkDoor = canWorkDoor,
     )
 }
 

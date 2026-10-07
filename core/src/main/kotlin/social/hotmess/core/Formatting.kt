@@ -1,7 +1,13 @@
 package social.hotmess.core
 
+import com.audiencekit.CoverCharge
+import java.text.NumberFormat
 import java.time.Instant
+import java.time.LocalDate
+import java.time.LocalTime
 import java.time.ZoneId
+import java.time.format.DateTimeParseException
+import java.util.Currency
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
 import java.util.Locale
@@ -34,6 +40,43 @@ object Formatting {
         instant.atZone(zone).format(DateTimeFormatter.ofPattern("MMM", locale)).uppercase(locale).trimEnd('.')
 
     fun dayOfMonth(instant: Instant, zone: ZoneId = ZoneId.systemDefault()): String = instant.atZone(zone).dayOfMonth.toString()
+
+    /** "$11.12", or "$10" for a round amount, in the cover's currency (an ISO 4217 code, any case). */
+    fun money(cents: Int, currency: String = "usd", locale: Locale = Locale.getDefault()): String {
+        val format = NumberFormat.getCurrencyInstance(locale)
+        runCatching { format.currency = Currency.getInstance(currency.uppercase(Locale.ROOT)) }
+        val digits = format.currency?.defaultFractionDigits?.takeIf { it >= 0 } ?: 2
+        val whole = cents % 100 == 0
+        format.minimumFractionDigits = if (whole) 0 else digits
+        format.maximumFractionDigits = if (whole) 0 else digits
+        return format.format(cents / 100.0)
+    }
+
+    /** A cover's start, `21:00`, as "9pm", or "9:30pm" when it isn't on the hour; null when it isn't a time. */
+    fun clockTime(hhmm: String): String? {
+        val time = try {
+            LocalTime.parse(hhmm.trim())
+        } catch (_: DateTimeParseException) {
+            return null
+        }
+        val hour = if (time.hour % 12 == 0) 12 else time.hour % 12
+        val minutes = if (time.minute == 0) "" else ":%02d".format(Locale.ROOT, time.minute)
+        return "$hour$minutes${if (time.hour < 12) "am" else "pm"}"
+    }
+
+    /** "Cover $11.12 tonight · from 9pm"; another night's leaves out "tonight". */
+    fun coverLine(charge: CoverCharge, tonight: Boolean, locale: Locale = Locale.getDefault()): String {
+        val price = "Cover ${money(charge.totalCents, charge.currency, locale)}${if (tonight) " tonight" else ""}"
+        val from = charge.from?.let(::clockTime) ?: return price
+        return "$price · from $from"
+    }
+
+    /** A cover's night, `2026-10-09`, as "Fri, Oct 9"; the text as it is when it isn't a date. */
+    fun night(isoDate: String, locale: Locale = Locale.getDefault()): String = try {
+        LocalDate.parse(isoDate).format(DateTimeFormatter.ofPattern("EEE, MMM d", locale))
+    } catch (_: DateTimeParseException) {
+        isoDate
+    }
 
     /** Metres as "350 m" / "1.2 km", or feet and miles where the locale uses them. */
     fun distance(metres: Double, locale: Locale = Locale.getDefault()): String {

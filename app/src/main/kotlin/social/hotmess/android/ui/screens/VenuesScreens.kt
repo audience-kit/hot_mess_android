@@ -16,6 +16,7 @@ import androidx.compose.material.icons.rounded.MyLocation
 import androidx.compose.material.icons.rounded.Phone
 import androidx.compose.material.icons.rounded.Place
 import androidx.compose.material.icons.rounded.OpenInFull
+import androidx.compose.material.icons.rounded.QrCodeScanner
 import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -41,12 +42,16 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import social.hotmess.android.payments.CoverCheckout
+import social.hotmess.android.payments.CoverCheckoutFailure
+import social.hotmess.android.payments.rememberCoverCheckout
 import social.hotmess.android.ui.LocalAppGraph
 import social.hotmess.android.ui.Navigator
 import social.hotmess.android.ui.ScreenScaffold
 import social.hotmess.android.ui.components.Card
 import social.hotmess.android.ui.components.CardRows
 import social.hotmess.android.ui.components.ChatPeek
+import social.hotmess.android.ui.components.CoverRow
 import social.hotmess.android.ui.components.EmptyRow
 import social.hotmess.android.ui.components.EventRow
 import social.hotmess.android.ui.components.Feed
@@ -68,6 +73,7 @@ import social.hotmess.android.ui.theme.Radius
 import social.hotmess.android.ui.theme.Space
 import social.hotmess.android.ui.theme.tokens
 import social.hotmess.core.AppRoute
+import social.hotmess.core.CoverOffer
 import social.hotmess.core.Formatting
 import social.hotmess.core.Venue
 import social.hotmess.core.VenueOverview
@@ -192,6 +198,12 @@ fun VenueScreen(id: String, navigator: Navigator) {
 
     LaunchedEffect(id) { loader.load(id) { graph.api.venueOverview(id) } }
 
+    val checkout = rememberCoverCheckout { pass ->
+        loader.load(id, refresh = true) { graph.api.venueOverview(id) }
+        navigator.openPass(pass.id)
+    }
+    val checkoutState by checkout.state.collectAsStateWithLifecycle()
+
     val venue = state.valueOrNull?.venue
     ScreenScaffold(
         title = venue?.name ?: "Venue",
@@ -208,6 +220,33 @@ fun VenueScreen(id: String, navigator: Navigator) {
             val loaded = overview.venue
             Feed {
                 (loaded.heroUrl ?: loaded.photoUrl)?.let { url -> item { HeroImage(url) } }
+                val offer = CoverOffer.of(loaded)
+                if (offer != null || loaded.canWorkDoor) {
+                    item {
+                        Section("Cover") {
+                            if (offer != null) {
+                                CoverRow(
+                                    offer,
+                                    paying = checkoutState == CoverCheckout.State.Working,
+                                    onPay = { checkout.pay(loaded.id, loaded.name) },
+                                    onShowPass = { pass ->
+                                        graph.passes.put(pass)
+                                        navigator.openPass(pass.id)
+                                    },
+                                )
+                            }
+                            if (loaded.canWorkDoor) {
+                                if (offer != null) RowDivider()
+                                InfoRow(
+                                    "Work the door",
+                                    icon = Icons.Rounded.QrCodeScanner,
+                                    onClick = { navigator.openDoor(loaded.id) },
+                                    trailing = Icons.AutoMirrored.Rounded.KeyboardArrowRight,
+                                )
+                            }
+                        }
+                    }
+                }
                 item {
                     Section("About") {
                         loaded.description?.takeIf { it.isNotBlank() }?.let {
@@ -276,6 +315,8 @@ fun VenueScreen(id: String, navigator: Navigator) {
             }
         }
     }
+
+    CoverCheckoutFailure(checkout)
 }
 
 /** Test builds only: report the venue's own position, so the app and the API treat you as inside it. */

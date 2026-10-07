@@ -13,9 +13,11 @@ import kotlinx.coroutines.launch
 import org.maplibre.android.MapLibre
 import social.hotmess.android.location.LocationProvider
 import social.hotmess.android.push.PushRegistrar
+import social.hotmess.android.session.AuthState
 import social.hotmess.android.session.BrandStore
 import social.hotmess.android.session.SessionStore
 import social.hotmess.core.HotMessApi
+import social.hotmess.core.PassBook
 
 /** The app's services, built once. Screens reach them through [LocalAppGraph][social.hotmess.android.ui.LocalAppGraph]. */
 class AppGraph(context: Context, val configuration: AppConfiguration = AppConfiguration()) {
@@ -26,6 +28,15 @@ class AppGraph(context: Context, val configuration: AppConfiguration = AppConfig
     val push = PushRegistrar(context, api, scope)
     val session = SessionStore(context, api, audienceKit, configuration, push, scope)
     val location = LocationProvider(context, api, configuration, scope)
+
+    /** The user's cover passes, kept so an opened pass still works with no signal at the door. */
+    val passes = PassBook()
+
+    init {
+        scope.launch {
+            session.state.collect { if (it == AuthState.SignedOut) passes.clear() }
+        }
+    }
 }
 
 class HotMessApplication : Application() {

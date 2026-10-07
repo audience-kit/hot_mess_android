@@ -27,11 +27,15 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
+import social.hotmess.android.payments.CoverCheckout
+import social.hotmess.android.payments.CoverCheckoutFailure
+import social.hotmess.android.payments.rememberCoverCheckout
 import social.hotmess.android.ui.LocalAppGraph
 import social.hotmess.android.ui.Navigator
 import social.hotmess.android.ui.ScreenScaffold
 import social.hotmess.android.ui.components.Card
 import social.hotmess.android.ui.components.CardRows
+import social.hotmess.android.ui.components.CoverRow
 import social.hotmess.android.ui.components.EventRow
 import social.hotmess.android.ui.components.FeaturedEventRow
 import social.hotmess.android.ui.components.Feed
@@ -53,6 +57,7 @@ import social.hotmess.android.ui.theme.Space
 import social.hotmess.android.ui.theme.tokens
 import social.hotmess.core.ApiError
 import social.hotmess.core.AppRoute
+import social.hotmess.core.CoverOffer
 import social.hotmess.core.Event
 import social.hotmess.core.EventListing
 import social.hotmess.core.Formatting
@@ -155,6 +160,12 @@ fun EventScreen(id: String, navigator: Navigator) {
 
     LaunchedEffect(id) { loader.load(id) { graph.api.event(id) } }
 
+    val checkout = rememberCoverCheckout { pass ->
+        loader.load(id, refresh = true) { graph.api.event(id) }
+        navigator.openPass(pass.id)
+    }
+    val checkoutState by checkout.state.collectAsStateWithLifecycle()
+
     fun choose(rsvp: Rsvp) {
         val previous = state.valueOrNull?.rsvp ?: return
         if (rsvp == previous) return
@@ -197,6 +208,22 @@ fun EventScreen(id: String, navigator: Navigator) {
                     }
                 }
                 item { Section("Your RSVP") { RsvpPicker(loaded.rsvp, ::choose) } }
+                val venue = loaded.venue
+                CoverOffer.of(loaded)?.let { offer ->
+                    item {
+                        Section("Cover") {
+                            CoverRow(
+                                offer,
+                                paying = checkoutState == CoverCheckout.State.Working,
+                                onPay = { venue?.let { checkout.pay(it.id, it.name) } },
+                                onShowPass = { pass ->
+                                    graph.passes.put(pass)
+                                    navigator.openPass(pass.id)
+                                },
+                            )
+                        }
+                    }
+                }
                 item {
                     Section("When") {
                         InfoRow("Starts", Formatting.dateTime(loaded.startAt))
@@ -232,6 +259,8 @@ fun EventScreen(id: String, navigator: Navigator) {
             }
         }
     }
+
+    CoverCheckoutFailure(checkout)
 
     rsvpError?.let { message ->
         AlertDialog(
