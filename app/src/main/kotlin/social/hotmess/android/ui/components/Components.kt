@@ -27,13 +27,9 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.OpenInNew
-import androidx.compose.material.icons.automirrored.rounded.HelpOutline
-import androidx.compose.material.icons.rounded.Cancel
-import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.ErrorOutline
 import androidx.compose.material.icons.rounded.Image
 import androidx.compose.material.icons.rounded.MusicNote
-import androidx.compose.material.icons.rounded.Star
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -69,7 +65,6 @@ import social.hotmess.android.ui.theme.tokens
 import social.hotmess.core.Event
 import social.hotmess.core.Formatting
 import social.hotmess.core.LoadState
-import social.hotmess.core.Rsvp
 import social.hotmess.core.SocialLink
 import social.hotmess.core.Track
 import social.hotmess.core.initialsForDisplay
@@ -355,45 +350,6 @@ fun DangerRow(text: String, onClick: () -> Unit) {
         Text(text, style = HotMessType.label, color = tokens.danger)
     }
 }
-
-/** The RSVP choices, side by side; the chosen one sits on `accent-soft`. */
-@Composable
-fun RsvpPicker(selection: Rsvp, onSelect: (Rsvp) -> Unit) {
-    Row(Modifier.fillMaxWidth().padding(Space.s2), horizontalArrangement = Arrangement.spacedBy(Space.s2)) {
-        Rsvp.selectable.forEach { rsvp ->
-            val selected = rsvp == selection
-            Column(
-                Modifier
-                    .weight(1f)
-                    .clip(Radius.md)
-                    .background(if (selected) tokens.accentSoft else Color.Transparent)
-                    .clickable(role = Role.RadioButton, onClick = { onSelect(rsvp) })
-                    .padding(vertical = Space.s2),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(Space.s1),
-            ) {
-                Icon(rsvp.icon, contentDescription = null, tint = if (selected) tokens.accentInk else tokens.inkMuted)
-                Text(rsvp.title, style = HotMessType.bodySmall, color = if (selected) tokens.accentInk else tokens.inkMuted)
-            }
-        }
-    }
-}
-
-val Rsvp.title: String
-    get() = when (this) {
-        Rsvp.ATTENDING -> "Going"
-        Rsvp.MAYBE -> "Interested"
-        Rsvp.DECLINED -> "Not going"
-        Rsvp.UNSURE -> "Undecided"
-    }
-
-val Rsvp.icon: ImageVector
-    get() = when (this) {
-        Rsvp.ATTENDING -> Icons.Rounded.CheckCircle
-        Rsvp.MAYBE -> Icons.Rounded.Star
-        Rsvp.DECLINED -> Icons.Rounded.Cancel
-        Rsvp.UNSURE -> Icons.AutoMirrored.Rounded.HelpOutline
-    }
 
 /** Shows a spinner, the content, or what went wrong with a "Try again" button. */
 @Composable

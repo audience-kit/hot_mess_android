@@ -17,12 +17,10 @@ import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.Text
@@ -73,7 +71,6 @@ import social.hotmess.core.Event
 import social.hotmess.core.Formatting
 import social.hotmess.core.Friend
 import social.hotmess.core.Person
-import social.hotmess.core.Rsvp
 import social.hotmess.core.Venue
 import kotlin.math.max
 
@@ -326,12 +323,7 @@ fun EventCard(event: Event, onClick: () -> Unit, modifier: Modifier = Modifier) 
             }
         },
         trailing = {
-            if (event.rsvp == Rsvp.ATTENDING || event.rsvp == Rsvp.MAYBE) {
-                GlassPill {
-                    Icon(event.rsvp.icon, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Text(event.rsvp.title, maxLines = 1)
-                }
-            }
+            RsvpBadge(event.rsvp)
         },
     ) {
         Text(event.name, style = if (event.isFeatured) FeaturedCardTitle else CardTitle, maxLines = 2, overflow = TextOverflow.Ellipsis)
