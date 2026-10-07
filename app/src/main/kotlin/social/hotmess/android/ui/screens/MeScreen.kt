@@ -28,10 +28,11 @@ import social.hotmess.android.ui.LocalAppGraph
 import social.hotmess.android.ui.ScreenScaffold
 import social.hotmess.android.ui.components.Avatar
 import social.hotmess.android.ui.components.DangerRow
+import social.hotmess.android.ui.components.DetailInset
+import social.hotmess.android.ui.components.DetailSection
 import social.hotmess.android.ui.components.Feed
 import social.hotmess.android.ui.components.InfoRow
 import social.hotmess.android.ui.components.RowDivider
-import social.hotmess.android.ui.components.Section
 import social.hotmess.android.ui.openAppSettings
 import social.hotmess.android.ui.openUrl
 import social.hotmess.android.ui.theme.HotMessType
@@ -56,9 +57,9 @@ fun MeScreen() {
     ScreenScaffold(title = "Me") {
         Feed {
             item {
-                Section(null) {
+                DetailSection(null) {
                     Row(
-                        Modifier.fillMaxWidth().padding(Space.s4),
+                        Modifier.fillMaxWidth().padding(horizontal = DetailInset, vertical = Space.s4),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(Space.s3),
                     ) {
@@ -72,7 +73,7 @@ fun MeScreen() {
                 }
             }
             item {
-                Section("Location") {
+                DetailSection("Location") {
                     InfoRow(
                         "Location access",
                         when (access) {
@@ -89,7 +90,7 @@ fun MeScreen() {
                 }
             }
             item {
-                Section("Feedback") {
+                DetailSection("Feedback") {
                     InfoRow(
                         "Send feedback",
                         icon = Icons.Rounded.Email,
@@ -98,7 +99,7 @@ fun MeScreen() {
                 }
             }
             item {
-                Section("About") {
+                DetailSection("About") {
                     InfoRow("Version", "${configuration.versionName} (${configuration.versionCode})")
                     RowDivider()
                     InfoRow("Facebook", configuration.facebookEnvironment)
@@ -107,7 +108,7 @@ fun MeScreen() {
                 }
             }
             item {
-                Section(null) {
+                DetailSection(null) {
                     DangerRow("Reset all data") { confirm = Confirm.RESET }
                     RowDivider()
                     DangerRow("Sign out") { confirm = Confirm.SIGN_OUT }

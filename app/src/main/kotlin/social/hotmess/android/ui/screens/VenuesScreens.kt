@@ -6,16 +6,18 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.rounded.OpenInNew
 import androidx.compose.material.icons.rounded.Close
-import androidx.compose.material.icons.rounded.NearMe
 import androidx.compose.material.icons.rounded.LocationOff
 import androidx.compose.material.icons.rounded.MyLocation
+import androidx.compose.material.icons.rounded.NearMe
+import androidx.compose.material.icons.rounded.OpenInFull
 import androidx.compose.material.icons.rounded.Phone
 import androidx.compose.material.icons.rounded.Place
-import androidx.compose.material.icons.rounded.OpenInFull
 import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -26,38 +28,45 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import social.hotmess.android.ui.LocalAppGraph
 import social.hotmess.android.ui.Navigator
 import social.hotmess.android.ui.ScreenScaffold
-import social.hotmess.android.ui.components.Card
 import social.hotmess.android.ui.components.CardRows
 import social.hotmess.android.ui.components.ChatPeek
+import social.hotmess.android.ui.components.DetailSection
 import social.hotmess.android.ui.components.EmptyRow
-import social.hotmess.android.ui.components.EventRow
+import social.hotmess.android.ui.components.EventCard
 import social.hotmess.android.ui.components.Feed
-import social.hotmess.android.ui.components.HeroImage
+import social.hotmess.android.ui.components.HeroFeed
+import social.hotmess.android.ui.components.HeroHeader
+import social.hotmess.android.ui.components.HeroScaffold
 import social.hotmess.android.ui.components.InfoRow
 import social.hotmess.android.ui.components.LoadStateView
 import social.hotmess.android.ui.components.RowDivider
-import social.hotmess.android.ui.components.Section
 import social.hotmess.android.ui.components.SocialLinkRow
+import social.hotmess.android.ui.components.TextRow
+import social.hotmess.android.ui.components.VenueCard
 import social.hotmess.android.ui.components.VenueMap
-import social.hotmess.android.ui.components.VenueRow
+import social.hotmess.android.ui.components.cardSection
+import social.hotmess.android.ui.components.rememberHeroCollapsed
 import social.hotmess.android.ui.dial
 import social.hotmess.android.ui.openMap
 import social.hotmess.android.ui.openUrl
@@ -65,10 +74,11 @@ import social.hotmess.android.ui.rememberLoader
 import social.hotmess.android.ui.share
 import social.hotmess.android.ui.theme.HotMessType
 import social.hotmess.android.ui.theme.Radius
-import social.hotmess.android.ui.theme.Space
+import social.hotmess.android.ui.theme.Sizes
 import social.hotmess.android.ui.theme.tokens
 import social.hotmess.core.AppRoute
 import social.hotmess.core.Formatting
+import social.hotmess.core.PhotoTone
 import social.hotmess.core.PingPick
 import social.hotmess.core.Venue
 import social.hotmess.core.VenueOverview
@@ -94,47 +104,35 @@ fun VenuesScreen(navigator: Navigator) {
             PullToRefreshBox(refreshing, onRefresh = { loader.load(localeId, refresh = true) { graph.api.venues(localeId) } }) {
                 Feed {
                     if (venues.any { it.coordinate != null }) {
-                        item {
-                            Card {
-                                Box {
-                                    VenueMap(
-                                        venues = venues,
-                                        onVenue = { navigator.open(AppRoute.VenueDetail(it)) },
-                                        onMapTap = { mapExpanded = true },
-                                        modifier = Modifier.fillMaxWidth().height(220.dp).clip(Radius.lg),
-                                    )
-                                    MapButton(
-                                        icon = Icons.Rounded.OpenInFull,
-                                        label = "Expand map",
-                                        onClick = { mapExpanded = true },
-                                        modifier = Modifier.align(Alignment.TopEnd),
-                                    )
-                                }
+                        item(key = "map") {
+                            Box(Modifier.fillMaxWidth().height(Sizes.mapInline).clip(Radius.photo)) {
+                                VenueMap(
+                                    venues = venues,
+                                    onVenue = { navigator.open(AppRoute.VenueDetail(it)) },
+                                    onMapTap = { mapExpanded = true },
+                                    modifier = Modifier.fillMaxSize().clip(Radius.photo),
+                                )
+                                MapButton(
+                                    icon = Icons.Rounded.OpenInFull,
+                                    label = "Expand map",
+                                    onClick = { mapExpanded = true },
+                                    modifier = Modifier.align(Alignment.TopEnd),
+                                )
                             }
                         }
                     }
                     val (here, elsewhere) = venues.partition { it.isIn(localeId) }
                     val name = locale?.name
+                    val open = { venue: Venue -> navigator.open(AppRoute.VenueDetail(venue.id)) }
                     if (venues.isEmpty()) {
-                        item { Section("All venues") { EmptyRow("There are no venues here yet.") } }
+                        item { DetailSection("All venues") { EmptyRow("There are no venues here yet.") } }
                     }
-                    if (here.isNotEmpty() && name != null) {
-                        item {
-                            Section(name) {
-                                CardRows(here, divider = 84.dp) { venue ->
-                                    VenueRow(venue) { navigator.open(AppRoute.VenueDetail(venue.id)) }
-                                }
-                            }
-                        }
+                    if (name != null) {
+                        cardSection("here", name, here, key = { it.id }) { venue -> VenueCard(venue, onClick = { open(venue) }) }
                     }
-                    if (elsewhere.isNotEmpty()) {
-                        item {
-                            Section(if (here.isEmpty() || name == null) "All venues" else "Elsewhere") {
-                                CardRows(elsewhere, divider = 84.dp) { venue ->
-                                    VenueRow(venue) { navigator.open(AppRoute.VenueDetail(venue.id)) }
-                                }
-                            }
-                        }
+                    val elsewhereTitle = if (here.isEmpty() || name == null) "All venues" else "Elsewhere"
+                    cardSection("elsewhere", elsewhereTitle, if (name == null) here + elsewhere else elsewhere, key = { it.id }) { venue ->
+                        VenueCard(venue, onClick = { open(venue) })
                     }
                 }
             }
@@ -201,8 +199,13 @@ fun VenueScreen(id: String, navigator: Navigator) {
     }
 
     val venue = state.valueOrNull?.venue
-    ScreenScaffold(
+    val listState = rememberLazyListState()
+    val scrolled by rememberHeroCollapsed(listState)
+    var heroTone by remember { mutableStateOf(PhotoTone.PLACEHOLDER) }
+    HeroScaffold(
         title = venue?.name ?: "Venue",
+        tone = heroTone,
+        collapsed = venue == null || scrolled,
         onBack = navigator::back,
         actions = {
             if (venue != null) {
@@ -211,11 +214,27 @@ fun VenueScreen(id: String, navigator: Navigator) {
                 }
             }
         },
-    ) {
+    ) { topInset ->
         LoadStateView(state, onRetry = { loader.load(id) { graph.api.venueOverview(id) } }) { overview ->
             val loaded = overview.venue
-            Feed {
-                (loaded.heroUrl ?: loaded.photoUrl)?.let { url -> item { HeroImage(url) } }
+            HeroFeed(
+                listState,
+                hero = {
+                    HeroHeader(loaded.heroUrl ?: loaded.photoUrl, topInset, onTone = { heroTone = it }) {
+                        Text(
+                            loaded.name,
+                            style = HotMessType.title,
+                            maxLines = 3,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.semantics { heading() },
+                        )
+                        val details = listOfNotNull(loaded.address?.takeIf { it.isNotBlank() }, loaded.distance?.let { Formatting.distance(it) })
+                        if (details.isNotEmpty()) {
+                            Text(details.joinToString(" · "), style = HotMessType.subheading, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                        }
+                    }
+                },
+            ) {
                 item {
                     PingStripSection(
                         pings = overview.friendPings,
@@ -226,9 +245,9 @@ fun VenueScreen(id: String, navigator: Navigator) {
                     )
                 }
                 item {
-                    Section("About") {
+                    DetailSection("About") {
                         loaded.description?.takeIf { it.isNotBlank() }?.let {
-                            Text(it, style = HotMessType.body, color = tokens.ink, modifier = Modifier.padding(Space.s4))
+                            TextRow(it)
                             RowDivider()
                         }
                         loaded.address?.takeIf { it.isNotBlank() }?.let { address ->
@@ -260,7 +279,7 @@ fun VenueScreen(id: String, navigator: Navigator) {
                 val links = loaded.socialLinks.filter { it.url != null }
                 if (links.isNotEmpty()) {
                     item {
-                        Section("Elsewhere") {
+                        DetailSection("Elsewhere") {
                             CardRows(links) { link -> SocialLinkRow(link) { link.url?.let(context::openUrl) } }
                         }
                     }
@@ -282,12 +301,11 @@ fun VenueScreen(id: String, navigator: Navigator) {
                         }
                     }
                 }
-                item {
-                    Section("Events") {
-                        if (overview.events.isEmpty()) EmptyRow("There's nothing coming up here yet.")
-                        CardRows(overview.events, divider = 76.dp) { event ->
-                            EventRow(event) { navigator.open(AppRoute.EventDetail(event.id)) }
-                        }
+                if (overview.events.isEmpty()) {
+                    item { DetailSection("Events") { EmptyRow("There's nothing coming up here yet.") } }
+                } else {
+                    cardSection("events", "Events", overview.events, key = { it.id }) { event ->
+                        EventCard(event, onClick = { navigator.open(AppRoute.EventDetail(event.id)) })
                     }
                 }
             }
@@ -318,12 +336,20 @@ private fun PretendHere(name: String, latitude: Double, longitude: Double, onRep
             onReported()
         }
     }
-    Section("Testing") {
+    DetailSection(
+        "Testing",
+        footer = {
+            Text(
+                "Test builds only. Reports this venue's location instead of yours until you stop.",
+                style = HotMessType.bodySmall,
+                color = tokens.inkMuted,
+            )
+        },
+    ) {
         if (simulated == name) {
             InfoRow("Stop pretending", icon = Icons.Rounded.LocationOff, onClick = { after(location.stopSimulating()) })
         } else {
             InfoRow("Pretend I'm here", icon = Icons.Rounded.MyLocation, onClick = { after(location.simulate(latitude, longitude, name)) })
         }
-        EmptyRow("Test builds only. Reports this venue's location instead of yours until you stop.")
     }
 }
