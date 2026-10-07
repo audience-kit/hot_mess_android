@@ -39,6 +39,17 @@ class ImageToneTest {
     }
 
     @Test
+    fun cityLightsAtNightGetAtLeastTheBusyScrim() {
+        // A dark skyline with a few bright windows: dark enough to pass 4.5:1 by the old rule, but
+        // letters crossing the lights still need a scrim.
+        val band = List(90) { 0.01 } + List(10) { 0.9 }
+        val tone = ImageTone.decide(top = band, band = band)
+
+        assertEquals(PhotoTone.Text.LIGHT, tone.text)
+        assertTrue(tone.scrim >= ImageTone.BUSY_SCRIM)
+    }
+
+    @Test
     fun theScrimIsClampedToTheMaximum() {
         val band = List(50) { 0.0 } + List(50) { 1.0 }
         val tone = ImageTone.decide(top = band, band = band, target = 7.0)
