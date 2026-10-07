@@ -177,8 +177,89 @@ object Radius {
     val pill = RoundedCornerShape(percent = 50)
 }
 
-/** Feeds and audience pages are one column up to 680dp wide. */
+/** Feeds and audience pages are one column up to 680dp wide (`size-content-max`). */
 val ContentMaxWidth = 680.dp
+
+/**
+ * Colours for text and fills over photos. They're the same in every theme, since what's under them
+ * is a photo, not the wash.
+ */
+object PhotoColors {
+    /** `scrim`: behind light text; its opacity is computed per photo (ImageTone). */
+    val scrim = Color(0xFF000000)
+
+    /** `scrim-light`: behind dark `photo-ink` text, when that still needs a scrim. */
+    val scrimLight = Color(0xFFFFFFFF)
+
+    /** `glass`: rgba(28,20,26,0.55), the fill of pills and badges on photos. */
+    val glass = Color(0x8C1C141A)
+
+    /** `on-photo`: text and icons over photos, glass pills and scrims. */
+    val onPhoto = Color(0xFFFFFFFF)
+
+    /** `photo-ink`: dark text over photos bright enough to carry it without a scrim. */
+    val photoInk = Color(0xFF24161D)
+
+    /** `photo-placeholder`: hero and photo card fill while the image loads. */
+    val placeholder = Color(0xFF291F26)
+}
+
+/** The design system's `size` tokens: heights the platforms share, in dp. */
+object Sizes {
+    /** HeroHeader body height below the status and top bars. */
+    val hero = 256.dp
+
+    /** Venue and event photo cards. */
+    val photoCard = 132.dp
+
+    /** Featured event photo cards. */
+    val photoCardFeatured = 180.dp
+
+    /** Person cards (blurred picture behind a sharp 56 avatar). */
+    val personCard = 84.dp
+
+    /** FriendFaces stack, overlapping by 7. */
+    val avatarXs = 26.dp
+
+    /** Chat bubbles and chat lines. */
+    val avatarSm = 28.dp
+
+    /** Person cards, FriendStrip. */
+    val avatarLg = 56.dp
+
+    /** Minimum NightCalendar cell height. */
+    val calendarCell = 44.dp
+
+    /** Inline map on the Venues tab. */
+    val mapInline = 220.dp
+}
+
+/** The design system's `opacity` tokens. */
+object Opacity {
+    /** Upper clamp on a computed photo scrim. */
+    const val scrimMax = 0.75f
+
+    /** Lower clamp on a photo scrim with high contrast text or reduced transparency (otherwise 0). */
+    const val scrimFloor = 0.3f
+
+    /** NightCalendar level 1: `accent` at this opacity. */
+    const val busy1 = 0.25f
+
+    /** NightCalendar level 2: `accent` at this opacity, `ink` text. */
+    const val busy2 = 0.6f
+
+    /** Past nights in the calendar. */
+    const val past = 0.35f
+
+    /** The white ring around avatars that sit on photos. */
+    const val ring = 0.9f
+
+    /**
+     * A quiet glyph standing in for something missing, like RemoteImage's empty photo icon. Android
+     * only, not a shared token yet.
+     */
+    const val placeholderGlyph = 0.5f
+}
 
 @OptIn(ExperimentalTextApi::class)
 private fun figtree(weight: Int) = Font(

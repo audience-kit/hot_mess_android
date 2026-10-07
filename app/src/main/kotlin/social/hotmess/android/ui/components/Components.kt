@@ -59,6 +59,7 @@ import coil3.compose.AsyncImage
 import social.hotmess.android.R
 import social.hotmess.android.ui.theme.ContentMaxWidth
 import social.hotmess.android.ui.theme.HotMessType
+import social.hotmess.android.ui.theme.Opacity
 import social.hotmess.android.ui.theme.Radius
 import social.hotmess.android.ui.theme.Space
 import social.hotmess.android.ui.theme.tokens
@@ -178,7 +179,7 @@ fun InfoRow(title: String, value: String? = null, icon: ImageVector? = null, onC
 fun RemoteImage(url: String?, modifier: Modifier = Modifier, contentScale: ContentScale = ContentScale.Crop) {
     Box(modifier.background(tokens.controlFill), contentAlignment = Alignment.Center) {
         if (url == null) {
-            Icon(Icons.Rounded.Image, contentDescription = null, tint = tokens.inkMuted.copy(alpha = 0.5f))
+            Icon(Icons.Rounded.Image, contentDescription = null, tint = tokens.inkMuted.copy(alpha = Opacity.placeholderGlyph))
         } else {
             AsyncImage(model = url, contentDescription = null, contentScale = contentScale, modifier = Modifier.fillMaxSize())
         }

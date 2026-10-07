@@ -25,7 +25,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import social.hotmess.android.ui.theme.HotMessType
+import social.hotmess.android.ui.theme.Opacity
 import social.hotmess.android.ui.theme.Radius
+import social.hotmess.android.ui.theme.Sizes
 import social.hotmess.android.ui.theme.Space
 import social.hotmess.android.ui.theme.tokens
 import social.hotmess.core.Night
@@ -36,6 +38,17 @@ import java.time.format.FormatStyle
 import java.time.format.TextStyle
 import java.util.Locale
 
+/** Cells and legend swatches: `radius-lg` cells, `radius-sm` swatches. */
+private val CellShape = Radius.lg
+private val SwatchShape = Radius.sm
+
+/** The gap between cells. */
+private val CellGap = 6.dp
+
+/** The border on today (`accent`) and on the selected night (`ink`). */
+private val TodayBorder = 1.5.dp
+private val SelectedBorder = 2.5.dp
+
 /**
  * A month-style grid of the next four weeks, each night shaded by how many events it has. Tapping a
  * night selects it; tapping it again clears it.
@@ -45,7 +58,7 @@ fun NightCalendarView(calendar: NightCalendar, selected: LocalDate?, onSelect: (
     Column(Modifier.fillMaxWidth().padding(Space.s4), verticalArrangement = Arrangement.spacedBy(Space.s2)) {
         Text(monthTitle(calendar), style = HotMessType.heading, color = tokens.ink)
 
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(CellGap)) {
             calendar.weeks.firstOrNull()?.forEach { night ->
                 Text(
                     night.date.dayOfWeek.getDisplayName(TextStyle.NARROW, Locale.getDefault()),
@@ -58,7 +71,7 @@ fun NightCalendarView(calendar: NightCalendar, selected: LocalDate?, onSelect: (
         }
 
         calendar.weeks.forEach { week ->
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(CellGap)) {
                 week.forEach { night ->
                     NightCell(
                         night = night,
@@ -88,10 +101,10 @@ private fun NightCell(night: Night, isSelected: Boolean, modifier: Modifier, onC
     }
     Column(
         modifier
-            .heightIn(min = 48.dp)
-            .alpha(if (night.isPast) 0.35f else 1f)
-            .background(busynessShade(night.busyness), Radius.lg)
-            .border(if (isSelected) 2.5.dp else 1.5.dp, border, Radius.lg)
+            .heightIn(min = Sizes.calendarCell)
+            .alpha(if (night.isPast) Opacity.past else 1f)
+            .background(busynessShade(night.busyness), CellShape)
+            .border(if (isSelected) SelectedBorder else TodayBorder, border, CellShape)
             .clickable(enabled = !night.isPast, onClick = onClick)
             .semantics(mergeDescendants = true) {
                 contentDescription = label
@@ -101,7 +114,8 @@ private fun NightCell(night: Night, isSelected: Boolean, modifier: Modifier, onC
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        val ink = if (night.busyness >= 2) tokens.accentInk else tokens.ink
+        // `ink` on levels 0 to 2, `on-accent` on the solid accent of level 3.
+        val ink = if (night.busyness >= NightCalendar.MAX_LEVEL) tokens.onAccent else tokens.ink
         Text(
             night.date.dayOfMonth.toString(),
             style = HotMessType.subheading.copy(fontWeight = if (night.isToday) FontWeight.Bold else FontWeight.Normal),
@@ -115,8 +129,8 @@ private fun NightCell(night: Night, isSelected: Boolean, modifier: Modifier, onC
 @Composable
 private fun busynessShade(level: Int): Color = when {
     level < 1 -> tokens.surfaceSunken
-    level == 1 -> tokens.accent.copy(alpha = 0.25f)
-    level == 2 -> tokens.accent.copy(alpha = 0.6f)
+    level == 1 -> tokens.accent.copy(alpha = Opacity.busy1)
+    level == 2 -> tokens.accent.copy(alpha = Opacity.busy2)
     else -> tokens.accent
 }
 
@@ -129,7 +143,7 @@ private fun BusynessLegend() {
     ) {
         Text("Quiet", style = HotMessType.bodySmall, color = tokens.inkMuted)
         (0..NightCalendar.MAX_LEVEL).forEach { level ->
-            Box(Modifier.size(14.dp).background(busynessShade(level), Radius.sm))
+            Box(Modifier.size(14.dp).background(busynessShade(level), SwatchShape))
         }
         Text("Busy", style = HotMessType.bodySmall, color = tokens.inkMuted)
     }
