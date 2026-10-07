@@ -186,7 +186,7 @@ private fun threadEntries(messages: List<ChatThreadMessage>): List<ThreadEntry> 
  * A chat room's transcript, oldest first and kept scrolled to the newest message: bubbles grouped
  * by sender (under 5 minutes apart), the sender's name above an incoming group and their avatar
  * beside its last bubble, and a time divider at the top and after any 15-minute gap. Empty, it
- * says hello to everyone in [roomName].
+ * says hello to everyone in [roomName], or out in it when [isLocale] (a city's room).
  */
 @Composable
 fun ChatThread(
@@ -195,10 +195,15 @@ fun ChatThread(
     modifier: Modifier = Modifier,
     presence: Map<String, Presence> = emptyMap(),
     state: LazyListState = rememberLazyListState(),
+    isLocale: Boolean = false,
 ) {
     Box(modifier.background(tokens.surface)) {
         if (messages.isEmpty()) {
-            Message(Icons.AutoMirrored.Rounded.Chat, "Say hello.", "Everyone at $roomName can see what you write here.")
+            Message(
+                Icons.AutoMirrored.Rounded.Chat,
+                "Say hello.",
+                if (isLocale) "Everyone out in $roomName can see what you write here." else "Everyone at $roomName can see what you write here.",
+            )
         } else {
             Transcript(messages, presence, state)
         }
@@ -315,9 +320,9 @@ fun ChatBubble(
 /** Why the reader is (or isn't fully) in a room. Only one shows; range wins. */
 enum class RoomBannerKind { RANGE, CONNECTING, OFFLINE }
 
-/** The strip under a chat room's title. */
+/** The strip under a chat room's title. [isLocale] rooms are a city's, which you're in, not at. */
 @Composable
-fun RoomBanner(kind: RoomBannerKind, roomName: String, modifier: Modifier = Modifier) {
+fun RoomBanner(kind: RoomBannerKind, roomName: String, modifier: Modifier = Modifier, isLocale: Boolean = false) {
     when (kind) {
         RoomBannerKind.RANGE -> Row(
             modifier.fillMaxWidth().background(tokens.warningSoft).padding(horizontal = Space.s4, vertical = Space.s2),
@@ -326,7 +331,11 @@ fun RoomBanner(kind: RoomBannerKind, roomName: String, modifier: Modifier = Modi
         ) {
             Icon(Icons.Rounded.LocationOff, contentDescription = null, tint = tokens.warning, modifier = Modifier.size(20.dp))
             Text(
-                "You're not at $roomName. You're in this chat because you're an admin.",
+                if (isLocale) {
+                    "You're not in $roomName. You're in this chat because you're an admin."
+                } else {
+                    "You're not at $roomName. You're in this chat because you're an admin."
+                },
                 style = HotMessType.bodySmall,
                 color = tokens.ink,
             )

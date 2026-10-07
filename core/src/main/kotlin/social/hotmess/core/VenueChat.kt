@@ -30,17 +30,33 @@ data class VenueMessage(
 }
 
 /**
- * The Action Cable protocol behind a venue's chat room: the `RealtimeChannel` subscription for a
+ * A chat room: a venue's, for people at the venue, or a locale's, for people out in the locale who
+ * aren't at a venue. Both speak the same frames, so one connection and one screen serve either.
+ */
+data class ChatRoom(val kind: Kind, val id: String) {
+    enum class Kind(val channel: String, val key: String) {
+        VENUE("RealtimeChannel", "venue_id"),
+        LOCALE("LocaleChannel", "locale_id"),
+    }
+
+    companion object {
+        fun venue(id: String) = ChatRoom(Kind.VENUE, id)
+        fun locale(id: String) = ChatRoom(Kind.LOCALE, id)
+    }
+}
+
+/**
+ * The Action Cable protocol behind a chat room (see [ChatRoom]): the `RealtimeChannel` subscription for a
  * venue, chat lines in and out, and the server's own frames. Kept apart from the socket so it can be
  * tested.
  *
- * The room is only open to people at the venue: the server rejects the subscription otherwise, and
- * sends `{"type":"left"}` when someone's presence lapses. It adds the sender to each line itself.
+ * A venue's room is only open to people at the venue, and a locale's to people out in it away from its
+ * venues: the server rejects the subscription otherwise, and sends `{"type":"left"}` when someone's
+ * presence lapses. It adds the sender to each line itself.
  * Admins can join from anywhere: everyone is told `{"type":"range","out_of_range":…}` on joining,
  * and admins again whenever that changes.
  */
 object ChatProtocol {
-    private const val CHANNEL = "RealtimeChannel"
     private val json = Json { ignoreUnknownKeys = true }
 
     sealed interface Frame {
@@ -49,27 +65,32 @@ object ChatProtocol {
         data class Message(val message: VenueMessage) : Frame
         data object Disconnected : Frame
 
-        /** The server won't let this person in: they haven't reported a position at the venue lately. */
+        /** The server won't let this person in: they haven't reported a position in the room's place lately. */
         data object Rejected : Frame
 
-        /** They were in the room, but they've left the venue. */
+        /** They were in the room, but they've left its place. */
         data object Left : Frame
 
-        /** Whether they're outside the venue. Only admins get in from outside. */
+        /** Whether they're outside the room's place. Only admins get in from outside. */
         data class Range(val outOfRange: Boolean) : Frame
     }
 
     /** Action Cable names a subscription by a JSON *string*, not an object. */
-    fun identifier(venueId: String): String =
-        JsonObject(mapOf("channel" to JsonPrimitive(CHANNEL), "venue_id" to JsonPrimitive(venueId.lowercase()))).toString()
+    fun identifier(room: ChatRoom): String =
+        JsonObject(mapOf("channel" to JsonPrimitive(room.kind.channel), room.kind.key to JsonPrimitive(room.id.lowercase()))).toString()
 
-    fun subscribe(venueId: String): String =
-        json.encodeToString(OutgoingFrame.serializer(), OutgoingFrame("subscribe", identifier(venueId), null))
+    fun subscribe(room: ChatRoom): String =
+        json.encodeToString(OutgoingFrame.serializer(), OutgoingFrame("subscribe", identifier(room), null))
 
-    fun message(venueId: String, body: String): String {
+    fun message(room: ChatRoom, body: String): String {
         val line = json.encodeToString(OutgoingMessage.serializer(), OutgoingMessage(message = body))
-        return json.encodeToString(OutgoingFrame.serializer(), OutgoingFrame("message", identifier(venueId), line))
+        return json.encodeToString(OutgoingFrame.serializer(), OutgoingFrame("message", identifier(room), line))
     }
+
+    /** A venue's room, by the venue's id. */
+    fun subscribe(venueId: String): String = subscribe(ChatRoom.venue(venueId))
+
+    fun message(venueId: String, body: String): String = message(ChatRoom.venue(venueId), body)
 
     /** Reads one frame from the server, or null for pings and anything unrecognized. */
     fun parse(text: String): Frame? {
@@ -116,9 +137,9 @@ object ChatProtocol {
     )
 }
 
-/** A live connection to a venue's chat room. */
+/** A live connection to a chat room, a venue's or a locale's. */
 class VenueChatConnection(
-    private val venueId: String,
+    private val room: ChatRoom,
     private val url: String,
     private val token: String?,
     private val client: OkHttpClient = OkHttpClient(),
@@ -142,7 +163,7 @@ class VenueChatConnection(
 
         val listener = object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
-                webSocket.send(ChatProtocol.subscribe(venueId))
+                webSocket.send(ChatProtocol.subscribe(room))
             }
 
             override fun onMessage(webSocket: WebSocket, text: String) {
@@ -176,5 +197,5 @@ class VenueChatConnection(
     }
 
     /** Sends a line. The server echoes it back, so the caller doesn't add it locally. */
-    fun send(body: String): Boolean = socket?.send(ChatProtocol.message(venueId, body)) ?: false
+    fun send(body: String): Boolean = socket?.send(ChatProtocol.message(room, body)) ?: false
 }
