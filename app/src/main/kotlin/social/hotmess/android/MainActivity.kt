@@ -45,6 +45,13 @@ class MainActivity : ComponentActivity() {
         handle(intent)
     }
 
+    // Square's card entry still starts with startActivityForResult, so its result arrives here.
+    @Suppress("OVERRIDE_DEPRECATION", "DEPRECATION")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        graph.squareCardEntry.onActivityResult(requestCode, data)
+    }
+
     override fun onResume() {
         super.onResume()
         // A redirect arrives through onNewIntent first, so still waiting here means the tab was closed.

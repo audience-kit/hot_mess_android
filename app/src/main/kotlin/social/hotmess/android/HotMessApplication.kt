@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.launch
 import org.maplibre.android.MapLibre
 import social.hotmess.android.location.LocationProvider
+import social.hotmess.android.payments.SquareCardEntry
 import social.hotmess.android.push.PushRegistrar
 import social.hotmess.android.session.AuthState
 import social.hotmess.android.session.BrandStore
@@ -34,6 +35,9 @@ class AppGraph(context: Context, val configuration: AppConfiguration = AppConfig
 
     /** The user's cover passes, kept so an opened pass still works with no signal at the door. */
     val passes = PassBook()
+
+    /** Square's card entry, for Square venues' cover; MainActivity passes it card entry's result. */
+    val squareCardEntry = SquareCardEntry()
 
     init {
         scope.launch {

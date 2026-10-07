@@ -43,7 +43,7 @@ android {
 
     defaultConfig {
         applicationId = "social.hotmess.android"
-        minSdk = 26
+        minSdk = 28
         targetSdk = 36
         versionCode = 1
         versionName = "1.0"
@@ -155,8 +155,10 @@ dependencies {
     implementation(libs.androidx.fragment)
     implementation(libs.maplibre)
     implementation(libs.firebase.messaging)
-    // Cover charge: Stripe's payment sheet takes the payment, and Door mode scans passes with the camera.
+    // Cover charge: Stripe's payment sheet or Square's card entry takes the payment, and Door mode scans
+    // passes with the camera.
     implementation(libs.stripe.android)
+    implementation(libs.square.card.entry)
     implementation(libs.androidx.camera.camera2)
     implementation(libs.androidx.camera.lifecycle)
     implementation(libs.androidx.camera.view)

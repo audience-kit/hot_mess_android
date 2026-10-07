@@ -4,6 +4,7 @@ import com.audiencekit.Admission
 import com.audiencekit.AdmissionStatus
 import com.audiencekit.CoverCharge
 import com.audiencekit.CoverPass
+import com.audiencekit.CoverPurchase
 import com.audiencekit.ScanOutcome
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -65,6 +66,52 @@ data class CoverOffer(
                 else -> CoverAction.PAY_AT_DOOR
             }
             return CoverOffer(charge, tonight = true, action = action, pass = pass)
+        }
+    }
+}
+
+/**
+ * How to pay for a [CoverPurchase]: Stripe venues pay on Stripe's payment sheet, Square venues with
+ * Square's card entry and [HotMessApi.payCover].
+ */
+sealed interface CoverPayment {
+    /** There's nothing to pay: show the pass. */
+    data class Paid(val admission: Admission) : CoverPayment
+
+    /** Stripe has nothing left to take, but the pass isn't paid yet: check it with `confirmCover`. */
+    data class Confirm(val admissionId: String) : CoverPayment
+
+    /** Stripe's payment sheet, as a direct charge on the venue's own Stripe account. */
+    data class Stripe(
+        val admissionId: String,
+        val clientSecret: String,
+        val publishableKey: String,
+        val stripeAccountId: String?,
+    ) : CoverPayment
+
+    /** Square's card entry, whose nonce goes to [HotMessApi.payCover]. */
+    data class Square(
+        val admissionId: String,
+        val applicationId: String,
+        val locationId: String?,
+    ) : CoverPayment
+
+    /** The API didn't send what paying needs. */
+    data class Unavailable(val message: String) : CoverPayment
+
+    companion object {
+        private const val UNAVAILABLE = "This venue can't take cover in the app right now. Pay at the door."
+
+        fun of(purchase: CoverPurchase): CoverPayment {
+            val admission = purchase.admission
+            if (admission.isPaid) return Paid(admission)
+            if (purchase.isSquare) {
+                val applicationId = purchase.squareApplicationId?.takeIf { it.isNotBlank() } ?: return Unavailable(UNAVAILABLE)
+                return Square(admission.id, applicationId, purchase.squareLocationId)
+            }
+            val clientSecret = purchase.paymentIntentClientSecret ?: return Confirm(admission.id)
+            val publishableKey = purchase.publishableKey?.takeIf { it.isNotBlank() } ?: return Unavailable(UNAVAILABLE)
+            return Stripe(admission.id, clientSecret, publishableKey, purchase.stripeAccountId)
         }
     }
 }
