@@ -1,6 +1,7 @@
 package social.hotmess.android
 
 import com.audiencekit.AudienceKitConfiguration
+import com.audiencekit.AudienceKitEnvironment
 
 /** The settings each build type bakes in (see app/build.gradle.kts), like the iOS xcconfig files. */
 data class AppConfiguration(
@@ -8,6 +9,10 @@ data class AppConfiguration(
     val audienceHost: String = BuildConfig.AUDIENCE_HOST,
     val audienceId: String? = BuildConfig.AUDIENCE_ID.ifBlank { null },
     val facebookAppId: String = BuildConfig.FACEBOOK_APP_ID,
+    /** Staging builds tell the API so, which then signs people in with Hot Mess's staging Facebook app. */
+    val environment: AudienceKitEnvironment =
+        AudienceKitEnvironment.entries.firstOrNull { it.value == BuildConfig.AUDIENCEKIT_ENVIRONMENT }
+            ?: AudienceKitEnvironment.PRODUCTION,
     val beaconUuid: String? = BuildConfig.BEACON_UUID.ifBlank { null },
     val versionName: String = BuildConfig.VERSION_NAME,
     val versionCode: Int = BuildConfig.VERSION_CODE,
@@ -19,6 +24,7 @@ data class AppConfiguration(
             host = audienceHost,
             audienceId = audienceId,
             facebookAppId = facebookAppId,
+            environment = environment,
         )
 
     /** Which Facebook app the build signs in with, for the Me screen. */
