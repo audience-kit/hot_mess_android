@@ -40,7 +40,7 @@ object Documents {
 
     val VENUE: String = """
         query Venue(${'$'}id: ID!) {
-          venue(id: ${'$'}id) { $VENUE_FIELDS events { $EVENT_FIELDS } }
+          venue(id: ${'$'}id) { $VENUE_FIELDS chatOpen events { $EVENT_FIELDS } }
         }
     """.trimIndent()
 

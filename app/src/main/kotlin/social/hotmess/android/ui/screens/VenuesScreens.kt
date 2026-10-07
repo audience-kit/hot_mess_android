@@ -154,14 +154,16 @@ fun VenueScreen(id: String, navigator: Navigator) {
                         }
                     }
                 }
-                item {
-                    Section("Chat") {
-                        InfoRow(
-                            "Join the room",
-                            icon = Icons.AutoMirrored.Rounded.Chat,
-                            onClick = { navigator.openChat(loaded.id, loaded.name) },
-                            trailing = Icons.AutoMirrored.Rounded.KeyboardArrowRight,
-                        )
+                if (overview.chatOpen) {
+                    item {
+                        Section("Chat") {
+                            InfoRow(
+                                "Join the room",
+                                icon = Icons.AutoMirrored.Rounded.Chat,
+                                onClick = { navigator.openChat(loaded.id, loaded.name) },
+                                trailing = Icons.AutoMirrored.Rounded.KeyboardArrowRight,
+                            )
+                        }
                     }
                 }
                 item {

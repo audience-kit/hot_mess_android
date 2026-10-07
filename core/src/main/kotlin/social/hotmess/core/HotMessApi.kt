@@ -68,7 +68,7 @@ class HotMessApi(val client: AudienceKitClient) {
     suspend fun venueOverview(id: String): VenueOverview {
         val venue = query(Documents.VENUE, VenueResponse.serializer(), graphQLVariables("id" to id)).venue
             ?: throw ApiError.NotFound
-        return VenueOverview(venue = venue.venue(), events = venue.events)
+        return VenueOverview(venue = venue.venue(), events = venue.events, chatOpen = venue.chatOpen)
     }
 
     // endregion
@@ -160,8 +160,11 @@ class HotMessApi(val client: AudienceKitClient) {
     }
 }
 
-/** A venue and its upcoming events, as the venue screen shows them. */
-data class VenueOverview(val venue: Venue, val events: List<Event> = emptyList())
+/**
+ * A venue and its upcoming events, as the venue screen shows them. [chatOpen] says whether the user can
+ * join its chat room: they're at the venue, or they're an admin. The way in is hidden otherwise.
+ */
+data class VenueOverview(val venue: Venue, val events: List<Event> = emptyList(), val chatOpen: Boolean = false)
 
 /** Visible venues, those in [localeId] first, then by the audience's order and name. */
 fun List<Venue>.sortedForList(localeId: String?): List<Venue> {
@@ -203,6 +206,7 @@ private data class VenueNode(
     @Serializable(with = BlankAsNullSerializer::class) val heroUrl: String? = null,
     val point: String? = null,
     val isLiked: Boolean = false,
+    val chatOpen: Boolean = false,
     val events: List<Event> = emptyList(),
 ) {
     fun venue() = Venue(
