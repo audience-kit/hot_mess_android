@@ -75,6 +75,7 @@ import social.hotmess.android.ui.theme.tokens
 import social.hotmess.core.AppRoute
 import social.hotmess.core.CoverOffer
 import social.hotmess.core.Formatting
+import social.hotmess.core.PingPick
 import social.hotmess.core.Venue
 import social.hotmess.core.VenueOverview
 import social.hotmess.core.isIn
@@ -203,6 +204,12 @@ fun VenueScreen(id: String, navigator: Navigator) {
         navigator.openPass(pass.id)
     }
     val checkoutState by checkout.state.collectAsStateWithLifecycle()
+    val userId = rememberUserId()
+    var pingHere by rememberSaveable { mutableStateOf(false) }
+    val actions = rememberPingActions { ping ->
+        loader.update { overview -> overview.copy(friendPings = overview.friendPings.map { if (it.id == ping.id) ping else it }) }
+        graph.pingUpdated(ping.id)
+    }
 
     val venue = state.valueOrNull?.venue
     ScreenScaffold(
@@ -246,6 +253,15 @@ fun VenueScreen(id: String, navigator: Navigator) {
                             }
                         }
                     }
+                }
+                item {
+                    PingStripSection(
+                        pings = overview.friendPings,
+                        pickOf = { it.pickForVenue(loaded.id) },
+                        userId = userId,
+                        actions = actions,
+                        onPingHere = { pingHere = true },
+                    )
                 }
                 item {
                     Section("About") {
@@ -317,6 +333,14 @@ fun VenueScreen(id: String, navigator: Navigator) {
     }
 
     CoverCheckoutFailure(checkout)
+    val here = venue
+    if (pingHere && here != null) {
+        PingSheet(
+            preselect = PingPick.VenuePick(here),
+            onDismiss = { pingHere = false },
+            onSent = { graph.pingUpdated(it.id) },
+        )
+    }
 }
 
 /** Test builds only: report the venue's own position, so the app and the API treat you as inside it. */

@@ -14,6 +14,8 @@ import com.audiencekit.RSVPState
 import com.audiencekit.ScanResult
 import com.audiencekit.graphQLVariables
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -41,6 +43,19 @@ class HotMessApi(val client: AudienceKitClient) {
             ReportLocationResponse.serializer(),
             mapOf("position" to near.toGraphQLValue()),
         ).reportLocation.now
+    }
+
+    /**
+     * [now], or without a position just your Ping and your friends', which don't need one, so Now can
+     * show them before location is on.
+     */
+    suspend fun nowOrPings(near: Coordinates?): Now {
+        if (near != null) return now(near)
+        return coroutineScope {
+            val mine = async { myPing() }
+            val friends = async { friendPings() }
+            Now(myPing = mine.await(), friendPings = friends.await())
+        }
     }
 
     /** Records where the device is, so the API knows which venue the user is in. */
@@ -74,7 +89,7 @@ class HotMessApi(val client: AudienceKitClient) {
     suspend fun venueOverview(id: String): VenueOverview {
         val venue = query(Documents.VENUE, VenueResponse.serializer(), graphQLVariables("id" to id)).venue
             ?: throw ApiError.NotFound
-        return VenueOverview(venue = venue.venue(), events = venue.events, chatOpen = venue.chatOpen)
+        return VenueOverview(venue = venue.venue(), events = venue.events, chatOpen = venue.chatOpen, friendPings = venue.friendPings)
     }
 
     // endregion
@@ -137,6 +152,60 @@ class HotMessApi(val client: AudienceKitClient) {
 
     // endregion
 
+    // region Ping
+
+    /** The signed-in user's active Ping, without reporting the position. */
+    suspend fun myPing(): Ping? = query(Documents.MY_PING, MyPingResponse.serializer()).myPing
+
+    /** Friends' active Pings, newest first, without reporting the position. */
+    suspend fun friendPings(): List<Ping> = query(Documents.FRIEND_PINGS, FriendPingsResponse.serializer()).friendPings
+
+    /**
+     * Sends a Ping for tonight, or edits the active one (which pushes nothing new). No picks means
+     * "anywhere tonight?"; a blank note is no note. [localeId] is the app's current locale, which the
+     * API needs when there are no picks. A null [reach] keeps the active Ping's (friends only for a new one).
+     */
+    suspend fun sendPing(
+        venueIds: List<String>,
+        eventIds: List<String>,
+        note: String?,
+        localeId: String?,
+        reach: PingReach? = null,
+    ): Ping =
+        mutate(
+            Documents.SEND_PING,
+            SendPingResponse.serializer(),
+            graphQLVariables(
+                "venueIds" to venueIds,
+                "eventIds" to eventIds,
+                "note" to note?.trim()?.takeIf { it.isNotEmpty() },
+                "localeId" to localeId,
+                "reach" to reach,
+            ),
+        ).sendPing.ping
+
+    /** "I'm in" on one pick ([targetId]), or on the Ping as a whole when that's null. */
+    suspend fun joinPing(pingId: String, targetId: String?): Ping =
+        mutate(Documents.JOIN_PING, JoinPingResponse.serializer(), graphQLVariables("pingId" to pingId, "targetId" to targetId))
+            .joinPing.ping
+
+    /** Takes back "I'm in" on a friend's Ping. */
+    suspend fun leavePing(pingId: String): Ping =
+        mutate(Documents.LEAVE_PING, LeavePingResponse.serializer(), graphQLVariables("pingId" to pingId)).leavePing.ping
+
+    /** Ends the signed-in user's active Ping early. */
+    suspend fun endPing(): Boolean = mutate(Documents.END_PING, EndPingResponse.serializer()).endPing.ended
+
+    /** What the send sheet offers in [localeId], and the Ping it would edit. Without a locale, only venues you pick elsewhere. */
+    suspend fun pingChoices(localeId: String?): PingChoices = coroutineScope {
+        val active = async { myPing() }
+        val tonight = async { localeId?.let { events(it).allEvents }.orEmpty() }
+        val places = async { if (localeId == null) emptyList() else venues(localeId) }
+        PingChoices.of(tonight.await(), places.await(), localeId, active.await())
+    }
+
+    // endregion
+
     // region Session
 
     /** The oldest Android build the API still serves, or null when it doesn't say. */
@@ -146,9 +215,16 @@ class HotMessApi(val client: AudienceKitClient) {
         return parseManifest(bytes.toString(Charsets.UTF_8))
     }
 
-    /** Stores this device's Firebase Cloud Messaging token for the session. */
-    suspend fun registerForPush(token: String) {
-        call { client.registerDevice(token) }
+    /**
+     * Stores this device's Firebase Cloud Messaging token for the session, with the app's package name
+     * ([appId]) so the API knows which app to push to. FCM has no sandbox, so that's always false.
+     */
+    suspend fun registerForPush(token: String, appId: String) {
+        query(
+            Documents.REGISTER_DEVICE,
+            RegisterDeviceResponse.serializer(),
+            graphQLVariables("notificationToken" to token, "appId" to appId, "sandbox" to false),
+        )
     }
 
     suspend fun me(): User? {
@@ -181,6 +257,22 @@ class HotMessApi(val client: AudienceKitClient) {
             throw ApiError.from(e)
         }
 
+    /** A mutation whose GraphQL errors are written for people ("That ping has ended"), so they're shown as they are. */
+    private suspend fun <T> mutate(
+        document: String,
+        serializer: KSerializer<T>,
+        variables: Map<String, JsonElement>? = null,
+    ): T =
+        try {
+            client.graphQL(document, serializer, variables, json = json)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: AudienceKitException.GraphQL) {
+            throw userFacingMessage(e.errors.map { it.message })?.let { ApiError.Other(it) } ?: ApiError.from(e)
+        } catch (e: AudienceKitException) {
+            throw ApiError.from(e)
+        }
+
     private suspend fun <T> call(block: suspend () -> T): T =
         try {
             block()
@@ -198,6 +290,16 @@ class HotMessApi(val client: AudienceKitClient) {
             explicitNulls = false
         }
 
+        /**
+         * The first error message when it's one written for people, or null for schema and validation
+         * errors ("Field 'x' doesn't exist on type 'Mutation'"), which get the generic message instead.
+         */
+        fun userFacingMessage(messages: List<String>): String? {
+            val message = messages.firstOrNull()?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+            val technical = listOf("Field '", "doesn't exist", "Variable ", "Argument '", "Expected type", "Parse error", "undefined method")
+            return message.takeIf { text -> technical.none { text.contains(it) } }
+        }
+
         /** The manifest's `client.mobile.android`; the API only lists `apple` so far. */
         fun parseManifest(text: String): VersionInfo? {
             val root = runCatching { json.parseToJsonElement(text).jsonObject }.getOrNull() ?: return null
@@ -212,7 +314,13 @@ class HotMessApi(val client: AudienceKitClient) {
  * A venue and its upcoming events, as the venue screen shows them. [chatOpen] says whether the user can
  * join its chat room: they're at the venue, or they're an admin. The way in is hidden otherwise.
  */
-data class VenueOverview(val venue: Venue, val events: List<Event> = emptyList(), val chatOpen: Boolean = false)
+data class VenueOverview(
+    val venue: Venue,
+    val events: List<Event> = emptyList(),
+    val chatOpen: Boolean = false,
+    /** Friends' active Pings that pick this venue or one of its events. */
+    val friendPings: List<Ping> = emptyList(),
+)
 
 /** Visible venues, those in [localeId] first, then by the audience's order and name. */
 fun List<Venue>.sortedForList(localeId: String?): List<Venue> =
@@ -260,6 +368,7 @@ private data class VenueNode(
     val recentMessages: List<ChatLine> = emptyList(),
     val events: List<Event> = emptyList(),
     val socialLinks: List<SocialLink> = emptyList(),
+    val friendPings: List<Ping> = emptyList(),
 ) {
     fun venue() = Venue(
         id = id,
@@ -297,3 +406,31 @@ private data class LocaleEventsResponse(val locale: Locale? = null) {
 
 @Serializable
 private data class EventResponse(val event: Event? = null)
+
+@Serializable
+private data class MyPingResponse(val myPing: Ping? = null)
+
+@Serializable
+private data class FriendPingsResponse(val friendPings: List<Ping> = emptyList())
+
+@Serializable
+private data class PingPayload(val ping: Ping)
+
+@Serializable
+private data class SendPingResponse(val sendPing: PingPayload)
+
+@Serializable
+private data class JoinPingResponse(val joinPing: PingPayload)
+
+@Serializable
+private data class LeavePingResponse(val leavePing: PingPayload)
+
+@Serializable
+private data class EndPingResponse(val endPing: Payload) {
+    @Serializable data class Payload(val ended: Boolean = false)
+}
+
+@Serializable
+private data class RegisterDeviceResponse(val registerDevice: Payload? = null) {
+    @Serializable data class Payload(val registered: Boolean = false)
+}

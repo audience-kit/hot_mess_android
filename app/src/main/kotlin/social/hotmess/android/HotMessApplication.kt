@@ -9,6 +9,9 @@ import com.audiencekit.android.AudienceKitClient
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.launch
 import org.maplibre.android.MapLibre
 import social.hotmess.android.location.LocationProvider
@@ -36,6 +39,15 @@ class AppGraph(context: Context, val configuration: AppConfiguration = AppConfig
         scope.launch {
             session.state.collect { if (it == AuthState.SignedOut) passes.clear() }
         }
+    }
+
+    private val _pingUpdates = MutableSharedFlow<String?>(extraBufferCapacity = 8)
+
+    /** A Ping push arrived or was tapped, with its Ping's ID; Now reloads to show it. */
+    val pingUpdates: SharedFlow<String?> = _pingUpdates.asSharedFlow()
+
+    fun pingUpdated(pingId: String?) {
+        _pingUpdates.tryEmit(pingId)
     }
 }
 
