@@ -235,6 +235,144 @@ class ChatProtocolTest {
     }
 
     @Test
+    fun readsTheSenderAndTimeOfALine() {
+        val line = ChatProtocol.parse(
+            """{"identifier":"x","message":{"type":"incoming","id":"m-1","message":"hi","user_id":"U-1",
+              "name":"Aurora B.","avatar_url":"https://cdn/a.jpg","sent_at":"2026-10-10T04:02:00Z","role":null,
+              "kind":"text","title":null,"body":"hi","photo_url":null,"event":null,"ends_at":null,"pinned":false}}""",
+        )
+        val message = assertIs<ChatProtocol.Frame.Message>(line).message
+        assertEquals("m-1", message.id)
+        assertEquals("hi", message.body)
+        assertEquals("Aurora B.", message.name)
+        assertEquals("https://cdn/a.jpg", message.avatarUrl)
+        assertEquals(Instant.parse("2026-10-10T04:02:00Z"), message.sentAt)
+        assertNull(message.role)
+        assertEquals(ChatKind.TEXT, message.kind)
+        assertFalse(message.pinned)
+        assertFalse(message.isPostedAsVenue)
+    }
+
+    @Test
+    fun anOlderLineStillReadsAsPlainText() {
+        val message = assertIs<ChatProtocol.Frame.Message>(
+            ChatProtocol.parse("""{"identifier":"x","message":{"message":"hi","user_id":"u-1","avatar_url":""}}"""),
+        ).message
+        assertNull(message.name)
+        assertNull(message.sentAt)
+        assertNull(message.avatarUrl, "an empty URL is no URL")
+        assertEquals(ChatKind.TEXT, message.kind)
+        assertTrue(message.id.isNotEmpty())
+    }
+
+    @Test
+    fun readsRolesInAnyCase() {
+        fun role(raw: String) = assertIs<ChatProtocol.Frame.Message>(
+            ChatProtocol.parse("""{"identifier":"x","message":{"message":"hi","user_id":"u-1","role":"$raw"}}"""),
+        ).message.role
+
+        assertEquals(ChatRole.VENUE, role("venue"))
+        assertEquals(ChatRole.HOST, role("host"))
+        assertEquals(ChatRole.STAFF, role("STAFF"))
+        assertNull(role("bouncer"))
+        assertEquals("Host", ChatRole.HOST.label)
+    }
+
+    @Test
+    fun aPostAsTheVenueCarriesTheVenuesNameAndPhoto() {
+        val message = assertIs<ChatProtocol.Frame.Message>(
+            ChatProtocol.parse(
+                """{"identifier":"x","message":{"message":"Doors at 9","user_id":"u-1","role":"venue",
+                  "name":"Neighbours","avatar_url":"https://cdn/venue.jpg"}}""",
+            ),
+        ).message
+        assertTrue(message.isPostedAsVenue)
+        assertEquals("Neighbours", message.name)
+        assertEquals("https://cdn/venue.jpg", message.avatarUrl)
+    }
+
+    @Test
+    fun readsAnAnnouncement() {
+        val message = assertIs<ChatProtocol.Frame.Message>(
+            ChatProtocol.parse(
+                """{"identifier":"x","message":{"type":"incoming","id":"m-2","message":"Announcement: Coat check closes at midnight\nGrab your things",
+                  "user_id":"u-1","role":"venue","kind":"announcement","title":"Coat check closes at midnight",
+                  "body":"Grab your things","photo_url":"https://cdn/p.jpg","pinned":true}}""",
+            ),
+        ).message
+        assertEquals(ChatKind.ANNOUNCEMENT, message.kind)
+        assertTrue(message.kind.isRich)
+        assertEquals("Coat check closes at midnight", message.title)
+        assertEquals("Grab your things", message.caption)
+        assertEquals("https://cdn/p.jpg", message.photoUrl)
+        assertTrue(message.pinned)
+        assertTrue(message.body.startsWith("Announcement: "), "the summary stays the line's text")
+    }
+
+    @Test
+    fun readsASharedEventAndAPhoto() {
+        val event = assertIs<ChatProtocol.Frame.Message>(
+            ChatProtocol.parse(
+                """{"identifier":"x","message":{"message":"Shared an event: Sunset Social","user_id":"u-1","role":"host",
+                  "kind":"event","body":"","event":{"id":"E-1","name":"Sunset Social","start_at":"2026-10-18T02:00:00Z"}}}""",
+            ),
+        ).message
+        assertEquals(ChatKind.EVENT, event.kind)
+        assertEquals(SharedEvent("E-1", "Sunset Social", Instant.parse("2026-10-18T02:00:00Z")), event.event)
+        assertNull(event.caption, "an empty caption is none")
+
+        val photo = assertIs<ChatProtocol.Frame.Message>(
+            ChatProtocol.parse(
+                """{"identifier":"x","message":{"message":"Shared a photo: Full house","user_id":"u-1","role":"venue",
+                  "kind":"photo","body":"Full house","photo_url":"https://cdn/crowd.jpg"}}""",
+            ),
+        ).message
+        assertEquals(ChatKind.PHOTO, photo.kind)
+        assertEquals("Full house", photo.caption)
+        assertEquals("https://cdn/crowd.jpg", photo.photoUrl)
+    }
+
+    @Test
+    fun aSpecialStopsShowingAtItsEnd() {
+        val special = assertIs<ChatProtocol.Frame.Message>(
+            ChatProtocol.parse(
+                """{"identifier":"x","message":{"message":"Special: Two for one","user_id":"u-1","role":"venue",
+                  "kind":"special","title":"Two for one","body":"Well drinks","ends_at":"2026-10-10T06:00:00Z"}}""",
+            ),
+        ).message
+        assertEquals(ChatKind.SPECIAL, special.kind)
+        assertEquals(Instant.parse("2026-10-10T06:00:00Z"), special.endsAt)
+        assertTrue(special.isShowing(Instant.parse("2026-10-10T05:59:00Z")))
+        assertFalse(special.isShowing(Instant.parse("2026-10-10T06:00:00Z")))
+    }
+
+    @Test
+    fun anUnknownKindReadsAsText() {
+        val message = assertIs<ChatProtocol.Frame.Message>(
+            ChatProtocol.parse("""{"identifier":"x","message":{"message":"Shared a poll","user_id":"u-1","kind":"poll"}}"""),
+        ).message
+        assertEquals(ChatKind.TEXT, message.kind)
+        assertEquals("Shared a poll", message.body)
+    }
+
+    @Test
+    fun readsTheRosterAndPresence() {
+        assertEquals(
+            ChatProtocol.Frame.Roster(setOf("u-1", "u-2")),
+            ChatProtocol.parse("""{"identifier":"x","message":{"type":"roster","online":["U-1","u-2"]}}"""),
+        )
+        assertEquals(
+            ChatProtocol.Frame.PresenceChanged("u-3", online = true),
+            ChatProtocol.parse("""{"identifier":"x","message":{"type":"presence","user_id":"U-3","presence":"online"}}"""),
+        )
+        assertEquals(
+            ChatProtocol.Frame.PresenceChanged("u-3", online = false),
+            ChatProtocol.parse("""{"identifier":"x","message":{"type":"presence","user_id":"u-3","presence":"offline"}}"""),
+        )
+        assertNull(ChatProtocol.parse("""{"identifier":"x","message":{"type":"presence","presence":"online"}}"""))
+    }
+
+    @Test
     fun sendsOnlyTheText() {
         val frame = HotMessApi.json.parseToJsonElement(ChatProtocol.message(venue, "hi")).jsonObject
         assertEquals("""{"message":"hi"}""", frame["data"]!!.jsonPrimitive.content)
@@ -244,6 +382,29 @@ class ChatProtocolTest {
     fun derivesTheSocketUrl() {
         assertEquals("wss://api.audiencekit.com/connection", ChatProtocol.realtimeUrl("https://api.audiencekit.com"))
         assertEquals("ws://10.0.2.2:3000/connection", ChatProtocol.realtimeUrl("http://10.0.2.2:3000/"))
+    }
+}
+
+class FriendDirectoryTest {
+    private val friendId = "b0f8b66a-e636-495d-9475-0f5317ea08e0"
+
+    @Test
+    fun swapsInAFriendsFullName() {
+        val friends = FriendDirectory()
+        friends.record(
+            Now(
+                friends = listOf(Friend(friendId.uppercase(), "Aurora Borealis")),
+                friendVenues = listOf(FriendVenue(Venue("v1"), 1, listOf(Friend("f2", "Sam Chatter")))),
+            ),
+        )
+
+        assertEquals("Aurora Borealis", friends.displayName(friendId, "Aurora B."))
+        assertEquals("Sam Chatter", friends.fullName("F2"))
+        assertEquals("Jo P.", friends.displayName("someone-else", "Jo P."), "strangers keep the room's short name")
+        assertNull(friends.fullName(null))
+
+        friends.clear()
+        assertEquals("Aurora B.", friends.displayName(friendId, "Aurora B."))
     }
 }
 
@@ -372,6 +533,31 @@ class HotMessApiTest {
         assertEquals("Seattle", locale.name)
         assertEquals("anyone out?", locale.recentMessages.single().message)
         assertTrue(bodies.single().contains("chatOpen"))
+    }
+
+    @Test
+    fun recentChatAndFriendsCarryPresenceAndRoles() = runTest {
+        val (api, bodies) = api(
+            "ReportLocation" to """{"data":{"reportLocation":{"now":{"title":"Nyne","venues":null,"events":[],
+                "venue":{"id":"v1","name":"Nyne","recentMessages":[{"id":"m1","message":"Special: Two for one",
+                  "name":"Nyne","userId":"u1","avatarUrl":"","sentAt":"2026-10-07T08:00:00Z","presence":"OFFLINE",
+                  "role":"VENUE","kind":"SPECIAL","endsAt":"2026-10-07T09:00:00Z","postedAsVenue":true},
+                  {"id":"m2","message":"hi","name":"Alex Friend","userId":"f1","presence":"ONLINE","kind":"TEXT"}]},
+                "friends":[{"id":"f1","name":"Alex Friend","facebookId":"4242","presence":"PUSH"}]}}}}""",
+        )
+        val now = api.now(Coordinates(47.66, -117.41))
+
+        assertTrue(bodies.single().contains("presence role kind endsAt postedAsVenue"))
+        val (special, hello) = now.venue!!.recentMessages
+        assertEquals(ChatRole.VENUE, special.role)
+        assertEquals(ChatKind.SPECIAL, special.kind)
+        assertTrue(special.postedAsVenue)
+        assertFalse(special.isShowing(Instant.parse("2026-10-07T09:30:00Z")))
+        assertEquals(com.audiencekit.Presence.ONLINE, hello.presence)
+        assertNull(hello.role)
+        assertEquals(ChatKind.TEXT, hello.kind)
+        assertEquals(com.audiencekit.Presence.PUSH, now.friends.single().presence)
+        assertEquals("Alex Friend", api.friends.fullName("f1"), "Now's friends are remembered for chat")
     }
 
     @Test

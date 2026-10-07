@@ -4,6 +4,7 @@ import com.audiencekit.Admission
 import com.audiencekit.Coordinate
 import com.audiencekit.CoverCharge
 import com.audiencekit.GlobalID
+import com.audiencekit.Presence
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -200,9 +201,17 @@ data class Event(
     val shareUrl: String get() = "https://hotmess.social/events/${id.lowercase()}"
 }
 
-/** A Facebook friend who also uses the app (from the user_friends permission). */
+/**
+ * A Facebook friend who also uses the app (from the user_friends permission). [presence] is whether they
+ * can be reached now, where the query asks for it (Now's friends); null where it doesn't.
+ */
 @Serializable
-data class Friend(val id: String, val name: String = "", val facebookId: String? = null) {
+data class Friend(
+    val id: String,
+    val name: String = "",
+    val facebookId: String? = null,
+    val presence: Presence? = null,
+) {
     val firstName: String get() = name.firstNameForDisplay()
 
     /** Opens a Messenger thread with them, when they have a Facebook ID. */
@@ -213,17 +222,36 @@ data class Friend(val id: String, val name: String = "", val facebookId: String?
 @Serializable
 data class FriendVenue(val venue: Venue, val friendCount: Int = 0, val friends: List<Friend> = emptyList())
 
-/** A line someone sent in a venue's or locale's chat room, as Now previews it. */
+/**
+ * A line someone sent in a venue's or locale's chat room, as Now previews it. [message] is the line in
+ * words, a rich message's summary included ("Shared an event: Sunset Social"), which is all a preview shows.
+ */
 @Serializable
 data class ChatLine(
     val id: String,
     val message: String = "",
-    /** The name the room showed for the sender. */
+    /** The name the room showed for the sender: in full for friends, "First L." for anyone else, or the venue's. */
     val name: String? = null,
     val userId: String = "",
     @Serializable(with = BlankAsNullSerializer::class) val avatarUrl: String? = null,
     @Serializable(with = InstantSerializer::class) val sentAt: Instant? = null,
-)
+    /** Whether the sender can be reached now; OFFLINE unless they're a friend (or the viewer is an admin). */
+    val presence: Presence? = null,
+    /** GraphQL's ChatRole (`VENUE`, `HOST`, `STAFF`), or null for everyone else; read [role]. */
+    @SerialName("role") val roleName: String? = null,
+    /** GraphQL's ChatKind; read [kind]. */
+    @SerialName("kind") val kindName: String? = null,
+    /** When a special stops showing. */
+    @Serializable(with = InstantSerializer::class) val endsAt: Instant? = null,
+    /** Posted as the venue: [name] and [avatarUrl] are the venue's. */
+    val postedAsVenue: Boolean = false,
+) {
+    val role: ChatRole? get() = ChatRole.parse(roleName)
+    val kind: ChatKind get() = ChatKind.parse(kindName)
+
+    /** Whether the room still shows it: a special stops at its end time. */
+    fun isShowing(at: Instant = Instant.now()): Boolean = !(kind == ChatKind.SPECIAL && endsAt != null && !endsAt.isAfter(at))
+}
 
 /**
  * A Ping: someone saying "I want to go out tonight", with the venues and events they picked, in their

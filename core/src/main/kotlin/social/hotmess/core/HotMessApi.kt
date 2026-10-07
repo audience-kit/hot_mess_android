@@ -30,6 +30,9 @@ import kotlinx.serialization.json.jsonObject
  * read before sign-in and isn't part of any audience. Failures surface as [ApiError].
  */
 class HotMessApi(val client: AudienceKitClient) {
+    /** Friends seen in Now's reports, so chat can show them by their full names. */
+    val friends = FriendDirectory()
+
     // region Home
 
     /**
@@ -42,7 +45,7 @@ class HotMessApi(val client: AudienceKitClient) {
             Documents.REPORT_LOCATION,
             ReportLocationResponse.serializer(),
             mapOf("position" to near.toGraphQLValue()),
-        ).reportLocation.now
+        ).reportLocation.now.also(friends::record)
     }
 
     /**
