@@ -405,6 +405,37 @@ class ChatProtocolTest {
     }
 
     @Test
+    fun readsHistoryPinsAndPushPresence() {
+        val history = ChatProtocol.parse(
+            """{"identifier":"x","message":{"type":"history","messages":[
+                {"id":"m-1","message":"first","user_id":"u-1","presence":"push"},
+                {"message":"no sender"},
+                {"id":"m-2","message":"second","user_id":"u-2","role":"staff"}],
+              "pinned":{"id":"m-0","message":"Announcement: Doors","user_id":"u-3","kind":"announcement","title":"Doors","pinned":true}}}""",
+        ) as ChatProtocol.Frame.History
+        assertEquals(listOf("first", "second"), history.messages.map { it.body })
+        assertEquals(true, history.messages.first().reachable)
+        assertEquals(ChatRole.STAFF, history.messages.last().role)
+        assertEquals("Doors", history.pinned?.title)
+
+        val pin = ChatProtocol.parse(
+            """{"identifier":"x","message":{"type":"pin","id":"m-0","pinned":true,
+              "announcement":{"id":"m-0","message":"Announcement: Doors","user_id":"u-3","kind":"announcement","title":"Doors","pinned":true}}}""",
+        ) as ChatProtocol.Frame.Pin
+        assertEquals("m-0", pin.id)
+        assertEquals("Doors", pin.announcement?.title)
+        assertEquals(
+            ChatProtocol.Frame.Pin("m-0", null),
+            ChatProtocol.parse("""{"identifier":"x","message":{"type":"pin","id":"m-0","pinned":false}}"""),
+        )
+
+        assertEquals(
+            ChatProtocol.Frame.PresenceChanged("u-3", online = false, reachable = true),
+            ChatProtocol.parse("""{"identifier":"x","message":{"type":"presence","user_id":"u-3","presence":"push"}}"""),
+        )
+    }
+
+    @Test
     fun sendsOnlyTheText() {
         val frame = HotMessApi.json.parseToJsonElement(ChatProtocol.message(venue, "hi")).jsonObject
         assertEquals("""{"message":"hi"}""", frame["data"]!!.jsonPrimitive.content)
