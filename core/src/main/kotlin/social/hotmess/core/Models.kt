@@ -40,7 +40,7 @@ data class Venue(
     val locale: LocaleSummary? = null,
     val hidden: Boolean = false,
     val order: Int = 0,
-    /** The last few lines of its chat room, oldest first; only Now asks, and only people there get them. */
+    /** The last few lines of its chat room, oldest first; Now and the venue screen ask, and only people there (or admins) get them. */
     val recentMessages: List<ChatLine> = emptyList(),
     /** Where else to find it, like its Instagram; only the venue screen asks. */
     val socialLinks: List<SocialLink> = emptyList(),

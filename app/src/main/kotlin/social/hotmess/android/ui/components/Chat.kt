@@ -33,6 +33,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Chat
+import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.rounded.ArrowUpward
 import androidx.compose.material.icons.rounded.LocationOff
 import androidx.compose.material3.Icon
@@ -49,10 +50,15 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.takeOrElse
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -75,8 +81,8 @@ import java.time.Instant
 
 /*
  * The shared chat kit (design system Chat.md): ChatThread of ChatBubbles, RoomBanner, ChatComposer,
- * ChatLineRow for flat previews, and PresenceDot. None of it knows about venues or sockets; callers
- * pass a room name and map their own message model to [ChatThreadMessage].
+ * ChatPeek for a read-only glimpse of a room, ChatLineRow for flat lines, and PresenceDot. None of
+ * it knows about venues or sockets; callers pass a room name and map their own message model to [ChatThreadMessage].
  */
 
 /** Whether someone can be reached right now. Offline draws nothing. */
@@ -84,13 +90,13 @@ enum class Presence { ONLINE, PUSH, OFFLINE }
 
 /**
  * The presence dot: a solid `presence-online` disc, or a `presence-push` ring with a hollow centre,
- * each on a 2dp `surface-raised` ring. [size] is the dot without its ring: 10 on 28 avatars, 12 on
- * 40 and up. Offline and null draw nothing.
+ * each on a 2dp [ring] (`surface-raised` when unspecified; the surface it sits on). [size] is the
+ * dot without its ring: 10 on 28 avatars, 12 on 40 and up. Offline and null draw nothing.
  */
 @Composable
-fun PresenceDot(state: Presence?, modifier: Modifier = Modifier, size: Dp = 10.dp) {
+fun PresenceDot(state: Presence?, modifier: Modifier = Modifier, size: Dp = 10.dp, ring: Color = Color.Unspecified) {
     if (state == null || state == Presence.OFFLINE) return
-    val ring = tokens.surfaceRaised
+    val ringColor = ring.takeOrElse { tokens.surfaceRaised }
     val online = tokens.presenceOnline
     val push = tokens.presencePush
     val edge = tokens.presencePushEdge
@@ -98,13 +104,13 @@ fun PresenceDot(state: Presence?, modifier: Modifier = Modifier, size: Dp = 10.d
     Canvas(modifier.size(size + 4.dp).semantics { contentDescription = label }) {
         val outer = this.size.minDimension / 2f
         val inner = outer - 2.dp.toPx()
-        drawCircle(ring, radius = outer)
+        drawCircle(ringColor, radius = outer)
         if (state == Presence.ONLINE) {
             drawCircle(online, radius = inner)
         } else {
             drawCircle(push, radius = inner)
             // The hollow centre, about half the dot (the web's radial gradient stops at 32–36%).
-            drawCircle(ring, radius = inner * 0.48f)
+            drawCircle(ringColor, radius = inner * 0.48f)
             val stroke = 1.dp.toPx()
             drawCircle(edge, radius = inner - stroke / 2f, style = Stroke(width = stroke))
         }
@@ -232,16 +238,23 @@ private fun TimeDivider(label: String) {
 }
 
 @Composable
-private fun BubbleRow(entry: ThreadEntry.BubbleEntry, bubbleMax: Dp, presence: Presence?) {
+private fun BubbleRow(
+    entry: ThreadEntry.BubbleEntry,
+    bubbleMax: Dp,
+    presence: Presence?,
+    groupGap: Dp = Space.s2,
+    maxLines: Int = Int.MAX_VALUE,
+    ring: Color = Color.Unspecified,
+) {
     val message = entry.message
     Row(
-        Modifier.fillMaxWidth().padding(bottom = if (entry.last) Space.s2 else 2.dp),
+        Modifier.fillMaxWidth().padding(bottom = if (entry.last) groupGap else 2.dp),
         horizontalArrangement = if (message.own) Arrangement.End else Arrangement.Start,
         verticalAlignment = Alignment.Bottom,
     ) {
         if (!message.own) {
             if (entry.last) {
-                Avatar(message.avatarUrl, message.senderName.orEmpty(), size = 28.dp, presence = presence)
+                Avatar(message.avatarUrl, message.senderName.orEmpty(), size = 28.dp, presence = presence, presenceRing = ring)
             } else {
                 Spacer(Modifier.width(28.dp))
             }
@@ -259,7 +272,7 @@ private fun BubbleRow(entry: ThreadEntry.BubbleEntry, bubbleMax: Dp, presence: P
                     modifier = Modifier.widthIn(max = bubbleMax).padding(start = Space.s3, bottom = 2.dp),
                 )
             }
-            ChatBubble(message.text, own = message.own, last = entry.last, maxWidth = bubbleMax)
+            ChatBubble(message.text, own = message.own, last = entry.last, maxWidth = bubbleMax, maxLines = maxLines)
         }
     }
 }
@@ -267,10 +280,17 @@ private fun BubbleRow(entry: ThreadEntry.BubbleEntry, bubbleMax: Dp, presence: P
 /**
  * One chat bubble: `accent` / `on-accent` for your own, `surface-raised` / `ink` with a small
  * shadow for everyone else's. The last bubble of a group drops its corner nearest the sender to
- * `radius-sm`.
+ * `radius-sm`. [maxLines] clamps the text with an ellipsis (ChatPeek shows two).
  */
 @Composable
-fun ChatBubble(text: String, own: Boolean, last: Boolean, modifier: Modifier = Modifier, maxWidth: Dp = 280.dp) {
+fun ChatBubble(
+    text: String,
+    own: Boolean,
+    last: Boolean,
+    modifier: Modifier = Modifier,
+    maxWidth: Dp = 280.dp,
+    maxLines: Int = Int.MAX_VALUE,
+) {
     val tail = CornerSize(4.dp)
     val shape = when {
         !last -> Radius.bubble
@@ -281,6 +301,8 @@ fun ChatBubble(text: String, own: Boolean, last: Boolean, modifier: Modifier = M
         text,
         style = HotMessType.body,
         color = if (own) tokens.onAccent else tokens.ink,
+        maxLines = maxLines,
+        overflow = TextOverflow.Ellipsis,
         modifier = modifier
             .widthIn(max = maxWidth)
             .then(if (own) Modifier else Modifier.shadow(1.dp, shape))
@@ -390,8 +412,112 @@ fun ChatComposer(
     }
 }
 
+/** ChatPeek's bubbles: grouped like the thread, but with no time dividers drawn. */
+private fun peekEntries(messages: List<ChatThreadMessage>): List<ThreadEntry.BubbleEntry> =
+    messages.mapIndexed { index, message ->
+        val first = !sameGroup(messages, index)
+        val last = index == messages.lastIndex || !sameGroup(messages, index + 1)
+        ThreadEntry.BubbleEntry(message, first, last)
+    }
+
 /**
- * A flat, bubble-less chat line (Now's "Small talk"): a 28 avatar, then the name and a
+ * A read-only glimpse of a chat room (design system ChatPeek): a `surface-sunken` panel with
+ * `radius-photo` corners holding [title], "N here now" when [online] is known, the last [limit]
+ * [messages] (oldest first) as the room's own ChatBubbles clamped to two lines, and a "Join the
+ * chat" call to action. The whole panel is one button that runs [onOpen]; screen readers hear
+ * "Open the chat at [room], N recent messages" instead of each bubble. It holds no connection;
+ * callers refresh [messages] when their screen appears.
+ */
+@Composable
+fun ChatPeek(
+    messages: List<ChatThreadMessage>,
+    title: String,
+    room: String,
+    onOpen: () -> Unit,
+    modifier: Modifier = Modifier,
+    online: Int? = null,
+    presence: Map<String, Presence> = emptyMap(),
+    limit: Int = 3,
+) {
+    val entries = remember(messages, limit) { peekEntries(messages.takeLast(limit)) }
+    val count = entries.size
+    val description = when (count) {
+        0 -> "Open the chat at $room, no recent messages"
+        1 -> "Open the chat at $room, 1 recent message"
+        else -> "Open the chat at $room, $count recent messages"
+    }
+    val panel = tokens.surfaceSunken
+    Column(
+        modifier
+            .fillMaxWidth()
+            .clip(Radius.photo)
+            .background(panel)
+            .clearAndSetSemantics {
+                contentDescription = description
+                role = Role.Button
+                onClick { onOpen(); true }
+            }
+            .clickable(role = Role.Button, onClick = onOpen)
+            .padding(horizontal = Space.s4, vertical = Space.s3),
+        verticalArrangement = Arrangement.spacedBy(Space.s2),
+    ) {
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(Space.s2),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                title,
+                style = HotMessType.subheading.copy(fontWeight = FontWeight.Bold),
+                color = tokens.ink,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
+            if (online != null && online > 0) {
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    PresenceDot(Presence.ONLINE, ring = panel)
+                    Text("$online here now", style = HotMessType.bodySmall, color = tokens.inkMuted, maxLines = 1)
+                }
+            }
+        }
+        if (entries.isEmpty()) {
+            Text("No one's said anything yet. Say hello.", style = HotMessType.body, color = tokens.inkMuted)
+        } else {
+            BoxWithConstraints(Modifier.fillMaxWidth()) {
+                val bubbleMax = min(280.dp, maxWidth * 0.75f)
+                Column {
+                    entries.forEachIndexed { index, entry ->
+                        BubbleRow(
+                            entry,
+                            bubbleMax,
+                            presence[entry.message.senderId],
+                            groupGap = if (index == entries.lastIndex) 0.dp else Space.s2,
+                            maxLines = 2,
+                            ring = panel,
+                        )
+                    }
+                }
+            }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(Space.s1), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                if (entries.isEmpty()) "Start the chat" else "Join the chat",
+                style = HotMessType.label,
+                color = tokens.accentInk,
+            )
+            Icon(
+                Icons.AutoMirrored.Rounded.KeyboardArrowRight,
+                contentDescription = null,
+                tint = tokens.accentInk,
+                modifier = Modifier.size(20.dp),
+            )
+        }
+    }
+}
+
+/**
+ * A flat, bubble-less chat line (the admin transcript's ChatLine): a 28 avatar, then the name and a
  * pre-formatted time on one caption line, then the text in two lines.
  */
 @Composable
@@ -500,6 +626,42 @@ private fun PresencePreview() {
             }
             ChatLineRow("Sam Lee", null, "Anyone else here for the drag show? Front left by the bar, come say hi.", "2m", presence = Presence.ONLINE)
             ChatLineRow(null, null, "Second set is starting", "14m")
+        }
+    }
+}
+
+@Preview(name = "Chat peek", widthDp = 360)
+@Composable
+private fun ChatPeekPreview() {
+    HotMessTheme(darkTheme = false) {
+        Column(Modifier.background(tokens.surface).padding(Space.s4), verticalArrangement = Arrangement.spacedBy(Space.s4)) {
+            ChatPeek(
+                previewMessages + ChatThreadMessage(
+                    "6",
+                    "alex",
+                    "Alex",
+                    null,
+                    "Second set is starting and the queue for the bar is already out the door, so grab a drink now if you want one",
+                    previewStart.plusSeconds(21 * 60),
+                    own = false,
+                ),
+                title = "Chat",
+                room = "The Wildrose",
+                onOpen = {},
+                online = 12,
+                presence = mapOf("alex" to Presence.ONLINE),
+            )
+            ChatPeek(emptyList(), title = "Small talk", room = "The Wildrose", onOpen = {})
+        }
+    }
+}
+
+@Preview(name = "Chat peek, dark", widthDp = 360)
+@Composable
+private fun ChatPeekDarkPreview() {
+    HotMessTheme(darkTheme = true) {
+        Column(Modifier.background(tokens.surface).padding(Space.s4)) {
+            ChatPeek(previewMessages, title = "Small talk", room = "The Wildrose", onOpen = {})
         }
     }
 }

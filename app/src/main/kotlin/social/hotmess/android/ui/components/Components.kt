@@ -187,10 +187,18 @@ fun RemoteImage(url: String?, modifier: Modifier = Modifier, contentScale: Conte
 
 /**
  * A round avatar. Without a photo it shows initials on a spectrum colour, chosen by name. With a
- * [presence], a [PresenceDot] sits at its bottom-right (10 on avatars under 40, 12 from 40 up).
+ * [presence], a [PresenceDot] sits at its bottom-right (10 on avatars under 40, 12 from 40 up), ringed
+ * in [presenceRing] (`surface-raised` when unspecified; pass the surface the avatar sits on).
  */
 @Composable
-fun Avatar(url: String?, name: String, size: Dp = 44.dp, modifier: Modifier = Modifier, presence: Presence? = null) {
+fun Avatar(
+    url: String?,
+    name: String,
+    size: Dp = 44.dp,
+    modifier: Modifier = Modifier,
+    presence: Presence? = null,
+    presenceRing: Color = Color.Unspecified,
+) {
     val band = (name.hashCode().absoluteValue) % tokens.spectrum.size
     Box(modifier.size(size)) {
         Box(
@@ -214,6 +222,7 @@ fun Avatar(url: String?, name: String, size: Dp = 44.dp, modifier: Modifier = Mo
             PresenceDot(
                 presence,
                 size = if (size >= 40.dp) 12.dp else 10.dp,
+                ring = presenceRing,
                 modifier = Modifier.align(Alignment.BottomEnd).offset(x = 1.dp, y = 1.dp),
             )
         }
