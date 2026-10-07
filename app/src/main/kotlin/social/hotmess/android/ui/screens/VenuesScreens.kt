@@ -57,8 +57,9 @@ import social.hotmess.core.AppRoute
 import social.hotmess.core.Formatting
 import social.hotmess.core.Venue
 import social.hotmess.core.VenueOverview
+import social.hotmess.core.isIn
 
-/** Every venue on a map, then as a list with the ones in your city first. */
+/** Every venue on a map, then as a list: the ones in your city, then everywhere else. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun VenuesScreen(navigator: Navigator) {
@@ -87,11 +88,26 @@ fun VenuesScreen(navigator: Navigator) {
                             }
                         }
                     }
-                    item {
-                        Section(locale?.name ?: "All venues") {
-                            if (venues.isEmpty()) EmptyRow("There are no venues here yet.")
-                            CardRows(venues, divider = 84.dp) { venue ->
-                                VenueRow(venue) { navigator.open(AppRoute.VenueDetail(venue.id)) }
+                    val (here, elsewhere) = venues.partition { it.isIn(localeId) }
+                    val name = locale?.name
+                    if (venues.isEmpty()) {
+                        item { Section("All venues") { EmptyRow("There are no venues here yet.") } }
+                    }
+                    if (here.isNotEmpty() && name != null) {
+                        item {
+                            Section(name) {
+                                CardRows(here, divider = 84.dp) { venue ->
+                                    VenueRow(venue) { navigator.open(AppRoute.VenueDetail(venue.id)) }
+                                }
+                            }
+                        }
+                    }
+                    if (elsewhere.isNotEmpty()) {
+                        item {
+                            Section(if (here.isEmpty() || name == null) "All venues" else "Elsewhere") {
+                                CardRows(elsewhere, divider = 84.dp) { venue ->
+                                    VenueRow(venue) { navigator.open(AppRoute.VenueDetail(venue.id)) }
+                                }
                             }
                         }
                     }

@@ -167,15 +167,14 @@ class HotMessApi(val client: AudienceKitClient) {
 data class VenueOverview(val venue: Venue, val events: List<Event> = emptyList(), val chatOpen: Boolean = false)
 
 /** Visible venues, those in [localeId] first, then by the audience's order and name. */
-fun List<Venue>.sortedForList(localeId: String?): List<Venue> {
-    val local = localeId?.let(RecordId::normalize)
-    return filterNot { it.hidden }
-        .sortedWith(
-            compareBy<Venue> { venue ->
-                val inLocale = local != null && venue.locale?.id?.let(RecordId::normalize) == local
-                if (inLocale) 0 else 1
-            }.thenBy { it.order }.thenBy { it.name.lowercase() },
-        )
+fun List<Venue>.sortedForList(localeId: String?): List<Venue> =
+    filterNot { it.hidden }
+        .sortedWith(compareBy<Venue> { if (it.isIn(localeId)) 0 else 1 }.thenBy { it.order }.thenBy { it.name.lowercase() })
+
+/** Whether the venue is in the locale [localeId]; false when there's no locale. */
+fun Venue.isIn(localeId: String?): Boolean {
+    val local = localeId?.let(RecordId::normalize) ?: return false
+    return locale?.id?.let(RecordId::normalize) == local
 }
 
 @Serializable
