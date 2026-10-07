@@ -63,6 +63,8 @@ import social.hotmess.android.ui.theme.Opacity
 import social.hotmess.android.ui.theme.Radius
 import social.hotmess.android.ui.theme.Space
 import social.hotmess.android.ui.theme.tokens
+import social.hotmess.core.Event
+import social.hotmess.core.Formatting
 import social.hotmess.core.LoadState
 import social.hotmess.core.Rsvp
 import social.hotmess.core.SocialLink
@@ -404,5 +406,22 @@ fun Message(icon: ImageVector, title: String, text: String, action: Pair<String,
                 PrimaryButton(action.first, action.second)
             }
         }
+    }
+}
+
+/** The event date tile: the month as a caption over the day. */
+@Composable
+fun DateBadge(event: Event) {
+    Column(
+        Modifier
+            .width(48.dp)
+            .clip(Radius.md)
+            .background(tokens.accentSoft)
+            .padding(vertical = Space.s1)
+            .semantics { contentDescription = Formatting.dateTime(event.startAt) },
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Text(Formatting.monthAbbreviation(event.startAt), style = HotMessType.caption, color = tokens.accentInk)
+        Text(Formatting.dayOfMonth(event.startAt), style = HotMessType.title, color = tokens.ink)
     }
 }

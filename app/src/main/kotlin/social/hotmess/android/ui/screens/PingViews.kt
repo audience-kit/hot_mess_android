@@ -69,7 +69,7 @@ import social.hotmess.android.ui.components.RemoteImage
 import social.hotmess.android.ui.components.RowButton
 import social.hotmess.android.ui.components.RowDivider
 import social.hotmess.android.ui.components.SecondaryButton
-import social.hotmess.android.ui.components.Section
+import social.hotmess.android.ui.components.DetailSection
 import social.hotmess.android.ui.theme.HotMessType
 import social.hotmess.android.ui.theme.Radius
 import social.hotmess.android.ui.theme.Space
@@ -223,7 +223,7 @@ private fun PingTarget.subtitle(): String {
 @Composable
 fun MyPingCard(ping: Ping, onEdit: () -> Unit, onEnd: () -> Unit, ending: Boolean) {
     var confirming by remember { mutableStateOf(false) }
-    Section("Your ping") {
+    DetailSection("Your ping") {
         Row(
             Modifier.fillMaxWidth().padding(Space.s4),
             horizontalArrangement = Arrangement.spacedBy(Space.s3),
@@ -359,7 +359,7 @@ fun PingStripSection(
 ) {
     val friends = pings.filterNot { it.isMine }
     if (friends.isEmpty() && onPingHere == null) return
-    Section(null) {
+    DetailSection(null) {
         if (friends.isNotEmpty()) {
             Row(
                 Modifier.fillMaxWidth().padding(Space.s4),
