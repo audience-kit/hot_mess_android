@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -184,25 +185,37 @@ fun RemoteImage(url: String?, modifier: Modifier = Modifier, contentScale: Conte
     }
 }
 
-/** A round avatar. Without a photo it shows initials on a spectrum colour, chosen by name. */
+/**
+ * A round avatar. Without a photo it shows initials on a spectrum colour, chosen by name. With a
+ * [presence], a [PresenceDot] sits at its bottom-right (10 on avatars under 40, 12 from 40 up).
+ */
 @Composable
-fun Avatar(url: String?, name: String, size: Dp = 44.dp, modifier: Modifier = Modifier) {
+fun Avatar(url: String?, name: String, size: Dp = 44.dp, modifier: Modifier = Modifier, presence: Presence? = null) {
     val band = (name.hashCode().absoluteValue) % tokens.spectrum.size
-    Box(
-        modifier
-            .size(size)
-            .clip(CircleShape)
-            .background(tokens.spectrum[band])
-            .semantics { contentDescription = name },
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(
-            name.initialsForDisplay(),
-            style = HotMessType.subheading.copy(fontSize = HotMessType.subheading.fontSize * (size.value / 44f)),
-            color = tokens.onSpectrum[band],
-        )
-        if (url != null) {
-            AsyncImage(model = url, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+    Box(modifier.size(size)) {
+        Box(
+            Modifier
+                .fillMaxSize()
+                .clip(CircleShape)
+                .background(tokens.spectrum[band])
+                .semantics { contentDescription = name },
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                name.initialsForDisplay(),
+                style = HotMessType.subheading.copy(fontSize = HotMessType.subheading.fontSize * (size.value / 44f)),
+                color = tokens.onSpectrum[band],
+            )
+            if (url != null) {
+                AsyncImage(model = url, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+            }
+        }
+        if (presence != null && presence != Presence.OFFLINE) {
+            PresenceDot(
+                presence,
+                size = if (size >= 40.dp) 12.dp else 10.dp,
+                modifier = Modifier.align(Alignment.BottomEnd).offset(x = 1.dp, y = 1.dp),
+            )
         }
     }
 }
