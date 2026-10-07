@@ -270,6 +270,20 @@ class HotMessApiTest {
     }
 
     @Test
+    fun nowAwayFromVenuesCountsFriendsPerVenue() = runTest {
+        val (api, _) = api(
+            "ReportLocation" to """{"data":{"reportLocation":{"now":{"title":"Spokane","venues":[],"events":[],
+                "friendVenues":[{"venue":{"id":"v1","name":"Nyne"},"friendCount":2,
+                  "friends":[{"id":"f1","name":"Alex Friend"},{"id":"f2","name":"Sam Chatter"}]}]}}}}""",
+        )
+        val entry = api.now(Coordinates(47.66, -117.43)).friendVenues.single()
+
+        assertEquals("Nyne", entry.venue.name)
+        assertEquals(2, entry.friendCount)
+        assertEquals(listOf("Alex", "Sam"), entry.friends.map { it.firstName })
+    }
+
+    @Test
     fun missingRecordsAreNotFound() = runTest {
         val (api, _) = api("query Event" to """{"data":{"event":null}}""")
         assertFailsWith<ApiError.NotFound> { api.event("e") }

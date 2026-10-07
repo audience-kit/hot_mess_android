@@ -8,6 +8,8 @@ import androidx.compose.material.icons.automirrored.rounded.Chat
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.rounded.OpenInNew
 import androidx.compose.material.icons.rounded.NearMe
+import androidx.compose.material.icons.rounded.LocationOff
+import androidx.compose.material.icons.rounded.MyLocation
 import androidx.compose.material.icons.rounded.Phone
 import androidx.compose.material.icons.rounded.Place
 import androidx.compose.material.icons.rounded.Share
@@ -24,6 +26,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
 import social.hotmess.android.ui.LocalAppGraph
 import social.hotmess.android.ui.Navigator
 import social.hotmess.android.ui.ScreenScaffold
@@ -166,6 +171,13 @@ fun VenueScreen(id: String, navigator: Navigator) {
                         }
                     }
                 }
+                loaded.coordinate?.takeIf { graph.configuration.isTestBuild }?.let { coordinate ->
+                    item {
+                        PretendHere(loaded.name, coordinate.latitude, coordinate.longitude) {
+                            loader.load(id, refresh = true) { graph.api.venueOverview(id) }
+                        }
+                    }
+                }
                 item {
                     Section("Events") {
                         if (overview.events.isEmpty()) EmptyRow("There's nothing coming up here yet.")
@@ -176,5 +188,29 @@ fun VenueScreen(id: String, navigator: Navigator) {
                 }
             }
         }
+    }
+}
+
+/** Test builds only: report the venue's own position, so the app and the API treat you as inside it. */
+@Composable
+private fun PretendHere(name: String, latitude: Double, longitude: Double, onReported: () -> Unit) {
+    val location = LocalAppGraph.current.location
+    val simulated by location.simulatedVenue.collectAsStateWithLifecycle()
+    val scope = rememberCoroutineScope()
+    // Reload once the visit is reported, so the chat row (chatOpen) catches up.
+    fun after(job: Job?) {
+        job ?: return
+        scope.launch {
+            job.join()
+            onReported()
+        }
+    }
+    Section("Testing") {
+        if (simulated == name) {
+            InfoRow("Stop pretending", icon = Icons.Rounded.LocationOff, onClick = { after(location.stopSimulating()) })
+        } else {
+            InfoRow("Pretend I'm here", icon = Icons.Rounded.MyLocation, onClick = { after(location.simulate(latitude, longitude, name)) })
+        }
+        EmptyRow("Test builds only. Reports this venue's location instead of yours until you stop.")
     }
 }

@@ -9,11 +9,13 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Chat
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
+import androidx.compose.material.icons.rounded.LocationOff
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Text
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
@@ -52,6 +54,7 @@ import social.hotmess.android.ui.theme.tokens
 import social.hotmess.core.AppRoute
 import social.hotmess.core.ChatLine
 import social.hotmess.core.Friend
+import social.hotmess.core.FriendVenue
 import social.hotmess.core.Now
 import social.hotmess.core.Venue
 
@@ -67,6 +70,7 @@ fun NowScreen(navigator: Navigator) {
     val loader = rememberLoader<Now>("now")
     val state by loader.state.collectAsStateWithLifecycle()
     val refreshing by loader.isRefreshing.collectAsStateWithLifecycle()
+    val simulated by graph.location.simulatedVenue.collectAsStateWithLifecycle()
 
     LaunchedEffect(coordinates) { loader.load(coordinates) { graph.api.now(coordinates) } }
 
@@ -74,6 +78,13 @@ fun NowScreen(navigator: Navigator) {
         LoadStateView(state, onRetry = { loader.load(coordinates, refresh = false) { graph.api.now(coordinates) } }) { now ->
             PullToRefreshBox(refreshing, onRefresh = { loader.load(coordinates, refresh = true) { graph.api.now(coordinates) } }) {
                 Feed {
+                    simulated?.let { name ->
+                        item {
+                            Section("Pretending to be at $name") {
+                                InfoRow("Stop pretending", icon = Icons.Rounded.LocationOff, onClick = { graph.location.stopSimulating() })
+                            }
+                        }
+                    }
                     now.imageUrl?.let { url ->
                         item { RemoteImage(url, Modifier.fillMaxWidth().height(160.dp).clip(Radius.lg)) }
                     }
@@ -81,6 +92,9 @@ fun NowScreen(navigator: Navigator) {
                     now.venue?.let { venue ->
                         item { SmallTalk(venue, navigator) }
                         item { FriendsHere(now.friends) }
+                    }
+                    if (now.venue == null && now.friendVenues.isNotEmpty()) {
+                        item { WhereFriendsAre(now.friendVenues, navigator) }
                     }
                     item {
                         Section("Events") {
@@ -177,6 +191,33 @@ private fun FriendsHere(friends: List<Friend>) {
                         Text(friend.firstName, style = HotMessType.caption, color = tokens.ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                 }
+            }
+        }
+    }
+}
+
+/** Away from venues: the venues where friends have been lately, with how many. */
+@Composable
+private fun WhereFriendsAre(entries: List<FriendVenue>, navigator: Navigator) {
+    Section("Where your friends are") {
+        CardRows(entries, divider = 72.dp) { entry ->
+            RowButton({ navigator.open(AppRoute.VenueDetail(entry.venue.id)) }) {
+                RemoteImage(entry.venue.photoUrl, Modifier.size(44.dp).clip(Radius.md))
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(entry.venue.name, style = HotMessType.subheading, color = tokens.ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(
+                        entry.friends.joinToString(", ") { it.firstName },
+                        style = HotMessType.bodySmall,
+                        color = tokens.inkMuted,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                Text(
+                    if (entry.friendCount == 1) "1 friend" else "${entry.friendCount} friends",
+                    style = HotMessType.caption,
+                    color = tokens.accentInk,
+                )
             }
         }
     }

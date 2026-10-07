@@ -14,6 +14,7 @@ import androidx.core.content.ContextCompat
 import com.audiencekit.Coordinates
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -22,6 +23,7 @@ import social.hotmess.android.AppConfiguration
 import social.hotmess.android.session.SessionStore
 import social.hotmess.core.AppLocale
 import social.hotmess.core.HotMessApi
+import social.hotmess.core.PositionTracker
 
 enum class LocationAccess { NOT_REQUESTED, ALLOWED, DENIED }
 
@@ -43,6 +45,13 @@ class LocationProvider(
 
     private val _access = MutableStateFlow(currentAccess(asked = false))
     val access: StateFlow<LocationAccess> = _access.asStateFlow()
+
+    private val _simulatedVenue = MutableStateFlow<String?>(null)
+
+    /** Test builds only: the venue the app is pretending to be at, whose position is reported instead of the device's. */
+    val simulatedVenue: StateFlow<String?> = _simulatedVenue.asStateFlow()
+
+    private val tracker = PositionTracker(configuration.isTestBuild)
 
     private val manager = context.getSystemService(LocationManager::class.java)
     private val beacons = configuration.beaconUuid?.let { BeaconScanner(context, it, ::onBeacon) }
@@ -84,6 +93,36 @@ class LocationProvider(
         }
     }
 
+    /**
+     * Reports this position as the device's until [stopSimulating], so a test build can be "at" a
+     * venue from anywhere. The API puts the user at whichever venue's envelope contains the point.
+     * The returned job finishes once the position is reported.
+     */
+    fun simulate(latitude: Double, longitude: Double, venueName: String): Job? {
+        if (!tracker.simulate(latitude, longitude, venueName)) return null
+        publish()
+        return scope.launch {
+            refreshLocale()
+            reportPosition()
+        }
+    }
+
+    /** Goes back to the device's real position. The returned job finishes once it's reported. */
+    fun stopSimulating(): Job? {
+        if (!tracker.stopSimulating()) return null
+        publish()
+        if (tracker.current == null) return null
+        return scope.launch {
+            refreshLocale()
+            reportPosition()
+        }
+    }
+
+    private fun publish() {
+        _coordinates.value = tracker.current
+        _simulatedVenue.value = tracker.simulatedVenue
+    }
+
     @SuppressLint("MissingPermission")
     private fun beginMonitoring() {
         if (isMonitoring) return
@@ -111,13 +150,8 @@ class LocationProvider(
     }
 
     private fun update(location: Location) {
-        val previous = _coordinates.value
-        _coordinates.value = Coordinates(
-            latitude = location.latitude,
-            longitude = location.longitude,
-            beaconMajor = previous?.beaconMajor,
-            beaconMinor = previous?.beaconMinor,
-        )
+        if (!tracker.deviceFix(location.latitude, location.longitude)) return
+        publish()
         scope.launch {
             refreshLocale()
             reportPosition()
@@ -125,10 +159,8 @@ class LocationProvider(
     }
 
     private fun onBeacon(major: Int, minor: Int) {
-        // Only attach beacon identifiers to a position we actually have.
-        val position = _coordinates.value ?: return
-        if (position.beaconMajor == major && position.beaconMinor == minor) return
-        _coordinates.value = position.copy(beaconMajor = major, beaconMinor = minor)
+        if (!tracker.beacon(major, minor)) return
+        publish()
         scope.launch { reportPosition() }
     }
 
