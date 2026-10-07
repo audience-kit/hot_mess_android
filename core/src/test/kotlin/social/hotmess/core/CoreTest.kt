@@ -58,6 +58,25 @@ class ModelDecodingTest {
     }
 
     @Test
+    fun decodesATroupesMembersAndAPerformersGroups() {
+        val troupe = json.decodeFromString(PersonDetail.serializer(), Fixtures.TROUPE)
+
+        assertEquals(listOf("Anita Cocktail", "Ella Vator"), troupe.members.map { it.name })
+        assertEquals("https://img/anita", troupe.members.first().pictureUrl)
+        assertNull(troupe.members.last().pictureUrl, "an empty URL is no URL")
+        assertEquals("p-2", troupe.groups.single().id)
+        assertEquals("House of Glitter", troupe.groups.single().name)
+    }
+
+    @Test
+    fun aPersonWithoutMembersOrGroupsHasNone() {
+        val person = json.decodeFromString(PersonDetail.serializer(), Fixtures.PERSON)
+
+        assertTrue(person.members.isEmpty())
+        assertTrue(person.groups.isEmpty())
+    }
+
+    @Test
     fun musicLinksNameTheirService() {
         val spotify = SocialLink(id = "1", handle = "artist/4Z8W", provider = "spotify")
         val appleMusic = SocialLink(id = "2", handle = "us/artist/dugan/123", provider = "apple_music")
@@ -300,6 +319,29 @@ class HotMessApiTest {
     }
 
     @Test
+    fun venueOverviewHasItsSocialLinks() = runTest {
+        val (api, bodies) = api(
+            "query Venue(" to """{"data":{"venue":{"id":"v-1","name":"The Wildrose","chatOpen":true,"events":[${Fixtures.EVENT}],
+                "socialLinks":[{"id":"s-1","handle":"thewildrosebar","provider":"instagram","url":"https://instagram.com/thewildrosebar"},
+                  {"id":"s-2","handle":"wildrose","provider":"facebook","url":""}]}}}""",
+        )
+        val overview = api.venueOverview("v-1")
+
+        assertTrue(bodies.single().contains("socialLinks"))
+        assertTrue(overview.chatOpen)
+        assertEquals(1, overview.events.size)
+        val links = overview.venue.socialLinks
+        assertEquals(listOf(SocialLink.Network.INSTAGRAM, SocialLink.Network.FACEBOOK), links.map { it.network })
+        assertEquals("https://instagram.com/thewildrosebar", links.first().url)
+        assertNull(links.last().url, "an empty URL is no URL")
+    }
+
+    @Test
+    fun aVenueWithoutLinksHasNone() {
+        assertTrue(HotMessApi.json.decodeFromString(Venue.serializer(), Fixtures.VENUE).socialLinks.isEmpty())
+    }
+
+    @Test
     fun missingRecordsAreNotFound() = runTest {
         val (api, _) = api("query Event" to """{"data":{"event":null}}""")
         assertFailsWith<ApiError.NotFound> { api.event("e") }
@@ -332,4 +374,8 @@ private object Fixtures {
     const val PERSON = """{"id":"p-1","name":"DJ Glitter","facebookId":null,"isLiked":false,"pictureUrl":"https://img/p",
         "coverUrl":null,"events":[$EVENT],"socialLinks":[{"id":"s-1","handle":"glitter","provider":"Instagram","url":"https://instagram.com/glitter"}],
         "tracks":[{"id":"t-1","title":"Late Night","provider":"soundcloud","providerUrl":null,"waveformUrl":null,"artworkUrl":null}]}"""
+
+    const val TROUPE = """{"id":"p-3","name":"The Glitterettes","pictureUrl":null,"coverUrl":null,"events":[],"socialLinks":[],"tracks":[],
+        "members":[{"id":"p-4","name":"Anita Cocktail","pictureUrl":"https://img/anita"},{"id":"p-5","name":"Ella Vator","pictureUrl":""}],
+        "groups":[{"id":"p-2","name":"House of Glitter","pictureUrl":null}]}"""
 }
