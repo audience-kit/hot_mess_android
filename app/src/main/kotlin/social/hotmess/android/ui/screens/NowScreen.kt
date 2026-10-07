@@ -65,6 +65,7 @@ import social.hotmess.android.ui.components.SkipTheLineCard
 import social.hotmess.android.ui.components.VenueCard
 import social.hotmess.android.ui.components.cardSection
 import social.hotmess.android.ui.components.friendNames
+import social.hotmess.android.ui.components.presenceOf
 import social.hotmess.android.ui.components.rememberHeroCollapsed
 import social.hotmess.android.ui.openUrl
 import social.hotmess.android.ui.rememberLoader
@@ -338,7 +339,7 @@ private fun FriendsHere(friends: List<Friend>) {
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
-                        Avatar(configuration.avatarUrl(friend.id), friend.name, size = Sizes.avatarLg)
+                        Avatar(configuration.avatarUrl(friend.id), friend.name, size = Sizes.avatarLg, presence = presenceOf(friend.presence))
                         // Friends see each other's full names; two lines fit most, and longer ones
                         // truncate at the end.
                         Text(

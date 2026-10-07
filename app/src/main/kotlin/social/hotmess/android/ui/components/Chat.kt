@@ -88,6 +88,13 @@ import java.time.Instant
 /** Whether someone can be reached right now. Offline draws nothing. */
 enum class Presence { ONLINE, PUSH, OFFLINE }
 
+/** The API's presence (GraphQL's `presence`) as the dot draws it; offline and unknown draw nothing. */
+fun presenceOf(value: com.audiencekit.Presence?): Presence? = when (value) {
+    com.audiencekit.Presence.ONLINE -> Presence.ONLINE
+    com.audiencekit.Presence.PUSH -> Presence.PUSH
+    com.audiencekit.Presence.OFFLINE, null -> null
+}
+
 /**
  * The presence dot: a solid `presence-online` disc, or a `presence-push` ring with a hollow centre,
  * each on a 2dp [ring] (`surface-raised` when unspecified; the surface it sits on). [size] is the
