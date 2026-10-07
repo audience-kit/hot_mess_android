@@ -129,7 +129,9 @@ data class ChatRoom(val kind: Kind, val id: String) {
  *
  * Presence: on joining, `{"type":"roster","online":[<user id>, …]}` lists everyone in the room now, the
  * joiner included; then `{"type":"presence","user_id":…,"presence":"online"|"offline"}` as people come
- * and go.
+ * and go. Newer servers add to the roster `people` (everyone in the room, with `name`, `avatar_url` and
+ * whether they're the joiner's `friend`) and `friends` (all the joiner's friends, by full name), and to
+ * an online presence frame the newcomer's `name` and `avatar_url`. Every one of those is optional.
  */
 object ChatProtocol {
     // Lenient, so an id sent as a number still reads as a string rather than dropping the line.
@@ -153,11 +155,23 @@ object ChatProtocol {
         /** Whether they're outside the room's place. Only admins get in from outside. */
         data class Range(val outOfRange: Boolean) : Frame
 
-        /** Everyone in the room now, by lowercase user id, sent on joining. */
-        data class Roster(val online: Set<String>) : Frame
+        /**
+         * Everyone in the room now, by lowercase user id, sent on joining; with [people] (who they are)
+         * and [friends] (all the joiner's friends, full names) from newer servers.
+         */
+        data class Roster(
+            val online: Set<String>,
+            val people: List<RoomPerson> = emptyList(),
+            val friends: List<Friend> = emptyList(),
+        ) : Frame
 
-        /** Someone (by lowercase user id) came into the room or left it. */
-        data class PresenceChanged(val userId: String, val online: Boolean) : Frame
+        /** Someone (by lowercase user id) came into the room or left it; a newcomer with their [name] and [avatarUrl] when sent. */
+        data class PresenceChanged(
+            val userId: String,
+            val online: Boolean,
+            val name: String? = null,
+            val avatarUrl: String? = null,
+        ) : Frame
     }
 
     /** Action Cable names a subscription by a JSON *string*, not an object. */
@@ -204,14 +218,39 @@ object ChatProtocol {
 
     private fun roster(message: JsonObject): Frame? {
         val online = message["online"] as? JsonArray ?: return null
-        return Frame.Roster(online.mapNotNull { (it as? JsonPrimitive)?.contentOrNull?.lowercase() }.toSet())
+        // Anything malformed in `people` or `friends` is skipped, never the whole roster.
+        val people = (message["people"] as? JsonArray).orEmpty().mapNotNull { entry ->
+            val person = entry as? JsonObject ?: return@mapNotNull null
+            val id = person.string("user_id") ?: return@mapNotNull null
+            RoomPerson(
+                userId = id.lowercase(),
+                name = person.string("name"),
+                avatarUrl = person.string("avatar_url"),
+                friend = (person["friend"] as? JsonPrimitive)?.booleanOrNull ?: false,
+            )
+        }
+        val friends = (message["friends"] as? JsonArray).orEmpty().mapNotNull { entry ->
+            val friend = entry as? JsonObject ?: return@mapNotNull null
+            val id = friend.string("user_id") ?: return@mapNotNull null
+            Friend(id.lowercase(), friend.string("name").orEmpty())
+        }
+        return Frame.Roster(online.mapNotNull { (it as? JsonPrimitive)?.contentOrNull?.lowercase() }.toSet(), people, friends)
     }
 
     private fun presence(message: JsonObject): Frame? {
-        val userId = (message["user_id"] as? JsonPrimitive)?.contentOrNull ?: return null
-        val presence = (message["presence"] as? JsonPrimitive)?.contentOrNull ?: return null
-        return Frame.PresenceChanged(userId.lowercase(), presence.equals("online", ignoreCase = true))
+        val userId = message.string("user_id") ?: return null
+        val presence = message.string("presence") ?: return null
+        val online = presence.equals("online", ignoreCase = true)
+        return Frame.PresenceChanged(
+            userId.lowercase(),
+            online,
+            name = if (online) message.string("name") else null,
+            avatarUrl = if (online) message.string("avatar_url") else null,
+        )
     }
+
+    /** A string field, or null when it's missing, not a string-like value, or blank. */
+    private fun JsonObject.string(key: String): String? = (this[key] as? JsonPrimitive)?.contentOrNull.blankToNull()
 
     /** The websocket endpoint, derived from the HTTP base URL: `wss://<host>/connection`. */
     fun realtimeUrl(baseUrl: String): String? {
@@ -288,10 +327,19 @@ class VenueChatConnection(
         data object Left : Event
         data class Range(val outOfRange: Boolean) : Event
 
-        /** Everyone in the room now, by lowercase user id. */
-        data class Roster(val online: Set<String>) : Event
+        /** Everyone in the room now, by lowercase user id, and who they are and the viewer's friends when sent. */
+        data class Roster(
+            val online: Set<String>,
+            val people: List<RoomPerson> = emptyList(),
+            val friends: List<Friend> = emptyList(),
+        ) : Event
 
-        data class PresenceChanged(val userId: String, val online: Boolean) : Event
+        data class PresenceChanged(
+            val userId: String,
+            val online: Boolean,
+            val name: String? = null,
+            val avatarUrl: String? = null,
+        ) : Event
     }
 
     @Volatile private var socket: WebSocket? = null
@@ -315,8 +363,8 @@ class VenueChatConnection(
                     ChatProtocol.Frame.Left -> trySend(Event.Left)
                     is ChatProtocol.Frame.Message -> trySend(Event.Received(frame.message))
                     is ChatProtocol.Frame.Range -> trySend(Event.Range(frame.outOfRange))
-                    is ChatProtocol.Frame.Roster -> trySend(Event.Roster(frame.online))
-                    is ChatProtocol.Frame.PresenceChanged -> trySend(Event.PresenceChanged(frame.userId, frame.online))
+                    is ChatProtocol.Frame.Roster -> trySend(Event.Roster(frame.online, frame.people, frame.friends))
+                    is ChatProtocol.Frame.PresenceChanged -> trySend(Event.PresenceChanged(frame.userId, frame.online, frame.name, frame.avatarUrl))
                     null -> Unit
                 }
             }

@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
@@ -36,6 +37,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Chat
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.rounded.ArrowUpward
+import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.LocationOff
 import androidx.compose.material.icons.rounded.PushPin
 import androidx.compose.material3.Icon
@@ -93,7 +95,9 @@ import social.hotmess.android.ui.theme.tokens
 import social.hotmess.core.ChatKind
 import social.hotmess.core.ChatRole
 import social.hotmess.core.Formatting
+import social.hotmess.core.RoomPerson
 import social.hotmess.core.SharedEvent
+import social.hotmess.core.firstNameForDisplay
 import java.time.Duration
 import java.time.Instant
 
@@ -670,6 +674,85 @@ fun RoomBanner(kind: RoomBannerKind, roomName: String, modifier: Modifier = Modi
 }
 
 /**
+ * Who else is in the room, under its banner (and above any pinned announcement): "N here now", then a
+ * row of faces with first names, in the order given (callers put friends first; see RoomPeople.hereNow).
+ * A friend's face has an `accent` ring and a heart badge. Every face carries the online dot. Draws
+ * nothing when [people] is empty, so pass everyone but the viewer.
+ */
+@Composable
+fun HereNowStrip(people: List<RoomPerson>, modifier: Modifier = Modifier) {
+    if (people.isEmpty()) return
+    val hairline = tokens.border
+    Column(
+        modifier
+            .fillMaxWidth()
+            .background(tokens.surfaceRaised)
+            .drawBehind { drawLine(hairline, Offset(0f, size.height), Offset(size.width, size.height), strokeWidth = 1.dp.toPx()) }
+            .padding(vertical = Space.s2),
+        verticalArrangement = Arrangement.spacedBy(Space.s1),
+    ) {
+        Text(
+            "${people.size} here now",
+            style = HotMessType.caption,
+            color = tokens.inkMuted,
+            modifier = Modifier.padding(horizontal = Space.s4),
+        )
+        LazyRow(
+            contentPadding = PaddingValues(horizontal = Space.s4),
+            horizontalArrangement = Arrangement.spacedBy(Space.s2),
+        ) {
+            items(people, key = { it.userId }) { person -> HereNowFace(person) }
+        }
+    }
+}
+
+/** One face in [HereNowStrip]: read out as "Aurora Bell, friend, here now". */
+@Composable
+private fun HereNowFace(person: RoomPerson) {
+    val name = person.name ?: "Someone"
+    val description = if (person.friend) "$name, friend, here now" else "$name, here now"
+    val ringColor = tokens.accent
+    Column(
+        Modifier.width(56.dp).clearAndSetSemantics { contentDescription = description },
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        Box(Modifier.size(48.dp)) {
+            if (person.friend) Box(Modifier.matchParentSize().border(2.dp, ringColor, CircleShape))
+            Avatar(
+                person.avatarUrl,
+                name,
+                size = 40.dp,
+                modifier = Modifier.align(Alignment.Center),
+                presence = Presence.ONLINE,
+                presenceRing = tokens.surfaceRaised,
+            )
+            if (person.friend) {
+                Box(
+                    Modifier
+                        .align(Alignment.TopEnd)
+                        .size(18.dp)
+                        .background(tokens.surfaceRaised, CircleShape)
+                        .padding(2.dp)
+                        .background(ringColor, CircleShape),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(Icons.Rounded.Favorite, contentDescription = null, tint = tokens.onAccent, modifier = Modifier.size(9.dp))
+                }
+            }
+        }
+        Text(
+            name.firstNameForDisplay(),
+            style = HotMessType.caption,
+            color = if (person.friend) tokens.ink else tokens.inkMuted,
+            fontWeight = if (person.friend) FontWeight.SemiBold else null,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
+/**
  * The message field and send button pinned under a room. Look only: [onSend] runs from the button
  * and the keyboard's send key; [sendEnabled] is the caller's (empty or offline disables it).
  */
@@ -1034,5 +1117,33 @@ private fun ChatPeekDarkPreview() {
         Column(Modifier.background(tokens.surface).padding(Space.s4)) {
             ChatPeek(previewMessages, title = "Small talk", room = "The Wildrose", onOpen = {})
         }
+    }
+}
+
+private val previewHereNow = listOf(
+    RoomPerson("aurora", "Aurora Bell", friend = true),
+    RoomPerson("wren", "Wren Fox", friend = true),
+    RoomPerson("amy", "Amy R."),
+    RoomPerson("jo", "Jo P."),
+    RoomPerson("kiko", "Kiko M."),
+    RoomPerson("zed", "Zed Q."),
+)
+
+@Preview(name = "Here now", widthDp = 360, heightDp = 420)
+@Composable
+private fun HereNowPreview() {
+    HotMessTheme(darkTheme = false) {
+        Column(Modifier.fillMaxSize()) {
+            HereNowStrip(previewHereNow)
+            ChatThread(previewRichMessages, "Neighbours", Modifier.weight(1f).fillMaxWidth())
+        }
+    }
+}
+
+@Preview(name = "Here now, dark", widthDp = 360)
+@Composable
+private fun HereNowDarkPreview() {
+    HotMessTheme(darkTheme = true) {
+        HereNowStrip(previewHereNow.take(3))
     }
 }

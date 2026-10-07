@@ -35,6 +35,7 @@ import social.hotmess.android.ui.ScreenScaffold
 import social.hotmess.android.ui.components.ChatComposer
 import social.hotmess.android.ui.components.ChatThread
 import social.hotmess.android.ui.components.ChatThreadMessage
+import social.hotmess.android.ui.components.HereNowStrip
 import social.hotmess.android.ui.components.Message
 import social.hotmess.android.ui.components.Presence
 import social.hotmess.android.ui.components.RichContent
@@ -45,6 +46,7 @@ import social.hotmess.core.ChatProtocol
 import social.hotmess.core.ChatRoom
 import social.hotmess.core.FriendDirectory
 import social.hotmess.core.RecordId
+import social.hotmess.core.RoomPeople
 import social.hotmess.core.VenueChatConnection
 import social.hotmess.core.VenueMessage
 
@@ -67,9 +69,12 @@ class VenueChatModel(private val graph: AppGraph, private val room: ChatRoom) : 
     private val _outOfRange = MutableStateFlow(false)
     val outOfRange: StateFlow<Boolean> = _outOfRange.asStateFlow()
 
-    /** Who is in the room now, by lowercase user id: the roster on joining, then presence frames. */
-    private val _online = MutableStateFlow<Set<String>>(emptySet())
-    val online: StateFlow<Set<String>> = _online.asStateFlow()
+    /**
+     * Who is in the room now, by lowercase user id, with their names and photos where the room sends
+     * them: the roster on joining, then presence frames. Empty while disconnected.
+     */
+    private val _people = MutableStateFlow(RoomPeople())
+    val people: StateFlow<RoomPeople> = _people.asStateFlow()
 
     private var connection: VenueChatConnection? = null
     private var job: Job? = null
@@ -108,13 +113,21 @@ class VenueChatModel(private val graph: AppGraph, private val room: ChatRoom) : 
                         }
                         is VenueChatConnection.Event.Received -> receive(event.message)
                         is VenueChatConnection.Event.Range -> _outOfRange.value = event.outOfRange
-                        is VenueChatConnection.Event.Roster -> _online.value = event.online
-                        is VenueChatConnection.Event.PresenceChanged -> _online.value =
-                            if (event.online) _online.value + event.userId else _online.value - event.userId
+                        is VenueChatConnection.Event.Roster -> {
+                            // All the viewer's friends, by full name, so the room and its lines show them that way.
+                            graph.api.friends.record(event.friends)
+                            _people.value = _people.value.roster(event.online, event.people)
+                        }
+                        is VenueChatConnection.Event.PresenceChanged -> _people.value =
+                            if (event.online) {
+                                _people.value.joined(event.userId, event.name, event.avatarUrl)
+                            } else {
+                                _people.value.left(event.userId)
+                            }
                         is VenueChatConnection.Event.Disconnected -> {
                             _status.value = Status.OFFLINE
                             // The next roster says who's here; until then nobody is known to be.
-                            _online.value = emptySet()
+                            _people.value = RoomPeople()
                         }
                         VenueChatConnection.Event.Rejected, VenueChatConnection.Event.Left -> away = true
                     }
@@ -143,6 +156,8 @@ class VenueChatModel(private val graph: AppGraph, private val room: ChatRoom) : 
         } else {
             message.copy(avatarUrl = graph.configuration.avatarUrl(message.userId))
         }
+        // An older server's roster has no names: a line someone sends names them in "Here now".
+        if (!line.isPostedAsVenue) _people.value = _people.value.described(line.userId, line.name, line.avatarUrl)
         val current = _messages.value
         val index = current.indexOfFirst { it.id == line.id }
         _messages.value = if (index >= 0) current.toMutableList().also { it[index] = line } else current + line
@@ -154,7 +169,7 @@ class VenueChatModel(private val graph: AppGraph, private val room: ChatRoom) : 
         heartbeat?.cancel()
         heartbeat = null
         connection = null
-        _online.value = emptySet()
+        _people.value = RoomPeople()
     }
 
     fun send(body: String): Boolean {
@@ -178,7 +193,7 @@ fun VenueChatScreen(room: ChatRoom, venueName: String, navigator: Navigator) {
     val messages by model.messages.collectAsStateWithLifecycle()
     val status by model.status.collectAsStateWithLifecycle()
     val outOfRange by model.outOfRange.collectAsStateWithLifecycle()
-    val online by model.online.collectAsStateWithLifecycle()
+    val people by model.people.collectAsStateWithLifecycle()
     val user by graph.session.user.collectAsStateWithLifecycle()
     var draft by rememberSaveable { mutableStateOf("") }
 
@@ -217,8 +232,14 @@ fun VenueChatScreen(room: ChatRoom, venueName: String, navigator: Navigator) {
             if (banner != null) RoomBanner(banner, venueName, isLocale = isLocale)
             val userId = user?.id
             val friends = graph.api.friends
-            val thread = remember(messages, userId) { messages.map { it.threadMessage(userId, friends) } }
-            val presence = remember(online) { online.associateWith { Presence.ONLINE } }
+            // Who's here, friends first; a roster can add friends' full names, so it redraws the thread too.
+            val hereNow = remember(people, userId) {
+                RoomPeople.hereNow(people.byId.values, userId) { friends.fullName(it) }
+                    .map { it.copy(avatarUrl = it.avatarUrl ?: graph.configuration.avatarUrl(it.userId)) }
+            }
+            HereNowStrip(hereNow)
+            val thread = remember(messages, userId, people) { messages.map { it.threadMessage(userId, friends) } }
+            val presence = remember(people) { people.ids.associateWith { Presence.ONLINE } }
             ChatThread(
                 thread,
                 venueName,

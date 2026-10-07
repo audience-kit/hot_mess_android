@@ -373,6 +373,38 @@ class ChatProtocolTest {
     }
 
     @Test
+    fun readsWhoIsInTheRoomAndTheViewersFriends() {
+        val frame = ChatProtocol.parse(
+            """{"identifier":"x","message":{"type":"roster","online":["U-1","u-2"],
+              "people":[{"user_id":"U-1","name":"Aurora Bell","avatar_url":"https://a/1.jpg","friend":true},
+                        {"user_id":"u-2","name":"Jo P.","avatar_url":null},
+                        {"name":"No Id"}, "junk"],
+              "friends":[{"user_id":"U-1","name":"Aurora Bell"},{"user_id":"f-9","name":"Sam Chatter"},{"name":"x"}]}}""",
+        )
+        assertEquals(
+            ChatProtocol.Frame.Roster(
+                setOf("u-1", "u-2"),
+                people = listOf(
+                    RoomPerson("u-1", "Aurora Bell", "https://a/1.jpg", friend = true),
+                    RoomPerson("u-2", "Jo P."),
+                ),
+                friends = listOf(Friend("u-1", "Aurora Bell"), Friend("f-9", "Sam Chatter")),
+            ),
+            frame,
+        )
+        // A newcomer comes with their name and photo; leaving carries neither.
+        assertEquals(
+            ChatProtocol.Frame.PresenceChanged("u-3", online = true, name = "Kiko M.", avatarUrl = "https://a/3.jpg"),
+            ChatProtocol.parse("""{"identifier":"x","message":{"type":"presence","user_id":"u-3","presence":"online","name":"Kiko M.","avatar_url":"https://a/3.jpg"}}"""),
+        )
+        // Malformed extras don't cost the roster.
+        assertEquals(
+            ChatProtocol.Frame.Roster(setOf("u-1")),
+            ChatProtocol.parse("""{"identifier":"x","message":{"type":"roster","online":["u-1"],"people":"nope","friends":7}}"""),
+        )
+    }
+
+    @Test
     fun sendsOnlyTheText() {
         val frame = HotMessApi.json.parseToJsonElement(ChatProtocol.message(venue, "hi")).jsonObject
         assertEquals("""{"message":"hi"}""", frame["data"]!!.jsonPrimitive.content)
@@ -405,6 +437,43 @@ class FriendDirectoryTest {
 
         friends.clear()
         assertEquals("Aurora B.", friends.displayName(friendId, "Aurora B."))
+    }
+}
+
+class RoomPeopleTest {
+    @Test
+    fun followsTheRosterAndPresence() {
+        var room = RoomPeople().roster(setOf("U-1", "u-2"), listOf(RoomPerson("u-1", "Aurora Bell", friend = true)))
+        assertEquals(setOf("u-1", "u-2"), room.ids)
+        assertEquals("Aurora Bell", room["U-1"]?.name)
+
+        room = room.joined("u-3", "Kiko M.", "https://a/3.jpg").left("u-2")
+        assertEquals(setOf("u-1", "u-3"), room.ids)
+
+        // An older server's bare roster keeps what was known; a chat line fills gaps only.
+        room = room.roster(setOf("u-1", "u-3"))
+        assertEquals(RoomPerson("u-1", "Aurora Bell", friend = true), room["u-1"])
+        room = room.described("u-3", "Someone Else", null).described("u-4", "Not Here", null)
+        assertEquals("Kiko M.", room["u-3"]?.name)
+        assertNull(room["u-4"])
+    }
+
+    @Test
+    fun hereNowPutsFriendsFirstAndLeavesOutTheViewer() {
+        val viewer = "b0f8b66a-e636-495d-9475-0f5317ea08e0"
+        val people = listOf(
+            RoomPerson(viewer, "Me Myself"),
+            RoomPerson("u-zed", "zed Q."),
+            RoomPerson("u-amy", "Amy R."),
+            RoomPerson("u-nameless"),
+            RoomPerson("u-wren", "Wren Fox", friend = true),
+            RoomPerson("u-bo", "Bo T."),
+        )
+        val directory = mapOf("u-bo" to "Bo Turner")
+        val here = RoomPeople.hereNow(people, viewer.uppercase()) { directory[it] }
+        assertEquals(listOf("Bo Turner", "Wren Fox", "Amy R.", "zed Q.", null), here.map { it.name })
+        assertEquals(listOf(true, true, false, false, false), here.map { it.friend })
+        assertTrue(RoomPeople.hereNow(listOf(RoomPerson(viewer)), viewer).isEmpty())
     }
 }
 
