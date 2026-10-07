@@ -14,6 +14,7 @@ import androidx.core.content.ContextCompat
 import com.audiencekit.Coordinates
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -95,22 +96,23 @@ class LocationProvider(
     /**
      * Reports this position as the device's until [stopSimulating], so a test build can be "at" a
      * venue from anywhere. The API puts the user at whichever venue's envelope contains the point.
+     * The returned job finishes once the position is reported.
      */
-    fun simulate(latitude: Double, longitude: Double, venueName: String) {
-        if (!tracker.simulate(latitude, longitude, venueName)) return
+    fun simulate(latitude: Double, longitude: Double, venueName: String): Job? {
+        if (!tracker.simulate(latitude, longitude, venueName)) return null
         publish()
-        scope.launch {
+        return scope.launch {
             refreshLocale()
             reportPosition()
         }
     }
 
-    /** Goes back to the device's real position. */
-    fun stopSimulating() {
-        if (!tracker.stopSimulating()) return
+    /** Goes back to the device's real position. The returned job finishes once it's reported. */
+    fun stopSimulating(): Job? {
+        if (!tracker.stopSimulating()) return null
         publish()
-        if (tracker.current == null) return
-        scope.launch {
+        if (tracker.current == null) return null
+        return scope.launch {
             refreshLocale()
             reportPosition()
         }

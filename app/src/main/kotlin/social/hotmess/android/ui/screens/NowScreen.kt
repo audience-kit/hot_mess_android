@@ -81,7 +81,7 @@ fun NowScreen(navigator: Navigator) {
                     simulated?.let { name ->
                         item {
                             Section("Pretending to be at $name") {
-                                InfoRow("Stop pretending", icon = Icons.Rounded.LocationOff, onClick = graph.location::stopSimulating)
+                                InfoRow("Stop pretending", icon = Icons.Rounded.LocationOff, onClick = { graph.location.stopSimulating() })
                             }
                         }
                     }
