@@ -35,6 +35,7 @@ import social.hotmess.android.ui.Navigator
 import social.hotmess.android.ui.ScreenScaffold
 import social.hotmess.android.ui.components.Avatar
 import social.hotmess.android.ui.components.CardRows
+import social.hotmess.android.ui.components.ChatLineRow
 import social.hotmess.android.ui.components.EmptyRow
 import social.hotmess.android.ui.components.EventRow
 import social.hotmess.android.ui.components.Feed
@@ -134,7 +135,7 @@ private fun SmallTalk(venue: Venue, navigator: Navigator) {
     val configuration = LocalAppGraph.current.configuration
     Section("Small talk") {
         if (venue.recentMessages.isEmpty()) EmptyRow("No one's said anything yet.")
-        CardRows(venue.recentMessages, divider = 56.dp) { line ->
+        CardRows(venue.recentMessages, divider = 54.dp) { line ->
             ChatPreviewRow(line, line.avatarUrl ?: line.userId.takeIf { it.isNotEmpty() }?.let(configuration::avatarUrl))
         }
         RowDivider()
@@ -149,20 +150,19 @@ private fun SmallTalk(venue: Venue, navigator: Navigator) {
 
 @Composable
 private fun ChatPreviewRow(line: ChatLine, avatarUrl: String?) {
-    RowButton(null) {
-        Avatar(avatarUrl, line.name.orEmpty(), size = 28.dp)
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            line.name?.takeIf { it.isNotBlank() }?.let { Text(it, style = HotMessType.caption, color = tokens.inkMuted) }
-            Text(line.message, style = HotMessType.body, color = tokens.ink, maxLines = 2, overflow = TextOverflow.Ellipsis)
-        }
-        line.sentAt?.let {
-            Text(
-                DateUtils.getRelativeTimeSpanString(it.toEpochMilli(), System.currentTimeMillis(), DateUtils.MINUTE_IN_MILLIS).toString(),
-                style = HotMessType.caption,
-                color = tokens.inkMuted,
-            )
-        }
-    }
+    ChatLineRow(
+        author = line.name,
+        avatarUrl = avatarUrl,
+        text = line.message,
+        time = line.sentAt?.let {
+            DateUtils.getRelativeTimeSpanString(
+                it.toEpochMilli(),
+                System.currentTimeMillis(),
+                DateUtils.MINUTE_IN_MILLIS,
+                DateUtils.FORMAT_ABBREV_RELATIVE,
+            ).toString()
+        },
+    )
 }
 
 /** Friends who are at the venue too; tapping one opens Messenger. */
