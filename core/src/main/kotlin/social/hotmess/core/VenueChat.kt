@@ -8,6 +8,7 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import okhttp3.OkHttpClient
@@ -35,6 +36,8 @@ data class VenueMessage(
  *
  * The room is only open to people at the venue: the server rejects the subscription otherwise, and
  * sends `{"type":"left"}` when someone's presence lapses. It adds the sender to each line itself.
+ * Admins can join from anywhere: everyone is told `{"type":"range","out_of_range":…}` on joining,
+ * and admins again whenever that changes.
  */
 object ChatProtocol {
     private const val CHANNEL = "RealtimeChannel"
@@ -51,6 +54,9 @@ object ChatProtocol {
 
         /** They were in the room, but they've left the venue. */
         data object Left : Frame
+
+        /** Whether they're outside the venue. Only admins get in from outside. */
+        data class Range(val outOfRange: Boolean) : Frame
     }
 
     /** Action Cable names a subscription by a JSON *string*, not an object. */
@@ -76,7 +82,10 @@ object ChatProtocol {
                 // A frame with no type and a message object is a chat line. Action Cable reuses
                 // `message` for its ping counter, so anything else there is ignored.
                 val message = frame["message"] as? JsonObject ?: return null
-                if ((message["type"] as? JsonPrimitive)?.contentOrNull == "left") return Frame.Left
+                when ((message["type"] as? JsonPrimitive)?.contentOrNull) {
+                    "left" -> return Frame.Left
+                    "range" -> return Frame.Range((message["out_of_range"] as? JsonPrimitive)?.booleanOrNull ?: false)
+                }
                 val payload = runCatching { json.decodeFromJsonElement(IncomingMessage.serializer(), message) }.getOrNull()
                     ?: return null
                 Frame.Message(VenueMessage(body = payload.message, userId = payload.userId, avatarUrl = payload.avatarUrl))
@@ -120,6 +129,7 @@ class VenueChatConnection(
         data class Disconnected(val reason: String?) : Event
         data object Rejected : Event
         data object Left : Event
+        data class Range(val outOfRange: Boolean) : Event
     }
 
     @Volatile private var socket: WebSocket? = null
@@ -142,6 +152,7 @@ class VenueChatConnection(
                     ChatProtocol.Frame.Rejected -> trySend(Event.Rejected)
                     ChatProtocol.Frame.Left -> trySend(Event.Left)
                     is ChatProtocol.Frame.Message -> trySend(Event.Received(frame.message))
+                    is ChatProtocol.Frame.Range -> trySend(Event.Range(frame.outOfRange))
                     null -> Unit
                 }
             }
