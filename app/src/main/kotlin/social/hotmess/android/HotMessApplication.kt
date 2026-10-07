@@ -9,6 +9,9 @@ import com.audiencekit.android.AudienceKitClient
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.launch
 import org.maplibre.android.MapLibre
 import social.hotmess.android.location.LocationProvider
@@ -26,6 +29,15 @@ class AppGraph(context: Context, val configuration: AppConfiguration = AppConfig
     val push = PushRegistrar(context, api, scope)
     val session = SessionStore(context, api, audienceKit, configuration, push, scope)
     val location = LocationProvider(context, api, configuration, scope)
+
+    private val _pingUpdates = MutableSharedFlow<String?>(extraBufferCapacity = 8)
+
+    /** A Ping push arrived or was tapped, with its Ping's ID; Now reloads to show it. */
+    val pingUpdates: SharedFlow<String?> = _pingUpdates.asSharedFlow()
+
+    fun pingUpdated(pingId: String?) {
+        _pingUpdates.tryEmit(pingId)
+    }
 }
 
 class HotMessApplication : Application() {

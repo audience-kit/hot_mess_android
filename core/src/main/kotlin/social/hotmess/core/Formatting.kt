@@ -17,6 +17,30 @@ object Formatting {
         return "$day $hour$meridiem"
     }
 
+    /** "5am", or "9:46pm" when it isn't on the hour. */
+    fun clock(instant: Instant, zone: ZoneId = ZoneId.systemDefault()): String {
+        val time = instant.atZone(zone)
+        val hour = time.format(DateTimeFormatter.ofPattern(if (time.minute == 0) "h" else "h:mm", Locale.US))
+        val meridiem = time.format(DateTimeFormatter.ofPattern("a", Locale.US)).lowercase(Locale.ROOT)
+        return "$hour$meridiem"
+    }
+
+    /**
+     * Names as a sentence: "Sam", "Sam and Alex", "Sam, Alex and Kai", joined with [conjunction]. Past
+     * [limit] names the rest are counted: "Sam, Alex and 2 others".
+     */
+    fun list(items: List<String>, conjunction: String, limit: Int = Int.MAX_VALUE): String {
+        if (items.size > limit && limit > 0) {
+            val rest = items.size - limit
+            return items.take(limit).joinToString(", ") + " $conjunction " + if (rest == 1) "1 other" else "$rest others"
+        }
+        return when (items.size) {
+            0 -> ""
+            1 -> items[0]
+            else -> items.dropLast(1).joinToString(", ") + " $conjunction " + items.last()
+        }
+    }
+
     /** "Fri 9pm · The Wildrose", or "Fri 9pm · To be announced" when the venue isn't set yet. */
     fun eventSubtitle(event: Event, zone: ZoneId = ZoneId.systemDefault(), locale: Locale = Locale.getDefault()): String =
         listOf(shortTime(event.startAt, zone, locale), event.venue?.name?.takeIf { it.isNotBlank() } ?: TO_BE_ANNOUNCED)

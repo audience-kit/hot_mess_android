@@ -17,6 +17,7 @@ import social.hotmess.android.ui.LocalAppGraph
 import social.hotmess.android.ui.theme.HotMessTheme
 import social.hotmess.core.AppRoute
 import social.hotmess.core.DeepLink
+import social.hotmess.core.PingPush
 
 class MainActivity : ComponentActivity() {
     private val graph by lazy { appGraph }
@@ -56,6 +57,17 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun handle(intent: Intent?) {
+        // A tapped Ping push: Firebase's own notification or ours both carry its data as extras.
+        val extras = intent?.extras
+        if (intent != null && extras != null) {
+            val push = PingPush.parse(listOf(PingPush.KIND, PingPush.PING_ID).associateWith { extras.getString(it) })
+            if (push != null) {
+                intent.removeExtra(PingPush.KIND)
+                graph.pingUpdated(push.pingId)
+                links.trySend(AppRoute.NowPing(push.pingId))
+                return
+            }
+        }
         val url = intent?.takeIf { it.action == Intent.ACTION_VIEW }?.dataString ?: return
         if (graph.session.handleRedirect(url)) return
         DeepLink.route(url)?.let { links.trySend(it) }

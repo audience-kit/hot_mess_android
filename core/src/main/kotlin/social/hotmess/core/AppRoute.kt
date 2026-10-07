@@ -11,12 +11,16 @@ sealed interface AppRoute {
     data class EventDetail(val id: String) : AppRoute
     data class PersonDetail(val id: String) : AppRoute
 
+    /** The Now tab, opened from a Ping push; [pingId] names the Ping it was about. */
+    data class NowPing(val pingId: String? = null) : AppRoute
+
     /** Which tab the route opens in. */
     val tab: AppTab
         get() = when (this) {
             is VenueDetail -> AppTab.VENUES
             is EventDetail -> AppTab.EVENTS
             is PersonDetail -> AppTab.PEOPLE
+            is NowPing -> AppTab.NOW
         }
 }
 

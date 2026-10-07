@@ -182,6 +182,8 @@ data class Event(
     val venue: Venue? = null,
     /** Who's hosting or playing; only the event screen asks for it. */
     val people: List<Person> = emptyList(),
+    /** Friends' active Pings that pick this event; only the event screen asks for it. */
+    val friendPings: List<Ping> = emptyList(),
 ) {
     val facebookUrl: String? get() = facebookId?.let { "https://facebook.com/events/$it" }
 
@@ -213,6 +215,119 @@ data class ChatLine(
     @Serializable(with = InstantSerializer::class) val sentAt: Instant? = null,
 )
 
+/**
+ * A Ping: someone saying "I want to go out tonight", with the venues and events they picked, in their
+ * order (none means anywhere). Only their Facebook friends on the app see it, and it clears at 5am.
+ */
+@Serializable
+data class Ping(
+    val id: String,
+    /** Who sent it. */
+    val user: Friend,
+    /** The sender's own words, which may hold emoji. */
+    val note: String? = null,
+    @Serializable(with = InstantSerializer::class) val createdAt: Instant? = null,
+    /** The next 5am in the Ping's locale. */
+    @Serializable(with = InstantSerializer::class) val expiresAt: Instant? = null,
+    /** Sent by the signed-in user. */
+    val isMine: Boolean = false,
+    /** The signed-in user is in, on any pick or for the Ping as a whole. */
+    val joined: Boolean = false,
+    val targets: List<PingTarget> = emptyList(),
+    /** Everyone in, oldest first. */
+    val joins: List<PingJoin> = emptyList(),
+    /** Who can see it: the sender's friends, or friends of anyone in its circle. */
+    val reach: PingReach = PingReach.FRIENDS,
+    /** The circle member the viewer knows, when the sender isn't their friend; null otherwise. */
+    val via: Friend? = null,
+) {
+    /** The sender and everyone in, once each: whose faces the card shows. */
+    val circle: List<Friend> get() = (listOf(user) + joins.map { it.user }).distinctBy { RecordId.normalize(it.id) ?: it.id }
+
+    /** "via Sam", when the viewer sees it through a circle member. */
+    val viaText: String? get() = via?.let { "via ${it.firstName}" }
+
+    /** No picks: "anywhere tonight?". */
+    val isAnywhere: Boolean get() = targets.isEmpty()
+
+    /** The note without surrounding space, or null when there's nothing to show. */
+    val noteText: String? get() = note?.trim()?.takeIf { it.isNotEmpty() }
+
+    /** "Drag Bingo or The Wildrose", or "Anywhere tonight?" with no picks. */
+    val placesSummary: String
+        get() = if (isAnywhere) ANYWHERE else Formatting.list(targets.map { it.name }.filter { it.isNotBlank() }, "or")
+
+    /** Everyone in, once each, oldest first. */
+    val people: List<Friend> get() = joins.map { it.user }.distinctBy { RecordId.normalize(it.id) ?: it.id }
+
+    /** "Sam and Alex are in", or null when no one is yet. */
+    val whoIsIn: String?
+        get() {
+            val names = people.map { it.firstName }
+            if (names.isEmpty()) return null
+            return Formatting.list(names, "and", limit = 3) + if (names.size == 1) " is in" else " are in"
+        }
+
+    /** The pick of the venue [venueId], directly or through one of its events. */
+    fun pickForVenue(venueId: String): PingTarget? =
+        targets.firstOrNull { RecordId.same(it.venue?.id, venueId) }
+            ?: targets.firstOrNull { RecordId.same(it.event?.venue?.id, venueId) }
+
+    /** The pick of the event [eventId]. */
+    fun pickForEvent(eventId: String): PingTarget? = targets.firstOrNull { RecordId.same(it.event?.id, eventId) }
+
+    /**
+     * Whether the signed-in user ([userId]) is in for [target], or for the Ping as a whole when it's null.
+     * Without [userId] only [joined] is known, which is enough for a Ping with one pick or none.
+     */
+    fun isIn(target: PingTarget?, userId: String?): Boolean {
+        if (!joined) return false
+        val mine = joins.filter { RecordId.same(it.user.id, userId) }
+        if (target == null) {
+            return if (userId == null) isAnywhere else mine.any { it.targetId == null } || (isAnywhere && mine.isNotEmpty())
+        }
+        if (userId == null) return targets.size == 1
+        return mine.any { RecordId.same(it.targetId, target.id) } || target.joins.any { RecordId.same(it.user.id, userId) }
+    }
+
+    companion object {
+        const val ANYWHERE = "Anywhere tonight?"
+    }
+}
+
+/** Who can see a Ping. GraphQL sends the enum's names; anything unknown reads as [FRIENDS]. */
+@Serializable(with = PingReachSerializer::class)
+enum class PingReach {
+    /** Only the sender's friends. */
+    FRIENDS,
+
+    /** Friends of anyone in the circle, so it spreads as people join. */
+    FRIENDS_OF_CIRCLE;
+
+    /** How the send sheet and your own card name it. */
+    val title: String
+        get() = when (this) {
+            FRIENDS -> "My friends"
+            FRIENDS_OF_CIRCLE -> "Friends of the circle"
+        }
+}
+
+/** One place a Ping picks: a venue or an event, never both. */
+@Serializable
+data class PingTarget(
+    val id: String,
+    val venue: Venue? = null,
+    val event: Event? = null,
+    /** Who is in for this pick. */
+    val joins: List<PingJoin> = emptyList(),
+) {
+    val name: String get() = venue?.name ?: event?.name ?: ""
+}
+
+/** Someone in on a Ping: for one pick ([targetId]), or for the Ping as a whole when that's null. */
+@Serializable
+data class PingJoin(val id: String, val user: Friend, val targetId: String? = null)
+
 /** What's happening where the device is, from `reportLocation`. */
 @Serializable
 data class Now(
@@ -229,8 +344,20 @@ data class Now(
     val friendVenues: List<FriendVenue> = emptyList(),
     /** The locale the user is in, or nearest, with its chat room. */
     val locale: NowLocale? = null,
+    /** The signed-in user's active Ping, if they sent one tonight. */
+    val myPing: Ping? = null,
+    /** Friends' active Pings, newest first. */
+    val friendPings: List<Ping> = emptyList(),
 ) {
     val isNearVenues: Boolean get() = venues != null
+
+    /** With [ping] in place of the copy Now had of it: as your own Ping, or among your friends'. */
+    fun replacingPing(ping: Ping): Now =
+        if (ping.isMine) {
+            copy(myPing = ping)
+        } else {
+            copy(friendPings = friendPings.map { if (it.id == ping.id) ping else it })
+        }
 }
 
 /**
@@ -266,6 +393,14 @@ object RecordId {
         runCatching { return UUID.fromString(id).toString() }
         val global = GlobalID.parse(id) ?: return null
         return runCatching { UUID.fromString(global.modelId).toString() }.getOrNull()
+    }
+
+    /** Whether two IDs name the same record, whatever form each comes in. False when either is null. */
+    fun same(a: String?, b: String?): Boolean {
+        if (a == null || b == null) return false
+        if (a.equals(b, ignoreCase = true)) return true
+        val normalized = normalize(a) ?: return false
+        return normalized == normalize(b)
     }
 }
 
@@ -304,6 +439,18 @@ object RsvpSerializer : KSerializer<Rsvp> {
     }
 
     override fun serialize(encoder: Encoder, value: Rsvp) = encoder.encodeString(value.name)
+}
+
+/** Reads a Ping's reach in any case, treating anything unknown as friends only. */
+object PingReachSerializer : KSerializer<PingReach> {
+    override val descriptor = PrimitiveSerialDescriptor("social.hotmess.PingReach", PrimitiveKind.STRING)
+
+    override fun deserialize(decoder: Decoder): PingReach {
+        val raw = decoder.decodeString().uppercase(Locale.ROOT)
+        return PingReach.entries.firstOrNull { it.name == raw } ?: PingReach.FRIENDS
+    }
+
+    override fun serialize(encoder: Encoder, value: PingReach) = encoder.encodeString(value.name)
 }
 
 /** A URL field where the API sometimes sends an empty string for "none". */

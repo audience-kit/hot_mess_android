@@ -20,6 +20,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -57,6 +58,8 @@ import social.hotmess.core.Event
 import social.hotmess.core.EventListing
 import social.hotmess.core.Formatting
 import social.hotmess.core.NightCalendar
+import social.hotmess.core.PingChoices
+import social.hotmess.core.PingPick
 import social.hotmess.core.Rsvp
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
@@ -155,6 +158,13 @@ fun EventScreen(id: String, navigator: Navigator) {
 
     LaunchedEffect(id) { loader.load(id) { graph.api.event(id) } }
 
+    val userId = rememberUserId()
+    var pingHere by rememberSaveable { mutableStateOf(false) }
+    val actions = rememberPingActions { ping ->
+        loader.update { event -> event.copy(friendPings = event.friendPings.map { if (it.id == ping.id) ping else it }) }
+        graph.pingUpdated(ping.id)
+    }
+
     fun choose(rsvp: Rsvp) {
         val previous = state.valueOrNull?.rsvp ?: return
         if (rsvp == previous) return
@@ -196,6 +206,16 @@ fun EventScreen(id: String, navigator: Navigator) {
                         )
                     }
                 }
+                item {
+                    // Pings are tonight only, so only tonight's events can be picked.
+                    PingStripSection(
+                        pings = loaded.friendPings,
+                        pickOf = { it.pickForEvent(loaded.id) },
+                        userId = userId,
+                        actions = actions,
+                        onPingHere = if (PingChoices.isTonight(loaded)) ({ pingHere = true }) else null,
+                    )
+                }
                 item { Section("Your RSVP") { RsvpPicker(loaded.rsvp, ::choose) } }
                 item {
                     Section("When") {
@@ -231,6 +251,14 @@ fun EventScreen(id: String, navigator: Navigator) {
                 }
             }
         }
+    }
+
+    if (pingHere && event != null) {
+        PingSheet(
+            preselect = PingPick.EventPick(event),
+            onDismiss = { pingHere = false },
+            onSent = { graph.pingUpdated(it.id) },
+        )
     }
 
     rsvpError?.let { message ->
