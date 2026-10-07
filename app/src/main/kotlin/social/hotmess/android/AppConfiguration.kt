@@ -32,7 +32,7 @@ data class AppConfiguration(
         get() = when (facebookAppId) {
             "1168782378316790" -> "production"
             "713525445368431" -> "AudienceKit platform"
-            "915436455177328" -> "staging"
+            "1660272792277019" -> "staging"
             "842337999153841" -> "development"
             else -> facebookAppId
         }

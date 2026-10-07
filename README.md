@@ -33,7 +33,7 @@ AudienceKit Kotlin SDK, styled with the AudienceKit design system's `hot_mess` p
 | Build type | API | Facebook app | Application id |
 | --- | --- | --- | --- |
 | `debug` | `http://10.0.2.2:3000` (the API on your machine, from the emulator) | 842337999153841 | `social.hotmess.android.development` |
-| `staging` | `https://api.audiencekit.com` | 915436455177328 | `social.hotmess.android.staging` |
+| `staging` | `https://api-staging.audiencekit.com` | 1660272792277019 | `social.hotmess.android.staging` |
 | `release` | `https://api.audiencekit.com` | 1168782378316790 | `social.hotmess.android` |
 
 Hot Mess is a consumer app: sign-in is classic Facebook Login on the build's Facebook app, asking
