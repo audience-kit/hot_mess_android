@@ -109,7 +109,7 @@ fun VenuesScreen(navigator: Navigator) {
                                     venues = venues,
                                     onVenue = { navigator.open(AppRoute.VenueDetail(it)) },
                                     onMapTap = { mapExpanded = true },
-                                    modifier = Modifier.fillMaxSize(),
+                                    modifier = Modifier.fillMaxSize().clip(Radius.photo),
                                 )
                                 MapButton(
                                     icon = Icons.Rounded.OpenInFull,
