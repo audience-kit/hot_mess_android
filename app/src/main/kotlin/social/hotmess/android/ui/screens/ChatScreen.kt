@@ -35,11 +35,18 @@ import social.hotmess.android.ui.ScreenScaffold
 import social.hotmess.android.ui.components.ChatComposer
 import social.hotmess.android.ui.components.ChatThread
 import social.hotmess.android.ui.components.ChatThreadMessage
+import social.hotmess.android.ui.components.HereNowStrip
 import social.hotmess.android.ui.components.Message
+import social.hotmess.android.ui.components.Presence
+import social.hotmess.android.ui.components.RichContent
 import social.hotmess.android.ui.components.RoomBanner
 import social.hotmess.android.ui.components.RoomBannerKind
+import social.hotmess.core.AppRoute
 import social.hotmess.core.ChatProtocol
 import social.hotmess.core.ChatRoom
+import social.hotmess.core.FriendDirectory
+import social.hotmess.core.RecordId
+import social.hotmess.core.RoomPeople
 import social.hotmess.core.VenueChatConnection
 import social.hotmess.core.VenueMessage
 
@@ -61,6 +68,13 @@ class VenueChatModel(private val graph: AppGraph, private val room: ChatRoom) : 
     /** They're in the room from outside its place, which only admins can do. */
     private val _outOfRange = MutableStateFlow(false)
     val outOfRange: StateFlow<Boolean> = _outOfRange.asStateFlow()
+
+    /**
+     * Who is in the room now, by lowercase user id, with their names and photos where the room sends
+     * them: the roster on joining, then presence frames. Empty while disconnected.
+     */
+    private val _people = MutableStateFlow(RoomPeople())
+    val people: StateFlow<RoomPeople> = _people.asStateFlow()
 
     private var connection: VenueChatConnection? = null
     private var job: Job? = null
@@ -97,11 +111,24 @@ class VenueChatModel(private val graph: AppGraph, private val room: ChatRoom) : 
                             _status.value = Status.CONNECTED
                             backoff = 1_000L
                         }
-                        is VenueChatConnection.Event.Received -> _messages.value = _messages.value + event.message.let {
-                            it.copy(avatarUrl = it.avatarUrl ?: graph.configuration.avatarUrl(it.userId))
-                        }
+                        is VenueChatConnection.Event.Received -> receive(event.message)
                         is VenueChatConnection.Event.Range -> _outOfRange.value = event.outOfRange
-                        is VenueChatConnection.Event.Disconnected -> _status.value = Status.OFFLINE
+                        is VenueChatConnection.Event.Roster -> {
+                            // All the viewer's friends, by full name, so the room and its lines show them that way.
+                            graph.api.friends.record(event.friends)
+                            _people.value = _people.value.roster(event.online, event.people)
+                        }
+                        is VenueChatConnection.Event.PresenceChanged -> _people.value =
+                            if (event.online) {
+                                _people.value.joined(event.userId, event.name, event.avatarUrl)
+                            } else {
+                                _people.value.left(event.userId)
+                            }
+                        is VenueChatConnection.Event.Disconnected -> {
+                            _status.value = Status.OFFLINE
+                            // The next roster says who's here; until then nobody is known to be.
+                            _people.value = RoomPeople()
+                        }
                         VenueChatConnection.Event.Rejected, VenueChatConnection.Event.Left -> away = true
                     }
                     !away
@@ -119,12 +146,30 @@ class VenueChatModel(private val graph: AppGraph, private val room: ChatRoom) : 
         }
     }
 
+    /**
+     * Adds a line, with the sender's picture when it has none. A post as the venue never falls back
+     * to the sender's own face. A line the room sends again (by its id) replaces the first copy.
+     */
+    private fun receive(message: VenueMessage) {
+        val line = if (message.avatarUrl != null || message.isPostedAsVenue) {
+            message
+        } else {
+            message.copy(avatarUrl = graph.configuration.avatarUrl(message.userId))
+        }
+        // An older server's roster has no names: a line someone sends names them in "Here now".
+        if (!line.isPostedAsVenue) _people.value = _people.value.described(line.userId, line.name, line.avatarUrl)
+        val current = _messages.value
+        val index = current.indexOfFirst { it.id == line.id }
+        _messages.value = if (index >= 0) current.toMutableList().also { it[index] = line } else current + line
+    }
+
     fun disconnect() {
         job?.cancel()
         job = null
         heartbeat?.cancel()
         heartbeat = null
         connection = null
+        _people.value = RoomPeople()
     }
 
     fun send(body: String): Boolean {
@@ -148,6 +193,7 @@ fun VenueChatScreen(room: ChatRoom, venueName: String, navigator: Navigator) {
     val messages by model.messages.collectAsStateWithLifecycle()
     val status by model.status.collectAsStateWithLifecycle()
     val outOfRange by model.outOfRange.collectAsStateWithLifecycle()
+    val people by model.people.collectAsStateWithLifecycle()
     val user by graph.session.user.collectAsStateWithLifecycle()
     var draft by rememberSaveable { mutableStateOf("") }
 
@@ -185,21 +231,23 @@ fun VenueChatScreen(room: ChatRoom, venueName: String, navigator: Navigator) {
             }
             if (banner != null) RoomBanner(banner, venueName, isLocale = isLocale)
             val userId = user?.id
-            val thread = remember(messages, userId) {
-                // The socket's lines carry no name or time yet, so there are no names or dividers.
-                messages.map {
-                    ChatThreadMessage(
-                        id = it.id,
-                        senderId = it.userId,
-                        senderName = null,
-                        avatarUrl = it.avatarUrl,
-                        text = it.body,
-                        sentAt = null,
-                        own = it.isOutgoing(userId),
-                    )
-                }
+            val friends = graph.api.friends
+            // Who's here, friends first; a roster can add friends' full names, so it redraws the thread too.
+            val hereNow = remember(people, userId) {
+                RoomPeople.hereNow(people.byId.values, userId) { friends.fullName(it) }
+                    .map { it.copy(avatarUrl = it.avatarUrl ?: graph.configuration.avatarUrl(it.userId)) }
             }
-            ChatThread(thread, venueName, Modifier.weight(1f).fillMaxWidth(), isLocale = isLocale)
+            HereNowStrip(hereNow)
+            val thread = remember(messages, userId, people) { messages.map { it.threadMessage(userId, friends) } }
+            val presence = remember(people) { people.ids.associateWith { Presence.ONLINE } }
+            ChatThread(
+                thread,
+                venueName,
+                Modifier.weight(1f).fillMaxWidth(),
+                presence = presence,
+                isLocale = isLocale,
+                onOpenEvent = { id -> navigator.open(AppRoute.EventDetail(RecordId.normalize(id) ?: id.lowercase())) },
+            )
             ChatComposer(
                 value = draft,
                 onValueChange = { draft = it },
@@ -209,3 +257,24 @@ fun VenueChatScreen(room: ChatRoom, venueName: String, navigator: Navigator) {
         }
     }
 }
+
+/**
+ * A room's line as ChatThread draws it. A friend shows by their full name (the room sends everyone
+ * "First L."), a post as the venue by the venue's name and photo, and a rich message as its card.
+ */
+private fun VenueMessage.threadMessage(viewerId: String?, friends: FriendDirectory) = ChatThreadMessage(
+    id = id,
+    senderId = userId.lowercase(),
+    senderName = if (isPostedAsVenue) name else friends.displayName(userId, name),
+    avatarUrl = avatarUrl,
+    text = body,
+    sentAt = sentAt,
+    own = isOutgoing(viewerId),
+    role = role,
+    asPlace = isPostedAsVenue,
+    rich = if (kind.isRich) {
+        RichContent(kind, title = title, body = caption, photoUrl = photoUrl, event = event, endsAt = endsAt, pinned = pinned)
+    } else {
+        null
+    },
+)

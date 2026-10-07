@@ -6,6 +6,7 @@ import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
@@ -17,17 +18,87 @@ import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
 import java.net.URI
+import java.time.Instant
 import java.util.UUID
 
-/** One line in a venue's chat room. */
+/**
+ * One line in a venue's or locale's chat room, as its frame describes it. Older servers send only
+ * [body], [userId] and [avatarUrl]; everything else is optional and defaults to a plain text line.
+ *
+ * [body] is the line in words, which for a rich message is its summary ("Shared an event: Sunset
+ * Social"); [caption] is what the sender wrote: an announcement's or special's body, or an event's or
+ * photo's caption.
+ */
 data class VenueMessage(
     val id: String = UUID.randomUUID().toString(),
     val body: String,
     val userId: String,
+    /** The sender's photo, or the venue's for a post as the venue. */
     val avatarUrl: String? = null,
+    /** The name the room shows: "First L." for anyone but the viewer's friends, or the venue's name. */
+    val name: String? = null,
+    val sentAt: Instant? = null,
+    /** Who the sender is in the room, worked out by the server; null for everyone else. */
+    val role: ChatRole? = null,
+    val kind: ChatKind = ChatKind.TEXT,
+    /** An announcement's or special's headline. */
+    val title: String? = null,
+    val caption: String? = null,
+    /** A photo message's photo, or an announcement's. */
+    val photoUrl: String? = null,
+    /** The event an event message shares. */
+    val event: SharedEvent? = null,
+    /** When a special stops showing. */
+    val endsAt: Instant? = null,
+    /** The announcement pinned under the room's title. */
+    val pinned: Boolean = false,
 ) {
     fun isOutgoing(currentUserId: String?): Boolean = currentUserId != null && userId.equals(currentUserId, ignoreCase = true)
+
+    /** Posted as the venue: [name] and [avatarUrl] are the venue's, never the sender's. */
+    val isPostedAsVenue: Boolean get() = role == ChatRole.VENUE
+
+    /** Whether the room still shows it: a special stops at its end time. */
+    fun isShowing(at: Instant = Instant.now()): Boolean = !(kind == ChatKind.SPECIAL && endsAt != null && !endsAt.isAfter(at))
 }
+
+/** Who someone is in a chat room, set by the server. Shown as a tag after their name. */
+enum class ChatRole(val label: String) {
+    /** Posting as the venue, with its name and photo. */
+    VENUE("Venue"),
+
+    /** A host or performer on tonight's event at the venue. */
+    HOST("Host"),
+
+    /** One of the audience's admins. */
+    STAFF("Staff"),
+    ;
+
+    companion object {
+        /** Reads the socket's `venue` and GraphQL's `VENUE` alike; anything else is no role. */
+        fun parse(raw: String?): ChatRole? = raw?.let { value -> entries.firstOrNull { it.name.equals(value, ignoreCase = true) } }
+    }
+}
+
+/** What a chat message is. Only people with a role send anything but [TEXT]. */
+enum class ChatKind {
+    TEXT,
+    ANNOUNCEMENT,
+    EVENT,
+    PHOTO,
+    SPECIAL,
+    ;
+
+    val isRich: Boolean get() = this != TEXT
+
+    companion object {
+        /** Any case; an unknown kind reads as [TEXT], so it shows as its summary. */
+        fun parse(raw: String?): ChatKind = raw?.let { value -> entries.firstOrNull { it.name.equals(value, ignoreCase = true) } } ?: TEXT
+    }
+}
+
+/** The event an event message shares, as much as its frame carries. */
+data class SharedEvent(val id: String, val name: String? = null, val startAt: Instant? = null)
 
 /**
  * A chat room: a venue's, for people at the venue, or a locale's, for people out in the locale who
@@ -55,9 +126,19 @@ data class ChatRoom(val kind: Kind, val id: String) {
  * presence lapses. It adds the sender to each line itself.
  * Admins can join from anywhere: everyone is told `{"type":"range","out_of_range":…}` on joining,
  * and admins again whenever that changes.
+ *
+ * Presence: on joining, `{"type":"roster","online":[<user id>, …]}` lists everyone in the room now, the
+ * joiner included; then `{"type":"presence","user_id":…,"presence":"online"|"offline"}` as people come
+ * and go. Newer servers add to the roster `people` (everyone in the room, with `name`, `avatar_url` and
+ * whether they're the joiner's `friend`) and `friends` (all the joiner's friends, by full name), and to
+ * an online presence frame the newcomer's `name` and `avatar_url`. Every one of those is optional.
  */
 object ChatProtocol {
-    private val json = Json { ignoreUnknownKeys = true }
+    // Lenient, so an id sent as a number still reads as a string rather than dropping the line.
+    private val json = Json {
+        ignoreUnknownKeys = true
+        isLenient = true
+    }
 
     sealed interface Frame {
         /** The server accepted the connection or the subscription. */
@@ -73,6 +154,24 @@ object ChatProtocol {
 
         /** Whether they're outside the room's place. Only admins get in from outside. */
         data class Range(val outOfRange: Boolean) : Frame
+
+        /**
+         * Everyone in the room now, by lowercase user id, sent on joining; with [people] (who they are)
+         * and [friends] (all the joiner's friends, full names) from newer servers.
+         */
+        data class Roster(
+            val online: Set<String>,
+            val people: List<RoomPerson> = emptyList(),
+            val friends: List<Friend> = emptyList(),
+        ) : Frame
+
+        /** Someone (by lowercase user id) came into the room or left it; a newcomer with their [name] and [avatarUrl] when sent. */
+        data class PresenceChanged(
+            val userId: String,
+            val online: Boolean,
+            val name: String? = null,
+            val avatarUrl: String? = null,
+        ) : Frame
     }
 
     /** Action Cable names a subscription by a JSON *string*, not an object. */
@@ -106,14 +205,52 @@ object ChatProtocol {
                 when ((message["type"] as? JsonPrimitive)?.contentOrNull) {
                     "left" -> return Frame.Left
                     "range" -> return Frame.Range((message["out_of_range"] as? JsonPrimitive)?.booleanOrNull ?: false)
+                    "roster" -> return roster(message)
+                    "presence" -> return presence(message)
                 }
                 val payload = runCatching { json.decodeFromJsonElement(IncomingMessage.serializer(), message) }.getOrNull()
                     ?: return null
-                Frame.Message(VenueMessage(body = payload.message, userId = payload.userId, avatarUrl = payload.avatarUrl))
+                Frame.Message(payload.toMessage())
             }
             else -> null
         }
     }
+
+    private fun roster(message: JsonObject): Frame? {
+        val online = message["online"] as? JsonArray ?: return null
+        // Anything malformed in `people` or `friends` is skipped, never the whole roster.
+        val people = (message["people"] as? JsonArray).orEmpty().mapNotNull { entry ->
+            val person = entry as? JsonObject ?: return@mapNotNull null
+            val id = person.string("user_id") ?: return@mapNotNull null
+            RoomPerson(
+                userId = id.lowercase(),
+                name = person.string("name"),
+                avatarUrl = person.string("avatar_url"),
+                friend = (person["friend"] as? JsonPrimitive)?.booleanOrNull ?: false,
+            )
+        }
+        val friends = (message["friends"] as? JsonArray).orEmpty().mapNotNull { entry ->
+            val friend = entry as? JsonObject ?: return@mapNotNull null
+            val id = friend.string("user_id") ?: return@mapNotNull null
+            Friend(id.lowercase(), friend.string("name").orEmpty())
+        }
+        return Frame.Roster(online.mapNotNull { (it as? JsonPrimitive)?.contentOrNull?.lowercase() }.toSet(), people, friends)
+    }
+
+    private fun presence(message: JsonObject): Frame? {
+        val userId = message.string("user_id") ?: return null
+        val presence = message.string("presence") ?: return null
+        val online = presence.equals("online", ignoreCase = true)
+        return Frame.PresenceChanged(
+            userId.lowercase(),
+            online,
+            name = if (online) message.string("name") else null,
+            avatarUrl = if (online) message.string("avatar_url") else null,
+        )
+    }
+
+    /** A string field, or null when it's missing, not a string-like value, or blank. */
+    private fun JsonObject.string(key: String): String? = (this[key] as? JsonPrimitive)?.contentOrNull.blankToNull()
 
     /** The websocket endpoint, derived from the HTTP base URL: `wss://<host>/connection`. */
     fun realtimeUrl(baseUrl: String): String? {
@@ -129,12 +266,50 @@ object ChatProtocol {
     @Serializable
     private data class OutgoingMessage(val message: String)
 
+    /** A chat line's frame. Only `message` and `user_id` are always there; the rest came later. */
     @Serializable
     private data class IncomingMessage(
         val message: String,
         @SerialName("user_id") val userId: String,
         @SerialName("avatar_url") val avatarUrl: String? = null,
+        val id: String? = null,
+        val name: String? = null,
+        @SerialName("sent_at") val sentAt: String? = null,
+        val role: String? = null,
+        val kind: String? = null,
+        val title: String? = null,
+        val body: String? = null,
+        @SerialName("photo_url") val photoUrl: String? = null,
+        val event: IncomingEvent? = null,
+        @SerialName("ends_at") val endsAt: String? = null,
+        val pinned: Boolean? = null,
+    ) {
+        fun toMessage(): VenueMessage {
+            val base = VenueMessage(body = message, userId = userId, avatarUrl = avatarUrl.blankToNull())
+            return base.copy(
+                id = id.blankToNull() ?: base.id,
+                name = name.blankToNull(),
+                sentAt = sentAt?.let(InstantSerializer::parse),
+                role = ChatRole.parse(role),
+                kind = ChatKind.parse(kind),
+                title = title.blankToNull(),
+                caption = body.blankToNull(),
+                photoUrl = photoUrl.blankToNull(),
+                event = event?.id.blankToNull()?.let { SharedEvent(it, event?.name.blankToNull(), event?.startAt?.let(InstantSerializer::parse)) },
+                endsAt = endsAt?.let(InstantSerializer::parse),
+                pinned = pinned ?: false,
+            )
+        }
+    }
+
+    @Serializable
+    private data class IncomingEvent(
+        val id: String? = null,
+        val name: String? = null,
+        @SerialName("start_at") val startAt: String? = null,
     )
+
+    private fun String?.blankToNull(): String? = this?.takeIf { it.isNotBlank() }
 }
 
 /** A live connection to a chat room, a venue's or a locale's. */
@@ -151,6 +326,20 @@ class VenueChatConnection(
         data object Rejected : Event
         data object Left : Event
         data class Range(val outOfRange: Boolean) : Event
+
+        /** Everyone in the room now, by lowercase user id, and who they are and the viewer's friends when sent. */
+        data class Roster(
+            val online: Set<String>,
+            val people: List<RoomPerson> = emptyList(),
+            val friends: List<Friend> = emptyList(),
+        ) : Event
+
+        data class PresenceChanged(
+            val userId: String,
+            val online: Boolean,
+            val name: String? = null,
+            val avatarUrl: String? = null,
+        ) : Event
     }
 
     @Volatile private var socket: WebSocket? = null
@@ -174,6 +363,8 @@ class VenueChatConnection(
                     ChatProtocol.Frame.Left -> trySend(Event.Left)
                     is ChatProtocol.Frame.Message -> trySend(Event.Received(frame.message))
                     is ChatProtocol.Frame.Range -> trySend(Event.Range(frame.outOfRange))
+                    is ChatProtocol.Frame.Roster -> trySend(Event.Roster(frame.online, frame.people, frame.friends))
+                    is ChatProtocol.Frame.PresenceChanged -> trySend(Event.PresenceChanged(frame.userId, frame.online, frame.name, frame.avatarUrl))
                     null -> Unit
                 }
             }

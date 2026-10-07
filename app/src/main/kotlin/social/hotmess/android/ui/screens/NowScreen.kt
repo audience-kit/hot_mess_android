@@ -61,10 +61,12 @@ import social.hotmess.android.ui.components.HeroScaffold
 import social.hotmess.android.ui.components.InfoRow
 import social.hotmess.android.ui.components.LoadStateView
 import social.hotmess.android.ui.components.PassCard
+import social.hotmess.android.ui.components.Presence
 import social.hotmess.android.ui.components.SkipTheLineCard
 import social.hotmess.android.ui.components.VenueCard
 import social.hotmess.android.ui.components.cardSection
 import social.hotmess.android.ui.components.friendNames
+import social.hotmess.android.ui.components.presenceOf
 import social.hotmess.android.ui.components.rememberHeroCollapsed
 import social.hotmess.android.ui.openUrl
 import social.hotmess.android.ui.rememberLoader
@@ -82,6 +84,7 @@ import social.hotmess.core.Now
 import social.hotmess.core.NowLocale
 import social.hotmess.core.PhotoTone
 import social.hotmess.core.Venue
+import java.time.Instant
 
 /**
  * What's happening where you are: the venue you're in, with the last few lines of its chat and the
@@ -276,6 +279,7 @@ private fun SmallTalk(venue: Venue, navigator: Navigator) {
         title = "Small talk",
         room = venue.name,
         onOpen = { navigator.openChat(venue.id, venue.name) },
+        presence = remember(venue.recentMessages) { peekPresence(venue.recentMessages) },
     )
 }
 
@@ -288,12 +292,14 @@ private fun LocaleSmallTalk(locale: NowLocale, navigator: Navigator) {
         title = "Small talk in $name",
         room = name,
         onOpen = { navigator.openLocaleChat(locale.id, name) },
+        presence = remember(locale.recentMessages) { peekPresence(locale.recentMessages) },
     )
 }
 
 /**
- * A venue's recent chat lines as ChatPeek draws them: the viewer's own on the right, and the
- * sender's picture when the line has none.
+ * A venue's recent chat lines as ChatPeek draws them: the viewer's own on the right, friends by their
+ * full names, a post as the venue with its rounded-square photo, rich messages in words (their
+ * summary), specials gone once they've ended, and the sender's picture when the line has none.
  */
 @Composable
 internal fun rememberPeekMessages(lines: List<ChatLine>): List<ChatThreadMessage> {
@@ -301,19 +307,29 @@ internal fun rememberPeekMessages(lines: List<ChatLine>): List<ChatThreadMessage
     val user by graph.session.user.collectAsStateWithLifecycle()
     val viewerId = user?.id
     return remember(lines, viewerId) {
-        lines.map { line ->
+        val now = Instant.now()
+        lines.filter { it.isShowing(now) }.map { line ->
             ChatThreadMessage(
                 id = line.id,
-                senderId = line.userId.ifEmpty { line.id },
-                senderName = line.name,
-                avatarUrl = line.avatarUrl ?: line.userId.takeIf { it.isNotEmpty() }?.let(graph.configuration::avatarUrl),
+                senderId = line.userId.ifEmpty { line.id }.lowercase(),
+                senderName = if (line.postedAsVenue) line.name else graph.api.friends.displayName(line.userId, line.name),
+                avatarUrl = line.avatarUrl
+                    ?: line.userId.takeIf { it.isNotEmpty() && !line.postedAsVenue }?.let(graph.configuration::avatarUrl),
                 text = line.message,
                 sentAt = line.sentAt,
                 own = viewerId != null && line.userId.equals(viewerId, ignoreCase = true),
+                role = line.role,
+                asPlace = line.postedAsVenue,
             )
         }
     }
 }
+
+/** The presence dots for a peek's senders, by the same ids [rememberPeekMessages] groups them by. */
+internal fun peekPresence(lines: List<ChatLine>): Map<String, Presence> =
+    lines.filter { it.userId.isNotEmpty() && !it.postedAsVenue }
+        .mapNotNull { line -> presenceOf(line.presence)?.let { line.userId.lowercase() to it } }
+        .toMap()
 
 /** Friends who are at the venue too, by their full names; tapping one opens Messenger. */
 @Composable
@@ -338,7 +354,7 @@ private fun FriendsHere(friends: List<Friend>) {
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
-                        Avatar(configuration.avatarUrl(friend.id), friend.name, size = Sizes.avatarLg)
+                        Avatar(configuration.avatarUrl(friend.id), friend.name, size = Sizes.avatarLg, presence = presenceOf(friend.presence))
                         // Friends see each other's full names; two lines fit most, and longer ones
                         // truncate at the end.
                         Text(

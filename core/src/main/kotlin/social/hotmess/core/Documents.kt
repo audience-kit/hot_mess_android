@@ -10,8 +10,11 @@ object Documents {
     const val VENUE_FIELDS: String =
         "id name address description phone distance point facebookId photoUrl heroUrl isLiked"
 
+    /** A chat line as a preview shows it: rich messages in words (`message`), with the sender's role and presence. */
+    const val CHAT_LINE_FIELDS: String = "id message name userId avatarUrl sentAt presence role kind endsAt postedAsVenue"
+
     /** A venue's last few chat lines, oldest first; empty unless the viewer is at the venue or an admin. */
-    const val RECENT_MESSAGES: String = "recentMessages(limit: 3) { id message name userId avatarUrl sentAt }"
+    const val RECENT_MESSAGES: String = "recentMessages(limit: 3) { $CHAT_LINE_FIELDS }"
 
     /** Tonight's cover at a venue and the user's pass for it. */
     const val VENUE_COVER_FIELDS: String =
@@ -23,6 +26,9 @@ object Documents {
         "id name startAt endAt facebookId coverPhotoUrl isFeatured viewerRsvp venue { $VENUE_FIELDS }"
 
     const val FRIEND_FIELDS: String = "id name facebookId"
+
+    /** Friends out now, with whether they can be reached (in chat, or by push). */
+    const val FRIEND_OUT_FIELDS: String = "$FRIEND_FIELDS presence"
 
     /** A Ping with its picks and who's in. Picks carry enough of the venue or event for a row. */
     const val PING_FIELDS: String =
@@ -38,10 +44,10 @@ object Documents {
               title imageUrl
               venue { $VENUE_FIELDS $RECENT_MESSAGES $VENUE_COVER_FIELDS }
               venues { $VENUE_FIELDS }
-              locale { id name chatOpen recentMessages(limit: 3) { id message name userId avatarUrl sentAt } }
+              locale { id name chatOpen $RECENT_MESSAGES }
               events { $EVENT_FIELDS }
-              friends { id name facebookId }
-              friendVenues { venue { $VENUE_FIELDS } friendCount friends { id name facebookId } }
+              friends { $FRIEND_OUT_FIELDS }
+              friendVenues { venue { $VENUE_FIELDS } friendCount friends { $FRIEND_OUT_FIELDS } }
               myPing { $PING_FIELDS }
               friendPings { $PING_FIELDS }
             }

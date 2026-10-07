@@ -265,6 +265,7 @@ fun FriendFaces(friends: List<Friend>, modifier: Modifier = Modifier, limit: Int
                 friend.name,
                 size = Sizes.avatarXs,
                 modifier = Modifier.padding(start = (Sizes.avatarXs - 7.dp) * index).photoRing(),
+                presence = presenceOf(friend.presence),
             )
         }
     }

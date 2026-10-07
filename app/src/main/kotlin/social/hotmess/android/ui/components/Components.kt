@@ -46,6 +46,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.layout
@@ -215,7 +216,8 @@ fun RemoteImage(url: String?, modifier: Modifier = Modifier, contentScale: Conte
 /**
  * A round avatar. Without a photo it shows initials on a spectrum colour, chosen by name. With a
  * [presence], a [PresenceDot] sits at its bottom-right (10 on avatars under 40, 12 from 40 up), ringed
- * in [presenceRing] (`surface-raised` when unspecified; pass the surface the avatar sits on).
+ * in [presenceRing] (`surface-raised` when unspecified; pass the surface the avatar sits on). A place
+ * (a venue posting in chat) passes a rounded-square [shape], so it never looks like a person.
  */
 @Composable
 fun Avatar(
@@ -225,13 +227,14 @@ fun Avatar(
     modifier: Modifier = Modifier,
     presence: Presence? = null,
     presenceRing: Color = Color.Unspecified,
+    shape: Shape = CircleShape,
 ) {
     val band = (name.hashCode().absoluteValue) % tokens.spectrum.size
     Box(modifier.size(size)) {
         Box(
             Modifier
                 .fillMaxSize()
-                .clip(CircleShape)
+                .clip(shape)
                 .background(tokens.spectrum[band])
                 .semantics { contentDescription = name },
             contentAlignment = Alignment.Center,
