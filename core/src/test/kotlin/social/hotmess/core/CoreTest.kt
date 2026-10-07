@@ -14,6 +14,7 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -112,6 +113,8 @@ class ListingTest {
 
         assertEquals(listOf("3", "2", "1"), venues.sortedForList(here.uppercase()).map { it.id })
         assertEquals(listOf("1", "3", "2"), venues.sortedForList(null).map { it.id })
+        assertEquals(listOf("2", "3"), venues.sortedForList(here).filter { it.isIn(here) }.map { it.id }.sorted())
+        assertFalse(venues.first().isIn(null))
     }
 }
 
