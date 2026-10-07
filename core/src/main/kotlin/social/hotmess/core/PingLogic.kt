@@ -45,7 +45,7 @@ data class PingSelection(val eventIds: List<String> = emptyList(), val venueIds:
     }
 
     companion object {
-        /** What the sheet starts with: the picks of the Ping it edits, plus [extra] (e.g. "Ping for here"). */
+        /** What the sheet starts with: the picks of the Ping it edits, plus [extra] (e.g. "Ping here"). */
         fun of(editing: Ping?, extra: PingPick? = null): PingSelection {
             val start = (editing?.targets.orEmpty().mapNotNull { PingPick.of(it) }).fold(PingSelection()) { selection, pick ->
                 if (selection.contains(pick)) selection else selection.toggle(pick)
@@ -64,7 +64,7 @@ data class PingChoices(
 ) {
     /**
      * With each of [picks] listed, at the top of its group, when it isn't already: a venue from another
-     * city opened with "Ping for here", or a pick of the Ping being edited.
+     * city opened with "Ping here", or a pick of the Ping being edited.
      */
     fun including(picks: List<PingPick>): PingChoices {
         var events = events
