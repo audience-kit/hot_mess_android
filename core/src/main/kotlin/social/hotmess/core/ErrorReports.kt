@@ -1,5 +1,7 @@
 package social.hotmess.core
 
+import kotlinx.serialization.EncodeDefault
+import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
@@ -7,9 +9,11 @@ import kotlinx.serialization.Serializable
  * One error report for `POST /v1/client_errors`, which the AudienceKit API logs as a `[client_error]` line in its
  * Heroku log.
  */
+@OptIn(ExperimentalSerializationApi::class)
 @Serializable
 data class ClientErrorReport(
-    val app: String = "android",
+    // HotMessApi.json leaves defaults out, but the API needs to know which app sent it.
+    @EncodeDefault val app: String = "android",
     /** `crash`, `error` or what else went wrong. */
     val kind: String,
     val message: String,
@@ -47,9 +51,11 @@ data class DeviceFacts(val version: String, val build: String, val osVersion: St
 data class RecentError(val kind: String, val message: String, val at: String)
 
 /** "Report a problem", for `POST /v1/bug_reports`. Works signed out, when [host] names the audience. */
+@OptIn(ExperimentalSerializationApi::class)
 @Serializable
 data class BugReportRequest(
-    val app: String = "android",
+    // The API refuses a report without it, and HotMessApi.json leaves defaults out.
+    @EncodeDefault val app: String = "android",
     val description: String,
     val email: String? = null,
     val screen: String? = null,

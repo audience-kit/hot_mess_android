@@ -34,8 +34,9 @@ class ErrorReportsTest {
             description = "Map is blank", version = "1.0", build = "7", osVersion = "Android 16", device = "Pixel",
             diagnostics = BugReportRequest.Diagnostics(signedIn = false, environment = "production", recentErrors = emptyList()),
         )
-        val diagnostics = json.parseToJsonElement(json.encodeToString(BugReportRequest.serializer(), bug))
-            .jsonObject["diagnostics"]!!.jsonObject
+        val bugJson = json.parseToJsonElement(json.encodeToString(BugReportRequest.serializer(), bug)).jsonObject
+        assertEquals("android", bugJson["app"]!!.jsonPrimitive.content)
+        val diagnostics = bugJson["diagnostics"]!!.jsonObject
         assertEquals("false", diagnostics["signed_in"]!!.jsonPrimitive.content)
         assertTrue("recent_errors" in diagnostics)
     }
