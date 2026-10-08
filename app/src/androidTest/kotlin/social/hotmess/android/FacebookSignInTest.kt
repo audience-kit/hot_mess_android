@@ -77,7 +77,8 @@ class FacebookSignInTest {
 
     /** Taps through Facebook until Hot Mess shows its tabs, or fails with what stopped it. */
     private fun walkFacebook() {
-        var loggedIn = false
+        // Facebook sometimes comes back to an empty login form, so log in again, a few times at most.
+        var logins = 0
         val deadline = System.currentTimeMillis() + 120_000
         while (System.currentTimeMillis() < deadline) {
             if (device.hasObject(inApp().text("Now"))) return
@@ -110,13 +111,20 @@ class FacebookSignInTest {
                 continue
             }
 
+            // "Email or mobile number required" over that empty form.
+            device.findObject(By.clickable(true).text(OK))?.let {
+                it.click()
+                device.waitForIdle()
+                continue
+            }
+
             val fields = device.findObjects(By.clazz("android.widget.EditText"))
-            if (!loggedIn && fields.size >= 2) {
+            if (logins < 3 && fields.size >= 2 && fields.first().text != email) {
                 fields.first().fill(email!!)
                 fields.last().fill(password!!)
                 (device.findObject(By.clickable(true).text(LOG_IN)) ?: device.findObject(By.desc(LOG_IN)))?.click()
                     ?: device.pressEnter()
-                loggedIn = true
+                logins++
                 device.waitForIdle()
                 continue
             }
@@ -176,8 +184,10 @@ class FacebookSignInTest {
 
     private companion object {
         const val TIMEOUT = 20_000L
-        val CONTINUE: Pattern = Pattern.compile("(?i)continue")
+        // Login for Business ends on "… has been connected to AudienceKit" with Got it.
+        val CONTINUE: Pattern = Pattern.compile("(?i)continue|got it")
         val CONTINUE_AS: Pattern = Pattern.compile("(?i)continue as (.+?)\\??$")
+        val OK: Pattern = Pattern.compile("(?i)ok")
         val NOT_NOW: Pattern = Pattern.compile("(?i)not now")
         val LOG_IN: Pattern = Pattern.compile("(?i)log ?in")
         val ANOTHER_ACCOUNT: Pattern = Pattern.compile("(?i)not you\\??|(log in|use) (to |with )?(another|a different) (account|profile)|switch accounts?")
