@@ -60,15 +60,21 @@ fun LoginScreen(onSignIn: () -> Unit) {
 
     HotMessTheme(branding = branding?.theme, darkTheme = true) {
         Box(Modifier.fillMaxSize().background(Color.Black)) {
-            // The backdrop carries the wordmark, so the name isn't repeated as text.
+            // The app icon's figure, already dark enough for white text (hot_mess_ios Design/LoginArt).
             Image(
                 painterResource(R.drawable.login_background),
-                contentDescription = branding?.audience?.name ?: "Hot Mess",
+                contentDescription = null,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize(),
             )
-            Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.45f)))
             SpectrumBar(Modifier.statusBarsPadding())
+            Text(
+                branding?.audience?.name ?: "Hot Mess",
+                style = HotMessType.display,
+                color = Color.White,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(top = 72.dp),
+            )
 
             Column(
                 Modifier.fillMaxSize().navigationBarsPadding().padding(Space.s8),
