@@ -207,7 +207,14 @@ class SessionStore(
         /** The app's own preferences (the remembered locale and the like). */
         const val PREFERENCES = "social.hotmess.preferences"
 
-        /** What sign-in asks Facebook for. */
-        private val PERMISSIONS = listOf("public_profile", "email", "user_friends")
+        /**
+         * Whether sign-in asks for user_friends, which shows friends who also use the app at the same venue. Off until
+         * Meta's App Review approves it on the Hot Mess Consumer app; until then everyone's friends list is empty.
+         */
+        const val ASKS_FOR_FRIENDS = false
+
+        /** What sign-in asks Facebook for. public_profile and email need no App Review; user_friends does. */
+        private val PERMISSIONS =
+            listOf("public_profile", "email") + if (ASKS_FOR_FRIENDS) listOf("user_friends") else emptyList()
     }
 }
