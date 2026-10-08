@@ -10,13 +10,18 @@ import java.net.URLEncoder
  *
  * The redirect goes to `fbconnect://cct.<package name>`, the one the Facebook Android SDK's own
  * Custom Tab login uses, which the Facebook app's Android platform must list.
+ *
+ * A Business-type Facebook app only accepts the dialog with its Login for Business [configId], which
+ * stands in for the permissions. Then, like the iOS app, it redirects to `fb<app id>://authorize/`,
+ * which has to be one of the app's Valid OAuth Redirect URIs.
  */
 class FacebookLoginDialog(
     val appId: String,
     private val permissions: List<String>,
     packageName: String,
+    private val configId: String? = null,
 ) {
-    val redirectUri: String = "fbconnect://cct.$packageName"
+    val redirectUri: String = if (configId != null) "fb$appId://authorize/" else "fbconnect://cct.$packageName"
 
     /** The dialog URL. [state] ties the redirect to this request. */
     fun url(state: String): String {
@@ -25,7 +30,7 @@ class FacebookLoginDialog(
             add("redirect_uri" to redirectUri)
             add("response_type" to "code")
             add("state" to state)
-            add("scope" to permissions.joinToString(","))
+            if (configId != null) add("config_id" to configId) else add("scope" to permissions.joinToString(","))
         }
         return "https://www.facebook.com/v21.0/dialog/oauth?" +
             query.joinToString("&") { (name, value) -> "$name=${URLEncoder.encode(value, Charsets.UTF_8)}" }

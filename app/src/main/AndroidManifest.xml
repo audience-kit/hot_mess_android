@@ -69,6 +69,14 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="fbconnect" android:host="cct.${applicationId}" />
             </intent-filter>
+
+            <!-- A Business-type Facebook app's dialog redirects to fb<app id>://authorize/ instead. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="fb${facebookAppId}" android:host="authorize" />
+            </intent-filter>
         </activity>
 
         <!-- Google Pay in Stripe's payment sheet, for paying cover. -->

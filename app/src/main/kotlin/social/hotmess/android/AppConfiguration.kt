@@ -9,6 +9,8 @@ data class AppConfiguration(
     val audienceHost: String = BuildConfig.AUDIENCE_HOST,
     val audienceId: String? = BuildConfig.AUDIENCE_ID.ifBlank { null },
     val facebookAppId: String = BuildConfig.FACEBOOK_APP_ID,
+    /** The Login for Business configuration, for a build that signs in with a Business-type app. */
+    val facebookLoginConfigId: String? = BuildConfig.FACEBOOK_LOGIN_CONFIG_ID.ifBlank { null },
     /** Staging builds tell the API so, which then signs people in with Hot Mess's staging Facebook app. */
     val environment: AudienceKitEnvironment =
         AudienceKitEnvironment.entries.firstOrNull { it.value == BuildConfig.AUDIENCEKIT_ENVIRONMENT }

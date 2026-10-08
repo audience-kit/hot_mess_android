@@ -28,12 +28,17 @@ data class Environment(
      * any host. Debug runs against a local API and stays production.
      */
     val audienceKitEnvironment: String = "production",
+    /** The Login for Business configuration, for a Business-type Facebook app. */
+    val facebookLoginConfigId: String = "",
 )
 
 val environments = mapOf(
     // The emulator reaches the host's localhost at 10.0.2.2.
     "debug" to Environment("debug", "http://10.0.2.2:3000", "", "842337999153841"),
     "staging" to Environment("staging", "https://api-staging.audiencekit.com", "", "1660272792277019", "staging"),
+    // Staging, signing in with the AudienceKit platform app instead: Meta won't make new Facebook test users or
+    // add the ones there are to another app, so this is the only app the sign-in test's users work on.
+    "signInTest" to Environment("signInTest", "https://api-staging.audiencekit.com", "", "713525445368431", "staging", "4085560021745660"),
     "release" to Environment("release", "https://api.audiencekit.com", "b0f8b66a-e636-495d-9475-0f5317ea08e0", "1168782378316790"),
 )
 
@@ -91,17 +96,25 @@ android {
             signingConfig = signingConfigs.getByName("debug")
             matchingFallbacks += listOf("release")
         }
+        create("signInTest") {
+            initWith(getByName("staging"))
+            applicationIdSuffix = ".signintest"
+            versionNameSuffix = "-signintest"
+        }
     }
 
-    // UI tests sign in against the real API, and the test users only work on the Facebook app the
-    // Hot Mess branding names, so they run on Staging rather than Debug's local API.
-    testBuildType = "staging"
+    // UI tests sign in against the real API as Facebook test users, which only work on the platform
+    // app, so they run on Sign-in Test: Staging on that app.
+    testBuildType = "signInTest"
+    // It looks like Staging.
+    sourceSets.getByName("signInTest").res.srcDir("src/staging/res")
 
     buildTypes.configureEach {
         val environment = environments.getValue(name)
         buildConfigField("String", "API_BASE_URL", "\"${environment.apiBaseUrl}\"")
         buildConfigField("String", "AUDIENCE_ID", "\"${environment.audienceId}\"")
         buildConfigField("String", "FACEBOOK_APP_ID", "\"${environment.facebookAppId}\"")
+        buildConfigField("String", "FACEBOOK_LOGIN_CONFIG_ID", "\"${environment.facebookLoginConfigId}\"")
         buildConfigField("String", "AUDIENCEKIT_ENVIRONMENT", "\"${environment.audienceKitEnvironment}\"")
         resValue(
             "string",
@@ -109,9 +122,11 @@ android {
             when (environment.name) {
                 "debug" -> "Hot Mess Dev"
                 "staging" -> "Hot Mess Staging"
+                "signInTest" -> "Hot Mess Sign-in Test"
                 else -> "Hot Mess"
             },
         )
+        manifestPlaceholders["facebookAppId"] = environment.facebookAppId
         manifestPlaceholders["usesCleartextTraffic"] = (environment.name == "debug").toString()
     }
 
