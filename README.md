@@ -64,7 +64,8 @@ and Meta won't add them to another app or make new ones, so connected tests run 
 Staging, signing in with that app. It's a Business-type app, so that build opens the dialog with its
 Login for Business configuration and redirects to `fb713525445368431://authorize/`, like the iOS app. With `FB_TEST_APP_ID` set to the app the users belong to, the test stops
 early when that isn't the build's.
-Sign-in uses Chrome's Facebook cookies, so log out of facebook.com in Chrome first. Like any
+That build signs in through an ephemeral Custom Tab, which doesn't share Chrome's cookies, so it
+doesn't matter who is signed in to facebook.com in Chrome (Chrome 136 or later). Like any
 connected test run, it uninstalls the app when it finishes.
 
 ## CI

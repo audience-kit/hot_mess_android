@@ -11,6 +11,8 @@ data class AppConfiguration(
     val facebookAppId: String = BuildConfig.FACEBOOK_APP_ID,
     /** The Login for Business configuration, for a build that signs in with a Business-type app. */
     val facebookLoginConfigId: String? = BuildConfig.FACEBOOK_LOGIN_CONFIG_ID.ifBlank { null },
+    /** Signs in through an ephemeral Custom Tab that doesn't share Chrome's Facebook cookies (Sign-in Test). */
+    val privateSignIn: Boolean = BuildConfig.PRIVATE_SIGN_IN,
     /** Staging builds tell the API so, which then signs people in with Hot Mess's staging Facebook app. */
     val environment: AudienceKitEnvironment =
         AudienceKitEnvironment.entries.firstOrNull { it.value == BuildConfig.AUDIENCEKIT_ENVIRONMENT }
