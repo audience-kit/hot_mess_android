@@ -75,6 +75,7 @@ object Documents {
             $VENUE_COVER_FIELDS
             events { $EVENT_FIELDS }
             socialLinks { id handle provider url }
+            friends { $FRIEND_OUT_FIELDS }
             friendPings { $PING_FIELDS }
           }
         }

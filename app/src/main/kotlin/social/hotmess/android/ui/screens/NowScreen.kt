@@ -331,9 +331,9 @@ internal fun peekPresence(lines: List<ChatLine>): Map<String, Presence> =
         .mapNotNull { line -> presenceOf(line.presence)?.let { line.userId.lowercase() to it } }
         .toMap()
 
-/** Friends who are at the venue too, by their full names; tapping one opens Messenger. */
+/** Friends who are at the venue too, by their full names; tapping one opens Messenger. Now and the venue screen show it. */
 @Composable
-private fun FriendsHere(friends: List<Friend>) {
+internal fun FriendsHere(friends: List<Friend>) {
     val configuration = LocalAppGraph.current.configuration
     val context = LocalContext.current
     DetailSection("Friends here") {

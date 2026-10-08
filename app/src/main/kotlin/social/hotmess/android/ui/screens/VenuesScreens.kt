@@ -314,6 +314,9 @@ fun VenueScreen(id: String, navigator: Navigator) {
                         }
                     }
                 }
+                if (overview.friends.isNotEmpty()) {
+                    item { FriendsHere(overview.friends) }
+                }
                 val links = loaded.socialLinks.filter { it.url != null }
                 if (links.isNotEmpty()) {
                     item {

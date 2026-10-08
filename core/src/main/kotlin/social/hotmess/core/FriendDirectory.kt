@@ -7,9 +7,9 @@ import java.util.concurrent.ConcurrentHashMap
  * names. A room's frames only carry the short form ("Aurora B.") so a full name never reaches a
  * stranger's phone; the app swaps in the full name for people on the viewer's friend list.
  *
- * There is no query for the whole friend list, so it fills from what Now reports: friends out at the
- * venue or in the locale, and at the venues friends have been lately. Those are the friends a room is
- * likely to hold.
+ * There is no query for the whole friend list, so it fills from what Now and the venue screen report:
+ * friends out at the venue or in the locale, and at the venues friends have been lately. Those are the
+ * friends a room is likely to hold.
  */
 class FriendDirectory {
     private val names = ConcurrentHashMap<String, String>()

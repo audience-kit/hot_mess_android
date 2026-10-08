@@ -92,7 +92,14 @@ class HotMessApi(val client: AudienceKitClient) {
     suspend fun venueOverview(id: String): VenueOverview {
         val venue = query(Documents.VENUE, VenueResponse.serializer(), graphQLVariables("id" to id)).venue
             ?: throw ApiError.NotFound
-        return VenueOverview(venue = venue.venue(), events = venue.events, chatOpen = venue.chatOpen, friendPings = venue.friendPings)
+        friends.record(venue.friends)
+        return VenueOverview(
+            venue = venue.venue(),
+            events = venue.events,
+            chatOpen = venue.chatOpen,
+            friends = venue.friends,
+            friendPings = venue.friendPings,
+        )
     }
 
     // endregion
@@ -329,6 +336,8 @@ data class VenueOverview(
     val venue: Venue,
     val events: List<Event> = emptyList(),
     val chatOpen: Boolean = false,
+    /** The user's friends who are here now. */
+    val friends: List<Friend> = emptyList(),
     /** Friends' active Pings that pick this venue or one of its events. */
     val friendPings: List<Ping> = emptyList(),
 )
@@ -379,6 +388,7 @@ private data class VenueNode(
     val recentMessages: List<ChatLine> = emptyList(),
     val events: List<Event> = emptyList(),
     val socialLinks: List<SocialLink> = emptyList(),
+    val friends: List<Friend> = emptyList(),
     val friendPings: List<Ping> = emptyList(),
 ) {
     fun venue() = Venue(
