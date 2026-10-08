@@ -116,7 +116,7 @@ class SessionStore(
             signInFailed("Facebook sign-in isn't set up for this build yet.")
             return null
         }
-        val dialog = FacebookLoginDialog(appId, PERMISSIONS, context.packageName)
+        val dialog = FacebookLoginDialog(appId, PERMISSIONS, context.packageName, configuration.facebookLoginConfigId)
         val state = java.util.UUID.randomUUID().toString()
         pendingLogin = dialog to state
         return dialog.url(state)

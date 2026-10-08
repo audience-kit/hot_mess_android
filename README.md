@@ -37,6 +37,7 @@ AudienceKit Kotlin SDK, styled with the AudienceKit design system's `hot_mess` p
 | `debug` | `http://10.0.2.2:3000` (the API on your machine, from the emulator) | 842337999153841 | `social.hotmess.android.development` |
 | `staging` | `https://api-staging.audiencekit.com` | 1660272792277019 | `social.hotmess.android.staging` |
 | `release` | `https://api.audiencekit.com` | 1168782378316790 | `social.hotmess.android` |
+| `signInTest` | `https://api-staging.audiencekit.com` | 713525445368431 (AudienceKit platform) | `social.hotmess.android.signintest` |
 
 Hot Mess is a consumer app: sign-in is classic Facebook Login on the build's Facebook app, asking
 for `public_profile`, `email` and `user_friends`, like the iOS app. It opens Facebook's OAuth dialog
@@ -57,10 +58,13 @@ page), which scans passes with the camera.
 
 `FacebookSignInTest` (`app/src/androidTest`) signs in on a connected phone as a Facebook test user and
 checks the Me tab shows them. `scripts/facebook-signin-test.sh` loads `FB_TEST_ANDROID_EMAIL`,
-`FB_TEST_ANDROID_PASSWORD` and `FB_TEST_ANDROID_NAME` from `~/.config/audience-kit/fb_test_users.env`
-and runs it on the Staging build; without them it's skipped. Facebook test users only work with their
-own app, so they have to be test users of the Staging build's app (1660272792277019). With
-`FB_TEST_APP_ID` set to the app they belong to, the test stops early when that isn't the build's. Sign-in uses Chrome's Facebook cookies, so log out of facebook.com in Chrome first. Like any
+`FB_TEST_ANDROID_PASSWORD` and `FB_TEST_ANDROID_NAME` from `~/.config/audience-kit/fb_test_users.env`;
+without them it's skipped. The test users belong to the AudienceKit platform app (713525445368431),
+and Meta won't add them to another app or make new ones, so connected tests run on `signInTest`:
+Staging, signing in with that app. It's a Business-type app, so that build opens the dialog with its
+Login for Business configuration and redirects to `fb713525445368431://authorize/`, like the iOS app. With `FB_TEST_APP_ID` set to the app the users belong to, the test stops
+early when that isn't the build's.
+Sign-in uses Chrome's Facebook cookies, so log out of facebook.com in Chrome first. Like any
 connected test run, it uninstalls the app when it finishes.
 
 ## CI

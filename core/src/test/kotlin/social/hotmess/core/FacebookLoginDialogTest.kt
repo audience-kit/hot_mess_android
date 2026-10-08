@@ -33,6 +33,28 @@ class FacebookLoginDialogTest {
     }
 
     @Test
+    fun opensABusinessAppsDialogWithItsLoginConfiguration() {
+        val business = FacebookLoginDialog(
+            appId = "713525445368431",
+            permissions = listOf("public_profile", "email", "user_friends"),
+            packageName = "social.hotmess.android.signintest",
+            configId = "4085560021745660",
+        )
+
+        assertEquals(
+            mapOf(
+                "client_id" to "713525445368431",
+                "redirect_uri" to "fb713525445368431://authorize/",
+                "response_type" to "code",
+                "state" to "s-1",
+                "config_id" to "4085560021745660",
+            ),
+            query(business.url(state = "s-1")),
+        )
+        assertTrue(business.isRedirect("fb713525445368431://authorize/?code=abc&state=s-1"))
+    }
+
+    @Test
     fun readsTheCodeFromTheRedirect() {
         val result = dialog.result("fbconnect://cct.social.hotmess.android.staging?code=abc%2B1&state=s-1#_=_", "s-1")
 
