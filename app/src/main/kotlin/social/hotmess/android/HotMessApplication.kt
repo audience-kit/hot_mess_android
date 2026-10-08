@@ -20,6 +20,7 @@ import social.hotmess.android.push.PushRegistrar
 import social.hotmess.android.session.AuthState
 import social.hotmess.android.session.BrandStore
 import social.hotmess.android.session.SessionStore
+import social.hotmess.android.support.ErrorReporter
 import social.hotmess.core.HotMessApi
 import social.hotmess.core.PassBook
 
@@ -32,6 +33,9 @@ class AppGraph(context: Context, val configuration: AppConfiguration = AppConfig
     val push = PushRegistrar(context, api, scope)
     val session = SessionStore(context, api, audienceKit, configuration, push, scope)
     val location = LocationProvider(context, api, configuration, scope)
+
+    /** Crash and error reports, and what "Report a problem" attaches. */
+    val errors = ErrorReporter(context, api, configuration, scope)
 
     /** The user's cover passes, kept so an opened pass still works with no signal at the door. */
     val passes = PassBook()
@@ -68,6 +72,7 @@ class HotMessApplication : Application() {
         super.onCreate()
         MapLibre.getInstance(this)
         graph = AppGraph(this)
+        graph.errors.start()
 
         graph.brand.load()
         graph.scope.launch { graph.session.start() }
