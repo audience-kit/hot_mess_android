@@ -12,7 +12,7 @@ AudienceKit Kotlin SDK, styled with the AudienceKit design system's `hot_mess` p
 - `app/`: the Android app. Theme and components (`ui/theme`, `ui/components`), screens
   (`ui/screens`), sign-in and branding (`session`), location and beacons (`location`), push (`push`),
   and paying cover with Stripe's payment sheet (`payments`).
-- `design/`: the script that draws the launcher icons from the iOS silhouette.
+- `design/`: the script that draws the launcher icons (the iOS "misprint" mark: Production blue, staging green, debug purple; `python3 design/make_launcher_icons.py`, needs cairosvg and Pillow).
 
 ## Setup
 
