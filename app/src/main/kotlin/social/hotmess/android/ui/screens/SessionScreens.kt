@@ -19,7 +19,11 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -103,16 +107,25 @@ fun LoginScreen(onSignIn: () -> Unit) {
                 }
             }
 
+            var reportingProblem by remember { mutableStateOf(false) }
             val failure = state as? AuthState.Failed
             if (failure != null) {
+                LaunchedEffect(failure) { graph.errors.record("sign_in", failure.message) }
                 AlertDialog(
                     onDismissRequest = { graph.session.signInCancelled() },
                     confirmButton = { TextButton(onClick = { graph.session.signInCancelled() }) { Text("OK") } },
+                    dismissButton = {
+                        TextButton(onClick = {
+                            reportingProblem = true
+                            graph.session.signInCancelled()
+                        }) { Text("Report a problem") }
+                    },
                     title = { Text("We couldn't sign you in", style = HotMessType.heading) },
                     text = { Text(failure.message, style = HotMessType.body) },
                     containerColor = tokens.surfaceRaised,
                 )
             }
+            if (reportingProblem) ReportProblemDialog(screen = "Sign in") { reportingProblem = false }
         }
     }
 }

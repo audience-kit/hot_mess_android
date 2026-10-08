@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.rounded.ConfirmationNumber
+import androidx.compose.material.icons.rounded.BugReport
 import androidx.compose.material.icons.rounded.Email
 import androidx.compose.material.icons.rounded.LocationOn
 import androidx.compose.material.icons.rounded.QrCodeScanner
@@ -56,6 +57,7 @@ fun MeScreen(navigator: Navigator) {
     val locale by graph.location.locale.collectAsStateWithLifecycle()
     val access by graph.location.access.collectAsStateWithLifecycle()
     var confirm by remember { mutableStateOf<Confirm?>(null) }
+    var reportingProblem by remember { mutableStateOf(false) }
     val configuration = graph.configuration
 
     LaunchedEffect(Unit) { graph.session.refreshUser() }
@@ -128,6 +130,13 @@ fun MeScreen(navigator: Navigator) {
             item {
                 DetailSection("Feedback") {
                     InfoRow(
+                        "Report a problem",
+                        icon = Icons.Rounded.BugReport,
+                        onClick = { reportingProblem = true },
+                        trailing = Icons.AutoMirrored.Rounded.KeyboardArrowRight,
+                    )
+                    RowDivider()
+                    InfoRow(
                         "Send feedback",
                         icon = Icons.Rounded.Email,
                         onClick = { context.openUrl("mailto:feedback@hotmess.social?subject=Hot%20Mess%20for%20Android%20${configuration.versionName}") },
@@ -152,6 +161,8 @@ fun MeScreen(navigator: Navigator) {
             }
         }
     }
+
+    if (reportingProblem) ReportProblemDialog(screen = "Me") { reportingProblem = false }
 
     confirm?.let { action ->
         AlertDialog(

@@ -33,6 +33,9 @@ class HotMessApi(val client: AudienceKitClient) {
     /** Friends seen in Now's reports, so chat can show them by their full names. */
     val friends = FriendDirectory()
 
+    /** Told about every failed call with what was called, for error reports. */
+    var onFailure: ((error: ApiError, operation: String) -> Unit)? = null
+
     // region Home
 
     /**
@@ -245,6 +248,29 @@ class HotMessApi(val client: AudienceKitClient) {
         )
     }
 
+    /**
+     * Sends an error report. Never throws: reporting must not cause an error of its own. Signed out it goes without
+     * the session token.
+     */
+    suspend fun reportError(report: ClientErrorReport, signedIn: Boolean) {
+        val body = json.encodeToString(ClientErrorReport.serializer(), report).toByteArray()
+        try {
+            client.data(APIRequest(method = "POST", path = "/v1/client_errors", body = body, authenticated = signedIn))
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+        }
+    }
+
+    /** "Report a problem". Works signed out too, so sign-in trouble can be reported. */
+    suspend fun reportProblem(report: BugReportRequest, signedIn: Boolean): BugReportResponse {
+        val body = json.encodeToString(BugReportRequest.serializer(), report).toByteArray()
+        val bytes = call("POST /v1/bug_reports") {
+            client.data(APIRequest(method = "POST", path = "/v1/bug_reports", body = body, authenticated = signedIn))
+        }
+        return json.decodeFromString(BugReportResponse.serializer(), bytes.toString(Charsets.UTF_8))
+    }
+
     suspend fun me(): User? {
         val me = call { client.me() } ?: return null
         val id = RecordId.normalize(me.id) ?: return null
@@ -258,7 +284,7 @@ class HotMessApi(val client: AudienceKitClient) {
         document: String,
         serializer: KSerializer<T>,
         variables: Map<String, JsonElement>? = null,
-    ): T = call { client.graphQL(document, serializer, variables, json = json) }
+    ): T = call(operationName(document)) { client.graphQL(document, serializer, variables, json = json) }
 
     /**
      * [call] for the cover mutations, whose errors are written for people ("The Wildrose doesn't take
@@ -272,7 +298,7 @@ class HotMessApi(val client: AudienceKitClient) {
         } catch (e: AudienceKitException.GraphQL) {
             throw ApiError.Other(e.errors.firstOrNull()?.message ?: "Something went wrong.")
         } catch (e: AudienceKitException) {
-            throw ApiError.from(e)
+            throw failed(ApiError.from(e), "cover")
         }
 
     /** A mutation whose GraphQL errors are written for people ("That ping has ended"), so they're shown as they are. */
@@ -288,17 +314,22 @@ class HotMessApi(val client: AudienceKitClient) {
         } catch (e: AudienceKitException.GraphQL) {
             throw userFacingMessage(e.errors.map { it.message })?.let { ApiError.Other(it) } ?: ApiError.from(e)
         } catch (e: AudienceKitException) {
-            throw ApiError.from(e)
+            throw failed(ApiError.from(e), operationName(document))
         }
 
-    private suspend fun <T> call(block: suspend () -> T): T =
+    private suspend fun <T> call(operation: String = "api", block: suspend () -> T): T =
         try {
             block()
         } catch (e: CancellationException) {
             throw e
         } catch (e: AudienceKitException) {
-            throw ApiError.from(e)
+            throw failed(ApiError.from(e), operation)
         }
+
+    private fun failed(error: ApiError, operation: String): ApiError {
+        runCatching { onFailure?.invoke(error, operation) }
+        return error
+    }
 
     companion object {
         /** Ignores fields the app doesn't know, so new API fields never break a shipped build. */
