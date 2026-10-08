@@ -19,7 +19,7 @@ class FacebookLoginDialogTest {
     fun opensTheDialogAskingForThePermissions() {
         val url = dialog.url(state = "s-1")
 
-        assertTrue(url.startsWith("https://www.facebook.com/v21.0/dialog/oauth?"))
+        assertTrue(url.startsWith("https://www.facebook.com/v26.0/dialog/oauth?"))
         assertEquals(
             mapOf(
                 "client_id" to "1168782378316790",
