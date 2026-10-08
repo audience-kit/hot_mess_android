@@ -47,7 +47,7 @@ OFFSET = (30, 14)
 BUILDS = {
     "main": dict(paper="#f6eff3", left="#2fb4ff", right="#ff3d9a"),
     "staging": dict(paper="#c9efc6", left="#ffd23d", right="#2fbf4f"),
-    "debug": dict(paper="#f1d2f4", left="#2fb4ff", right="#b84cc4"),
+    "debug": dict(paper="#dcc0f5", left="#a46bff", right="#5e1a9c"),
 }
 
 
