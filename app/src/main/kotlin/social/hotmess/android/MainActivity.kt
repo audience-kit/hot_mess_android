@@ -60,7 +60,10 @@ class MainActivity : ComponentActivity() {
 
     private fun signIn() {
         val url = graph.session.beginSignIn() ?: return
-        CustomTabsIntent.Builder().build().launchUrl(this, url.toUri())
+        CustomTabsIntent.Builder()
+            .setEphemeralBrowsingEnabled(graph.configuration.privateSignIn)
+            .build()
+            .launchUrl(this, url.toUri())
     }
 
     private fun handle(intent: Intent?) {

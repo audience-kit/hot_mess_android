@@ -24,9 +24,8 @@ import org.junit.runner.RunWith
  *
  * The test user comes from the `fbEmail`, `fbPassword` and optional `fbName` runner arguments (see
  * scripts/facebook-signin-test.sh); without them the test is skipped. The optional `fbAppId` is the
- * Facebook app the test users belong to, which has to be the build's. Sign-in opens in a Chrome
- * Custom Tab, which shares Chrome's Facebook cookies, so Chrome mustn't be signed in to Facebook as
- * someone else.
+ * Facebook app the test users belong to, which has to be the build's. Sign-in opens in an ephemeral
+ * Chrome Custom Tab, so whoever is signed in to Facebook in Chrome itself doesn't matter.
  */
 @RunWith(AndroidJUnit4::class)
 class FacebookSignInTest {
