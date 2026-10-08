@@ -32,7 +32,7 @@ class FacebookLoginDialog(
             add("state" to state)
             if (configId != null) add("config_id" to configId) else add("scope" to permissions.joinToString(","))
         }
-        return "https://www.facebook.com/v21.0/dialog/oauth?" +
+        return "https://www.facebook.com/v26.0/dialog/oauth?" +
             query.joinToString("&") { (name, value) -> "$name=${URLEncoder.encode(value, Charsets.UTF_8)}" }
     }
 
