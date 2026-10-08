@@ -121,6 +121,13 @@ class FacebookSignInTest {
                 continue
             }
 
+            // "Save your login info?" after logging in, and other offers to skip.
+            (device.findObject(By.text(NOT_NOW)) ?: device.findObject(By.desc(NOT_NOW)))?.let {
+                it.click()
+                device.waitForIdle()
+                continue
+            }
+
             // The consent page after logging in: "Continue", or "Continue as …" handled above.
             device.findObject(By.clickable(true).text(CONTINUE))?.let {
                 it.click()
@@ -171,6 +178,7 @@ class FacebookSignInTest {
         const val TIMEOUT = 20_000L
         val CONTINUE: Pattern = Pattern.compile("(?i)continue")
         val CONTINUE_AS: Pattern = Pattern.compile("(?i)continue as (.+?)\\??$")
+        val NOT_NOW: Pattern = Pattern.compile("(?i)not now")
         val LOG_IN: Pattern = Pattern.compile("(?i)log ?in")
         val ANOTHER_ACCOUNT: Pattern = Pattern.compile("(?i)not you\\??|(log in|use) (to |with )?(another|a different) (account|profile)|switch accounts?")
         val CHROME_FIRST_RUN: Pattern = Pattern.compile("(?i)use without an account|stay signed out|no,? thanks|accept & continue")
