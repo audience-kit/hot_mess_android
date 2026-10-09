@@ -57,9 +57,9 @@ builds must use a number higher than the previous release.
 | Build type | API | Facebook app | Application id |
 | --- | --- | --- | --- |
 | `debug` | `http://10.0.2.2:3000` (the API on your machine, from the emulator) | 842337999153841 | `social.hotmess.android.development` |
-| `staging` | `https://api-staging.audiencekit.com` | 1660272792277019 | `social.hotmess.android.staging` |
+| `staging` | `https://api.next.audiencekit.com` | 1660272792277019 | `social.hotmess.android.staging` |
 | `release` | `https://api.audiencekit.com` | 1168782378316790 | `social.hotmess.android.app` |
-| `signInTest` | `https://api-staging.audiencekit.com` | 713525445368431 (AudienceKit platform) | `social.hotmess.android.signintest` |
+| `signInTest` | `https://api.next.audiencekit.com` | 713525445368431 (AudienceKit platform) | `social.hotmess.android.signintest` |
 
 Hot Mess is a consumer app: sign-in is classic Facebook Login on the build's Facebook app, asking
 only for `public_profile` until App Review is approved, like the iOS app. It opens Facebook's OAuth dialog

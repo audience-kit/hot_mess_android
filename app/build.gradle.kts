@@ -40,9 +40,8 @@ data class Environment(
     val audienceId: String,
     val facebookAppId: String,
     /**
-     * Staging calls api-staging.audiencekit.com, the production API under its staging host, which signs people in
-     * with Hot Mess's staging Facebook app; it also sends X-AudienceKit-Environment: staging, which does the same on
-     * any host. Debug runs against a local API and stays production.
+     * Staging calls the next preview (api.next.audiencekit.com), which runs the API as staging and signs people in
+     * with Hot Mess's staging Facebook app. Debug runs against a local API.
      */
     val audienceKitEnvironment: String = "production",
     /** The Login for Business configuration, for a Business-type Facebook app. */
@@ -52,15 +51,22 @@ data class Environment(
      * whoever is signed in to facebook.com in Chrome doesn't get in the sign-in test's way.
      */
     val privateSignIn: Boolean = false,
+    /**
+     * Names the Hot Mess audience to the API for sign-in and branding: its console host on that API's platform.
+     * hotmess.admin.audiencekit.com resolves by subdomain; switch to hotmess.social once that domain is verified.
+     */
+    val audienceHost: String = "hotmess.admin.audiencekit.com",
 )
 
 val environments = mapOf(
     // The emulator reaches the host's localhost at 10.0.2.2.
     "debug" to Environment("debug", "http://10.0.2.2:3000", "", "842337999153841"),
-    "staging" to Environment("staging", "https://api-staging.audiencekit.com", "", "1660272792277019", "staging"),
+    "staging" to Environment("staging", "https://api.next.audiencekit.com", "", "1660272792277019", "staging",
+        audienceHost = "hotmess.admin.next.audiencekit.com"),
     // Staging, signing in with the AudienceKit platform app instead: Meta won't make new Facebook test users or
     // add the ones there are to another app, so this is the only app the sign-in test's users work on.
-    "signInTest" to Environment("signInTest", "https://api-staging.audiencekit.com", "", "713525445368431", "staging", "4085560021745660", privateSignIn = true),
+    "signInTest" to Environment("signInTest", "https://api.next.audiencekit.com", "", "713525445368431", "staging", "4085560021745660", privateSignIn = true,
+        audienceHost = "hotmess.admin.next.audiencekit.com"),
     "release" to Environment("release", "https://api.audiencekit.com", "b0f8b66a-e636-495d-9475-0f5317ea08e0", "1168782378316790"),
 )
 
@@ -89,10 +95,6 @@ android {
             }
         }
 
-        // Names the Hot Mess audience to the AudienceKit API for sign-in and branding.
-        // hotmess.admin.audiencekit.com resolves by subdomain; switch to hotmess.social once that
-        // domain is verified.
-        buildConfigField("String", "AUDIENCE_HOST", "\"hotmess.admin.audiencekit.com\"")
         // Venues' iBeacons; their major value names a locale.
         buildConfigField("String", "BEACON_UUID", "\"1422F585-E729-49E3-9E1F-B943DE12BAA9\"")
         // Push needs a Firebase app. Leave these empty and the app runs without push.
@@ -150,6 +152,7 @@ android {
     buildTypes.configureEach {
         val environment = environments.getValue(name)
         buildConfigField("String", "API_BASE_URL", "\"${environment.apiBaseUrl}\"")
+        buildConfigField("String", "AUDIENCE_HOST", "\"${environment.audienceHost}\"")
         buildConfigField("String", "AUDIENCE_ID", "\"${environment.audienceId}\"")
         buildConfigField("String", "FACEBOOK_APP_ID", "\"${environment.facebookAppId}\"")
         buildConfigField("String", "FACEBOOK_LOGIN_CONFIG_ID", "\"${environment.facebookLoginConfigId}\"")
