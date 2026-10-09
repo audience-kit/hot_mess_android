@@ -430,6 +430,16 @@ class ChatProtocolTest {
         )
 
         assertEquals(
+            ChatProtocol.Frame.Removed("m-1"),
+            ChatProtocol.parse("""{"identifier":"x","message":{"type":"removed","id":"m-1"}}"""),
+        )
+        assertEquals(
+            ChatProtocol.Frame.Cleared,
+            ChatProtocol.parse("""{"identifier":"x","message":{"type":"cleared","cleared_at":"2026-10-09T04:00:00.123Z"}}"""),
+        )
+        assertEquals(null, ChatProtocol.parse("""{"identifier":"x","message":{"type":"removed"}}"""))
+
+        assertEquals(
             ChatProtocol.Frame.PresenceChanged("u-3", online = false, reachable = true),
             ChatProtocol.parse("""{"identifier":"x","message":{"type":"presence","user_id":"u-3","presence":"push"}}"""),
         )

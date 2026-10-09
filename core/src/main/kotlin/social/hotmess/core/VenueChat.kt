@@ -143,6 +143,9 @@ data class ChatRoom(val kind: Kind, val id: String) {
  * `{"type":"pin","id":…,"pinned":true,"announcement":<line>}` or `{"type":"pin","id":…,"pinned":false}`
  * as announcements are pinned and unpinned; and `"presence":"push"`, on a presence frame or a line, for a
  * friend outside the room whom a notification reaches.
+ *
+ * When an admin removes a line the room hears `{"type":"removed","id":…}`, and when they clear the room
+ * `{"type":"cleared","cleared_at":…}`: every line so far is gone.
  */
 object ChatProtocol {
     // Lenient, so an id sent as a number still reads as a string rather than dropping the line.
@@ -193,6 +196,12 @@ object ChatProtocol {
 
         /** An announcement (by [id]) was pinned, with the [announcement], or unpinned (null). */
         data class Pin(val id: String, val announcement: VenueMessage?) : Frame
+
+        /** An admin removed a line (by [id]); nobody sees it again. */
+        data class Removed(val id: String) : Frame
+
+        /** An admin cleared the room: every line so far is gone. */
+        data object Cleared : Frame
     }
 
     /** Action Cable names a subscription by a JSON *string*, not an object. */
@@ -230,6 +239,8 @@ object ChatProtocol {
                     "presence" -> return presence(message)
                     "history" -> return history(message)
                     "pin" -> return pin(message)
+                    "removed" -> return message.string("id")?.let(Frame::Removed)
+                    "cleared" -> return Frame.Cleared
                 }
                 val payload = runCatching { json.decodeFromJsonElement(IncomingMessage.serializer(), message) }.getOrNull()
                     ?: return null
@@ -387,6 +398,8 @@ class VenueChatConnection(
 
         data class History(val messages: List<VenueMessage>, val pinned: VenueMessage?) : Event
         data class Pin(val id: String, val announcement: VenueMessage?) : Event
+        data class Removed(val id: String) : Event
+        data object Cleared : Event
     }
 
     @Volatile private var socket: WebSocket? = null
@@ -415,6 +428,8 @@ class VenueChatConnection(
                         trySend(Event.PresenceChanged(frame.userId, frame.online, frame.name, frame.avatarUrl, frame.reachable))
                     is ChatProtocol.Frame.History -> trySend(Event.History(frame.messages, frame.pinned))
                     is ChatProtocol.Frame.Pin -> trySend(Event.Pin(frame.id, frame.announcement))
+                    is ChatProtocol.Frame.Removed -> trySend(Event.Removed(frame.id))
+                    ChatProtocol.Frame.Cleared -> trySend(Event.Cleared)
                     null -> Unit
                 }
             }
