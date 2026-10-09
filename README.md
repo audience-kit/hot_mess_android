@@ -28,7 +28,18 @@ AudienceKit Kotlin SDK, styled with the AudienceKit design system's `hot_mess` p
    hotmess.firebase.senderId=...
    ```
 
-3. Open the project in Android Studio, or run `./gradlew installDebug`.
+3. To sign Release for Google Play, point `local.properties` at the upload keystore (kept outside the
+   repository, never committed). Google Play manages the app signing key and re-signs what it ships.
+
+   ```properties
+   hotmess.upload.storeFile=~/.config/audience-kit/hotmess-upload.p12
+   hotmess.upload.keyAlias=upload
+   hotmess.upload.storePassword=...
+   ```
+
+   Then `./gradlew :app:bundleRelease` writes `app/build/outputs/bundle/release/app-release.aab`.
+
+4. Open the project in Android Studio, or run `./gradlew installDebug`.
 
 ## Environments
 
@@ -36,7 +47,7 @@ AudienceKit Kotlin SDK, styled with the AudienceKit design system's `hot_mess` p
 | --- | --- | --- | --- |
 | `debug` | `http://10.0.2.2:3000` (the API on your machine, from the emulator) | 842337999153841 | `social.hotmess.android.development` |
 | `staging` | `https://api-staging.audiencekit.com` | 1660272792277019 | `social.hotmess.android.staging` |
-| `release` | `https://api.audiencekit.com` | 1168782378316790 | `social.hotmess.android` |
+| `release` | `https://api.audiencekit.com` | 1168782378316790 | `social.hotmess.android.app` |
 | `signInTest` | `https://api-staging.audiencekit.com` | 713525445368431 (AudienceKit platform) | `social.hotmess.android.signintest` |
 
 Hot Mess is a consumer app: sign-in is classic Facebook Login on the build's Facebook app, asking
