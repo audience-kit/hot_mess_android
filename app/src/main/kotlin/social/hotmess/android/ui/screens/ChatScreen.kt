@@ -136,6 +136,9 @@ class VenueChatModel(private val graph: AppGraph, private val room: ChatRoom) : 
                         }
                         is VenueChatConnection.Event.History -> history(event.messages, event.pinned)
                         is VenueChatConnection.Event.Pin -> pin(event.id, event.announcement)
+                        // An admin removed a line, or cleared the room; a pinned announcement goes with its line.
+                        is VenueChatConnection.Event.Removed -> _messages.value = _messages.value.filterNot { it.id == event.id }
+                        VenueChatConnection.Event.Cleared -> _messages.value = emptyList()
                         is VenueChatConnection.Event.Disconnected -> {
                             _status.value = Status.OFFLINE
                             // The next roster says who's here; until then nobody is known to be.
