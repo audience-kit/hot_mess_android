@@ -11,7 +11,6 @@ import androidx.compose.material.icons.rounded.ConfirmationNumber
 import androidx.compose.material.icons.rounded.BugReport
 import androidx.compose.material.icons.rounded.Email
 import androidx.compose.material.icons.rounded.LocationOn
-import androidx.compose.material.icons.rounded.QrCodeScanner
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -19,7 +18,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -28,8 +26,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import social.hotmess.android.location.LocationAccess
-import com.audiencekit.DoorVenue
-import kotlinx.coroutines.CancellationException
 import social.hotmess.android.ui.LocalAppGraph
 import social.hotmess.android.ui.Navigator
 import social.hotmess.android.ui.ScreenScaffold
@@ -62,17 +58,6 @@ fun MeScreen(navigator: Navigator) {
 
     LaunchedEffect(Unit) { graph.session.refreshUser() }
 
-    // Door mode shows only for people who can work a venue's door.
-    val doorVenues by produceState<List<DoorVenue>>(emptyList()) {
-        value = try {
-            graph.api.doorVenues()
-        } catch (e: CancellationException) {
-            throw e
-        } catch (_: Exception) {
-            emptyList()
-        }
-    }
-
     ScreenScaffold(title = "Me") {
         Feed {
             item {
@@ -99,15 +84,6 @@ fun MeScreen(navigator: Navigator) {
                         onClick = navigator::openPasses,
                         trailing = Icons.AutoMirrored.Rounded.KeyboardArrowRight,
                     )
-                    if (doorVenues.isNotEmpty()) {
-                        RowDivider()
-                        InfoRow(
-                            "Door mode",
-                            icon = Icons.Rounded.QrCodeScanner,
-                            onClick = { navigator.openDoor() },
-                            trailing = Icons.AutoMirrored.Rounded.KeyboardArrowRight,
-                        )
-                    }
                 }
             }
             item {

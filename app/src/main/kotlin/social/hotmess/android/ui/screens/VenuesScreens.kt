@@ -24,6 +24,8 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.Button
+import com.audiencekit.Coordinates
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -96,6 +98,7 @@ import social.hotmess.core.isIn
 fun VenuesScreen(navigator: Navigator) {
     val graph = LocalAppGraph.current
     val locale by graph.location.locale.collectAsStateWithLifecycle()
+    val coordinates by graph.location.coordinates.collectAsStateWithLifecycle()
     val branding by graph.brand.branding.collectAsStateWithLifecycle()
     val loader = rememberLoader<List<Venue>>("venues")
     val state by loader.state.collectAsStateWithLifecycle()
@@ -114,6 +117,7 @@ fun VenuesScreen(navigator: Navigator) {
                             Box(Modifier.fillMaxWidth().height(Sizes.mapInline).clip(Radius.photo)) {
                                 VenueMap(
                                     venues = venues,
+                                    location = coordinates,
                                     onVenue = { navigator.open(AppRoute.VenueDetail(it)) },
                                     onMapTap = { mapExpanded = true },
                                     modifier = Modifier.fillMaxSize().clip(Radius.photo),
@@ -145,6 +149,7 @@ fun VenuesScreen(navigator: Navigator) {
             if (mapExpanded) {
                 FullScreenVenueMap(
                     venues = venues,
+                    location = coordinates,
                     onVenue = {
                         mapExpanded = false
                         navigator.open(AppRoute.VenueDetail(it))
@@ -158,10 +163,20 @@ fun VenuesScreen(navigator: Navigator) {
 
 /** The venues map filling the screen. Back or the close button dismisses it. */
 @Composable
-private fun FullScreenVenueMap(venues: List<Venue>, onVenue: (String) -> Unit, onClose: () -> Unit) {
+private fun FullScreenVenueMap(venues: List<Venue>, location: Coordinates?, onVenue: (String) -> Unit, onClose: () -> Unit) {
+    var selectedId by rememberSaveable { mutableStateOf<String?>(null) }
     Dialog(onDismissRequest = onClose, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Box(Modifier.fillMaxSize()) {
-            VenueMap(venues = venues, onVenue = onVenue, modifier = Modifier.fillMaxSize())
+            VenueMap(venues = venues, location = location, onVenue = { selectedId = it }, modifier = Modifier.fillMaxSize())
+            venues.firstOrNull { it.id == selectedId }?.let { venue ->
+                Button(
+                    onClick = { onVenue(venue.id) },
+                    modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(16.dp),
+                ) {
+                    Text(venue.name, modifier = Modifier.weight(1f))
+                    Icon(Icons.AutoMirrored.Rounded.KeyboardArrowRight, contentDescription = null)
+                }
+            }
             MapButton(
                 icon = Icons.Rounded.Close,
                 label = "Close map",

@@ -12,6 +12,7 @@ import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.rounded.LocationOff
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -49,6 +50,7 @@ import social.hotmess.android.ui.LocalAppGraph
 import social.hotmess.android.ui.Navigator
 import social.hotmess.android.ui.components.Avatar
 import social.hotmess.android.ui.components.ChatPeek
+import social.hotmess.android.ui.components.ChatPeekParticipant
 import social.hotmess.android.ui.components.ChatThreadMessage
 import social.hotmess.android.ui.components.DetailInset
 import social.hotmess.android.ui.components.DetailSection
@@ -161,13 +163,27 @@ fun NowScreen(navigator: Navigator) {
                     listState,
                     hero = {
                         HeroHeader(now.imageUrl, topInset, onTone = { heroTone = it }) {
-                            Text(
-                                title,
-                                style = HotMessType.display,
-                                maxLines = 2,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.semantics { heading() },
-                            )
+                            val venue = now.venue
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(Space.s3),
+                                modifier = if (venue != null) Modifier.clickable(
+                                    role = Role.Button,
+                                    onClickLabel = "View venue details",
+                                    onClick = { navigator.open(AppRoute.VenueDetail(venue.id)) },
+                                ) else Modifier,
+                            ) {
+                                Text(
+                                    venue?.name ?: title,
+                                    style = HotMessType.display,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.weight(1f, fill = false).semantics { heading() },
+                                )
+                                if (venue != null) {
+                                    Icon(Icons.AutoMirrored.Rounded.KeyboardArrowRight, contentDescription = null)
+                                }
+                            }
                         }
                     },
                 ) {
@@ -221,8 +237,7 @@ fun NowScreen(navigator: Navigator) {
                     }
                     nearby(now, coordinates != null, navigator)
                     now.venue?.let { venue ->
-                        item { SmallTalk(venue, navigator) }
-                        item { FriendsHere(now.friends) }
+                        item { SmallTalk(venue, now.friends, navigator) }
                     }
                     now.locale?.takeIf { now.venue == null && it.chatOpen }?.let { locale ->
                         item { LocaleSmallTalk(locale, navigator) }
@@ -258,13 +273,12 @@ fun NowScreen(navigator: Navigator) {
     }
 }
 
-/** The venue you're at, the venues near you, or a nudge to turn on location. */
+/** Away from a venue: nearby venues, or a nudge to turn on location. */
 private fun LazyListScope.nearby(now: Now, located: Boolean, navigator: Navigator) {
     val open = { venue: Venue -> navigator.open(AppRoute.VenueDetail(venue.id)) }
-    val venue = now.venue
+    if (now.venue != null) return
     val venues = now.venues
     when {
-        venue != null -> cardSection("here", "You're at", listOf(venue), key = { it.id }) { VenueCard(it, onClick = { open(it) }) }
         venues != null && venues.isEmpty() -> item { DetailSection("Venues near you") { EmptyRow("You aren't near any venues right now.") } }
         venues != null -> cardSection("nearby", "Venues near you", venues.take(3), key = { it.id }) { VenueCard(it, onClick = { open(it) }) }
         !located -> item { DetailSection("Venues near you") { EmptyRow("Turn on location to see what's happening near you.") } }
@@ -273,13 +287,26 @@ private fun LazyListScope.nearby(now: Now, located: Boolean, navigator: Navigato
 
 /** The last few lines of the venue's chat, and the way into the room. */
 @Composable
-private fun SmallTalk(venue: Venue, navigator: Navigator) {
+private fun SmallTalk(venue: Venue, friends: List<Friend>, navigator: Navigator) {
+    val graph = LocalAppGraph.current
+    val user by graph.session.user.collectAsStateWithLifecycle()
+    val participants = buildList {
+        add(ChatPeekParticipant("venue-${venue.id}", venue.name, venue.photoUrl, isPlace = true))
+        add(ChatPeekParticipant("viewer", "You", user?.id?.let(graph.configuration::avatarUrl)))
+        friends.filterNot { it.id.equals(user?.id, ignoreCase = true) }
+            .distinctBy { it.id.lowercase() }.forEach { friend ->
+                add(ChatPeekParticipant(
+                    friend.id, friend.name, graph.configuration.avatarUrl(friend.id), presenceOf(friend.presence),
+                ))
+            }
+    }
     ChatPeek(
         rememberPeekMessages(venue.recentMessages),
         title = "Small talk",
         room = venue.name,
         onOpen = { navigator.openChat(venue.id, venue.name) },
         presence = remember(venue.recentMessages) { peekPresence(venue.recentMessages) },
+        participants = participants,
     )
 }
 

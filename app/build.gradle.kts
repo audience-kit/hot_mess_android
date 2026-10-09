@@ -1,3 +1,6 @@
+import java.time.Instant
+import org.gradle.api.provider.ValueSource
+import org.gradle.api.provider.ValueSourceParameters
 import java.util.Base64
 import java.util.Properties
 
@@ -15,6 +18,20 @@ val localProperties = Properties().apply {
 }
 fun secret(name: String): String =
     providers.gradleProperty("hotmess.$name").orNull ?: localProperties.getProperty("hotmess.$name") ?: ""
+
+// A ValueSource makes Gradle recheck the clock even when configuration caching is enabled.
+// Seconds since 2026-01-01 UTC keep local and CI builds ordered without modifying tracked files.
+abstract class AutomaticBuildNumber : ValueSource<String, ValueSourceParameters.None> {
+    override fun obtain(): String = (Instant.now().epochSecond - 1767225600L).toString()
+}
+
+val buildNumberText = providers.gradleProperty("hotmess.buildNumber")
+    .orElse(providers.environmentVariable("BUILD_NUMBER"))
+    .orElse(providers.of(AutomaticBuildNumber::class) {})
+    .get()
+val buildNumber = buildNumberText.toIntOrNull()
+    ?.takeIf { it in 1..2100000000 }
+    ?: error("Build number must be an integer between 1 and 2100000000; got '$buildNumberText'")
 
 /** The settings that differ between Debug, Staging and Release, like the iOS app's xcconfig files. */
 data class Environment(
@@ -55,8 +72,8 @@ android {
         applicationId = "social.hotmess.android"
         minSdk = 28
         targetSdk = 36
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = buildNumber
+        versionName = "2.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         // The Facebook sign-in test's test user, from the environment (scripts/facebook-signin-test.sh

@@ -41,6 +41,17 @@ AudienceKit Kotlin SDK, styled with the AudienceKit design system's `hot_mess` p
 
 4. Open the project in Android Studio, or run `./gradlew installDebug`.
 
+## Version and build numbers
+
+The app version is **2.0**. Each Gradle invocation defaults to a build number (`versionCode`)
+computed from the seconds since 2026-01-01 UTC, so later builds automatically get higher numbers
+on both developer machines and CI. Builds started in the same second share a number; APK and AAB
+built together also share it. The clock is rechecked when Gradle reuses its configuration cache.
+
+For a reproducible rebuild, pass `-Photmess.buildNumber=12345678` or set `BUILD_NUMBER` (the Gradle
+property takes precedence). Overrides must be integers from 1 through 2,100,000,000, and published
+builds must use a number higher than the previous release.
+
 ## Environments
 
 | Build type | API | Facebook app | Application id |
@@ -51,7 +62,7 @@ AudienceKit Kotlin SDK, styled with the AudienceKit design system's `hot_mess` p
 | `signInTest` | `https://api-staging.audiencekit.com` | 713525445368431 (AudienceKit platform) | `social.hotmess.android.signintest` |
 
 Hot Mess is a consumer app: sign-in is classic Facebook Login on the build's Facebook app, asking
-for `public_profile`, `email` and `user_friends`, like the iOS app. It opens Facebook's OAuth dialog
+only for `public_profile` until App Review is approved, like the iOS app. It opens Facebook's OAuth dialog
 in a Custom Tab, which redirects to `fbconnect://cct.<application id>` with a code that the API
 exchanges. Each Facebook app needs an Android platform listing this app's package names and key
 hashes, and the redirect has to be accepted as a Valid OAuth Redirect URI.
@@ -62,8 +73,7 @@ Venues that take cover in the app show "Pay cover" on their page, their events t
 `buyCover` starts the payment, Stripe's payment sheet (with Google Pay) takes it as a direct charge on
 the venue's own Stripe account, and `confirmCover` turns the pass on. A pass's QR code is made on the
 phone from its secret every 30 seconds (`CoverPass` in the SDK), so it works with no signal at the
-door. Passes are on the Me tab. People who work a venue's door get Door mode there (and on the venue's
-page), which scans passes with the camera.
+door. Passes are on the Me tab. Door operations are handled through Velvet, rather than the Me tab.
 
 ## Facebook sign-in test
 
