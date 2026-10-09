@@ -85,12 +85,28 @@ android {
         buildConfigField("String", "FIREBASE_SENDER_ID", "\"${secret("firebase.senderId")}\"")
     }
 
+    // Release builds are signed with the Play upload key, kept outside the repository: `hotmess.upload.storeFile`,
+    // `.storePassword`, `.keyAlias` and `.keyPassword` in local.properties. Without them Release is unsigned.
+    // Google Play re-signs what it ships with the app signing key it manages.
+    val uploadStoreFile = secret("upload.storeFile")
+    if (uploadStoreFile.isNotEmpty()) {
+        signingConfigs.create("upload") {
+            storeFile = file(uploadStoreFile.replaceFirst(Regex("^~"), System.getProperty("user.home")))
+            storePassword = secret("upload.storePassword")
+            keyAlias = secret("upload.keyAlias").ifEmpty { "upload" }
+            keyPassword = secret("upload.keyPassword").ifEmpty { secret("upload.storePassword") }
+        }
+    }
+
     buildTypes {
         getByName("debug") {
             applicationIdSuffix = ".development"
             versionNameSuffix = "-development"
         }
         getByName("release") {
+            // The Play listing's package.
+            applicationIdSuffix = ".app"
+            signingConfigs.findByName("upload")?.let { signingConfig = it }
             isMinifyEnabled = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
