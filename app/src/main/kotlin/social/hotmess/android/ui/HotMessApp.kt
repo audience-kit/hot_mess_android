@@ -48,7 +48,6 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.serialization.Serializable
 import social.hotmess.android.location.LocationAccess
 import social.hotmess.android.session.AuthState
-import social.hotmess.android.ui.screens.DoorScreen
 import social.hotmess.android.ui.screens.EventScreen
 import social.hotmess.android.ui.screens.EventsScreen
 import social.hotmess.android.ui.screens.LaunchScreen
@@ -83,8 +82,6 @@ import social.hotmess.core.ChatRoom
 /** A cover pass, with its live QR code. */
 @Serializable data class PassRoute(val id: String)
 @Serializable data object PassesRoute
-/** Door mode, at [venueId] or a door the user picks. */
-@Serializable data class DoorRoute(val venueId: String? = null)
 
 private val AppTab.route: Any
     get() = when (this) {
@@ -122,8 +119,6 @@ interface Navigator {
     /** A cover pass, full screen. */
     fun openPass(admissionId: String)
     fun openPasses()
-    /** Door mode, at [venueId] or a door to pick. */
-    fun openDoor(venueId: String? = null)
     fun back()
 }
 
@@ -207,10 +202,6 @@ private fun MainShell(links: Flow<AppRoute>) {
             navController.navigate(PassesRoute) { launchSingleTop = true }
         }
 
-        override fun openDoor(venueId: String?) {
-            navController.navigate(DoorRoute(venueId)) { launchSingleTop = true }
-        }
-
         override fun back() {
             navController.popBackStack()
         }
@@ -232,8 +223,8 @@ private fun MainShell(links: Flow<AppRoute>) {
 
     AskForPermissions()
 
-    // Chat, a pass and Door mode take the whole screen.
-    val fullScreen = destination?.let { it.hasRoute(ChatRoute::class) || it.hasRoute(PassRoute::class) || it.hasRoute(DoorRoute::class) } == true
+    // Chat and a pass take the whole screen.
+    val fullScreen = destination?.let { it.hasRoute(ChatRoute::class) || it.hasRoute(PassRoute::class) } == true
 
     Scaffold(
         containerColor = tokens.surface,
@@ -262,7 +253,6 @@ private fun MainShell(links: Flow<AppRoute>) {
             }
             composable<PassRoute> { PassScreen(it.toRoute<PassRoute>().id, navigator) }
             composable<PassesRoute> { PassesScreen(navigator) }
-            composable<DoorRoute> { DoorScreen(it.toRoute<DoorRoute>().venueId, navigator) }
         }
     }
 }
