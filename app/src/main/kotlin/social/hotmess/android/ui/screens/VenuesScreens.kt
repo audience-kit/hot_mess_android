@@ -18,7 +18,6 @@ import androidx.compose.material.icons.rounded.NearMe
 import androidx.compose.material.icons.rounded.OpenInFull
 import androidx.compose.material.icons.rounded.Phone
 import androidx.compose.material.icons.rounded.Place
-import androidx.compose.material.icons.rounded.QrCodeScanner
 import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -247,29 +246,18 @@ fun VenueScreen(id: String, navigator: Navigator) {
                 },
             ) {
                 val offer = CoverOffer.of(loaded)
-                if (offer != null || loaded.canWorkDoor) {
+                if (offer != null) {
                     item {
                         DetailSection("Cover") {
-                            if (offer != null) {
-                                CoverRow(
-                                    offer,
-                                    paying = checkoutState == CoverCheckout.State.Working,
-                                    onPay = { checkout.pay(loaded.id, loaded.name) },
-                                    onShowPass = { pass ->
-                                        graph.passes.put(pass)
-                                        navigator.openPass(pass.id)
-                                    },
-                                )
-                            }
-                            if (loaded.canWorkDoor) {
-                                if (offer != null) RowDivider()
-                                InfoRow(
-                                    "Work the door",
-                                    icon = Icons.Rounded.QrCodeScanner,
-                                    onClick = { navigator.openDoor(loaded.id) },
-                                    trailing = Icons.AutoMirrored.Rounded.KeyboardArrowRight,
-                                )
-                            }
+                            CoverRow(
+                                offer,
+                                paying = checkoutState == CoverCheckout.State.Working,
+                                onPay = { checkout.pay(loaded.id, loaded.name) },
+                                onShowPass = { pass ->
+                                    graph.passes.put(pass)
+                                    navigator.openPass(pass.id)
+                                },
+                            )
                         }
                     }
                 }

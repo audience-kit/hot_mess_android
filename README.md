@@ -62,8 +62,7 @@ Venues that take cover in the app show "Pay cover" on their page, their events t
 `buyCover` starts the payment, Stripe's payment sheet (with Google Pay) takes it as a direct charge on
 the venue's own Stripe account, and `confirmCover` turns the pass on. A pass's QR code is made on the
 phone from its secret every 30 seconds (`CoverPass` in the SDK), so it works with no signal at the
-door. Passes are on the Me tab. People who work a venue's door get Door mode there (and on the venue's
-page), which scans passes with the camera.
+door. Passes are on the Me tab. Scanning passes at the door is the separate Velvet app's job.
 
 ## Facebook sign-in test
 
