@@ -240,11 +240,11 @@ class CoverApiTest {
     @Test
     fun theVenueAsksForTonightsCoverAndPass() = runTest {
         val (api, bodies) = api {
-            """{"data":{"venue":{"id":"v-1","name":"The Wildrose","chat":{"open":false},"events":{"upcoming":{"nodes":[]}},
+            """{"data":{"venues":{"venue":{"id":"v-1","name":"The Wildrose","chat":{"open":false},"events":{"upcoming":{"nodes":[]}},
                "cover":{"canWorkDoor":true,"charge":{"amountCents":1000,"totalCents":1112,"feeCents":50,"currency":"usd","night":"2026-10-09",
                  "from":"21:00","payable":true,"event":null},
                "viewerAdmission":{"id":"a-1","status":"PAID","night":"2026-10-09","totalCents":1112,"isRefundable":true,
-                 "passSecret":"AAEC","venue":{"id":"v-1","name":"The Wildrose"}}}}}}"""
+                 "passSecret":"AAEC","venue":{"id":"v-1","name":"The Wildrose"}}}}}}}"""
         }
         val venue = api.venueOverview("v-1").venue
 
@@ -257,10 +257,10 @@ class CoverApiTest {
     @Test
     fun theEventAsksForItsCoverAndTheVenuesTonight() = runTest {
         val (api, bodies) = api {
-            """{"data":{"event":{"id":"e-1","name":"Drag Bingo","startAt":"2026-10-10T04:00:00Z",
+            """{"data":{"events":{"event":{"id":"e-1","name":"Drag Bingo","startAt":"2026-10-10T04:00:00Z",
                "cover":{"charge":{"amountCents":500,"totalCents":612,"night":"2026-10-09","payable":true}},
                "venue":{"name":"The Wildrose","venue":{"id":"v-1","name":"The Wildrose","cover":{"charge":{"amountCents":500,
-                 "totalCents":612,"night":"2026-10-09","payable":true},"viewerAdmission":null}}}}}}"""
+                 "totalCents":612,"night":"2026-10-09","payable":true},"viewerAdmission":null}}}}}}}"""
         }
         val event = api.event("e-1")
 

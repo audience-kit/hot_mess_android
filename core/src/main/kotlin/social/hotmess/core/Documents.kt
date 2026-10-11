@@ -86,39 +86,43 @@ object Documents {
 
     val VENUES: String = """
         query Venues {
-          venues { $VENUE_FIELDS hidden order locale { id name label } }
+          audience { venues { list { nodes { $VENUE_FIELDS hidden order locale { id name label } } } } }
         }
     """.trimIndent()
 
     val VENUE: String = """
         query Venue(${'$'}id: ID!) {
-          venue(id: ${'$'}id) {
-            $VENUE_FIELDS
-            chat { open $RECENT_MESSAGES }
-            cover { charge { ${Queries.COVER_CHARGE_FIELDS} } viewerAdmission { ${Queries.ADMISSION_FIELDS} } canWorkDoor }
-            events { upcoming { nodes { $EVENT_FIELDS } } }
-            $PROFILE_SOCIAL_LINKS
-            friends { list { nodes { $FRIEND_OUT_FIELDS } } }
-            ping { friendPings { $PING_FIELDS } }
+          venues {
+            venue(id: ${'$'}id) {
+              $VENUE_FIELDS
+              chat { open $RECENT_MESSAGES }
+              cover { charge { ${Queries.COVER_CHARGE_FIELDS} } viewerAdmission { ${Queries.ADMISSION_FIELDS} } canWorkDoor }
+              events { upcoming { nodes { $EVENT_FIELDS } } }
+              $PROFILE_SOCIAL_LINKS
+              friends { list { nodes { $FRIEND_OUT_FIELDS } } }
+              ping { friendPings { $PING_FIELDS } }
+            }
           }
         }
     """.trimIndent()
 
     val PEOPLE: String = """
         query People {
-          people { $PERSON_FIELDS order }
+          audience { people { list { nodes { $PERSON_FIELDS order } } } }
         }
     """.trimIndent()
 
     val PERSON: String = """
         query Person(${'$'}id: ID!) {
-          person(id: ${'$'}id) {
-            $PERSON_FIELDS
-            events { upcoming { nodes { $EVENT_FIELDS } } }
-            $PROFILE_SOCIAL_LINKS
-            members { id name pictureUrl }
-            groups { id name pictureUrl }
-            music { tracks { nodes { id title provider providerUrl waveformUrl artworkUrl } } }
+          people {
+            person(id: ${'$'}id) {
+              $PERSON_FIELDS
+              events { upcoming { nodes { $EVENT_FIELDS } } }
+              $PROFILE_SOCIAL_LINKS
+              members { id name pictureUrl }
+              groups { id name pictureUrl }
+              music { tracks { nodes { id title provider providerUrl waveformUrl artworkUrl } } }
+            }
           }
         }
     """.trimIndent()
@@ -131,25 +135,27 @@ object Documents {
 
     val EVENT: String = """
         query Event(${'$'}id: ID!) {
-          event(id: ${'$'}id) {
-            $EVENT_FIELDS
-            cover { charge { ${Queries.COVER_CHARGE_FIELDS} } }
-            venue { venue { id $VENUE_COVER_FIELDS } }
-            people { lineup { nodes { $PERSON_FIELDS } } }
-            ping { friendPings { $PING_FIELDS } }
+          events {
+            event(id: ${'$'}id) {
+              $EVENT_FIELDS
+              cover { charge { ${Queries.COVER_CHARGE_FIELDS} } }
+              venue { venue { id $VENUE_COVER_FIELDS } }
+              people { lineup { nodes { $PERSON_FIELDS } } }
+              ping { friendPings { $PING_FIELDS } }
+            }
           }
         }
     """.trimIndent()
 
     val MY_PING: String = """
         query MyPing {
-          myPing { $PING_FIELDS }
+          audience { ping { myPing { $PING_FIELDS } } }
         }
     """.trimIndent()
 
     val FRIEND_PINGS: String = """
         query FriendPings {
-          friendPings { $PING_FIELDS }
+          audience { ping { friendPings { $PING_FIELDS } } }
         }
     """.trimIndent()
 

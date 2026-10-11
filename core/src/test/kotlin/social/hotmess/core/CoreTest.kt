@@ -672,9 +672,9 @@ class HotMessApiTest {
     @Test
     fun venueOverviewAsksForAndKeepsItsRecentChat() = runTest {
         val (api, bodies) = api(
-            "query Venue(" to """{"data":{"venue":{"id":"v1","name":"Nyne","events":{"upcoming":{"nodes":[]}},
+            "query Venue(" to """{"data":{"venues":{"venue":{"id":"v1","name":"Nyne","events":{"upcoming":{"nodes":[]}},
                 "chat":{"open":true,"recentMessages":{"nodes":[{"id":"m1","message":"who's here?","name":"Sam","userId":"u1",
-                  "avatarUrl":"","sentAt":"2026-10-07T08:00:00Z"}]}}}}}""",
+                  "avatarUrl":"","sentAt":"2026-10-07T08:00:00Z"}]}}}}}}""",
         )
         val overview = api.venueOverview("v1")
 
@@ -748,9 +748,9 @@ class HotMessApiTest {
     @Test
     fun venueOverviewHasItsSocialLinks() = runTest {
         val (api, bodies) = api(
-            "query Venue(" to """{"data":{"venue":{"id":"v-1","name":"The Wildrose","chat":{"open":true},"events":{"upcoming":{"nodes":[${Fixtures.EVENT}]}},
+            "query Venue(" to """{"data":{"venues":{"venue":{"id":"v-1","name":"The Wildrose","chat":{"open":true},"events":{"upcoming":{"nodes":[${Fixtures.EVENT}]}},
                 "profile":{"socialLinks":{"nodes":[{"id":"s-1","handle":"thewildrosebar","provider":"instagram","url":"https://instagram.com/thewildrosebar"},
-                  null,{"id":"s-2","handle":"wildrose","provider":"facebook","url":""}]}}}}}""",
+                  null,{"id":"s-2","handle":"wildrose","provider":"facebook","url":""}]}}}}}}""",
         )
         val overview = api.venueOverview("v-1")
 
@@ -766,8 +766,8 @@ class HotMessApiTest {
     @Test
     fun venueOverviewHasTheFriendsHere() = runTest {
         val (api, bodies) = api(
-            "query Venue(" to """{"data":{"venue":{"id":"v1","name":"Nyne","chat":{"open":true},"events":{"upcoming":{"nodes":[]}},
-                "friends":{"list":{"nodes":[{"id":"f1","name":"Alex Friend","facebookId":"4242","presence":"ONLINE"}]}}}}}""",
+            "query Venue(" to """{"data":{"venues":{"venue":{"id":"v1","name":"Nyne","chat":{"open":true},"events":{"upcoming":{"nodes":[]}},
+                "friends":{"list":{"nodes":[{"id":"f1","name":"Alex Friend","facebookId":"4242","presence":"ONLINE"}]}}}}}}""",
         )
         val overview = api.venueOverview("v1")
 
@@ -781,7 +781,7 @@ class HotMessApiTest {
 
     @Test
     fun aVenueWithoutFriendsHasNone() = runTest {
-        val (api, _) = api("query Venue(" to """{"data":{"venue":{"id":"v1","name":"Nyne","events":{"upcoming":{"nodes":[]}}}}}""")
+        val (api, _) = api("query Venue(" to """{"data":{"venues":{"venue":{"id":"v1","name":"Nyne","events":{"upcoming":{"nodes":[]}}}}}}""")
         assertTrue(api.venueOverview("v1").friends.isEmpty())
     }
 
@@ -811,7 +811,7 @@ class HotMessApiTest {
 
     @Test
     fun missingRecordsAreNotFound() = runTest {
-        val (api, _) = api("query Event" to """{"data":{"event":null}}""")
+        val (api, _) = api("query Event" to """{"data":{"events":{"event":null}}}""")
         assertFailsWith<ApiError.NotFound> { api.event("e") }
     }
 
