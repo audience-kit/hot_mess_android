@@ -160,7 +160,7 @@ fun EventScreen(id: String, navigator: Navigator) {
     val userId = rememberUserId()
     var pingHere by rememberSaveable { mutableStateOf(false) }
     val actions = rememberPingActions { ping ->
-        loader.update { event -> event.copy(friendPings = event.friendPings.map { if (it.id == ping.id) ping else it }) }
+        loader.update { event -> event.replacingFriendPing(ping) }
         graph.pingUpdated(ping.id)
     }
 

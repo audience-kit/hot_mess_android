@@ -370,9 +370,9 @@ class PingApiTest {
     @Test
     fun venueAndEventPagesCarryFriendsPings() = runTest {
         val (api, _) = api(
-            "query Venue" to """{"data":{"venue":{"id":"v-wildrose","name":"The Wildrose","friendPings":[${PingFixtures.FRIEND_PING}]}}}""",
+            "query Venue" to """{"data":{"venue":{"id":"v-wildrose","name":"The Wildrose","ping":{"friendPings":[${PingFixtures.FRIEND_PING}]}}}}""",
             "query Event" to """{"data":{"event":{"id":"e-bingo","name":"Drag Bingo","startAt":"2026-10-10T04:00:00Z",
-                "friendPings":[${PingFixtures.FRIEND_PING}]}}}""",
+                "ping":{"friendPings":[${PingFixtures.FRIEND_PING}]}}}}""",
         )
         assertEquals("p-1", api.venueOverview("v-wildrose").friendPings.single().id)
         assertEquals("p-1", api.event("e-bingo").friendPings.single().id)

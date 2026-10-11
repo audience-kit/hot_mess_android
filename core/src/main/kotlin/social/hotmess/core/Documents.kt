@@ -96,7 +96,7 @@ object Documents {
             events { upcoming { nodes { $EVENT_FIELDS } } }
             $PROFILE_SOCIAL_LINKS
             friends { list { nodes { $FRIEND_OUT_FIELDS } } }
-            friendPings { $PING_FIELDS }
+            ping { friendPings { $PING_FIELDS } }
           }
         }
     """.trimIndent()
@@ -133,7 +133,7 @@ object Documents {
             cover { charge { ${Queries.COVER_CHARGE_FIELDS} } }
             venue { venue { id $VENUE_COVER_FIELDS } }
             people { $PERSON_FIELDS }
-            friendPings { $PING_FIELDS }
+            ping { friendPings { $PING_FIELDS } }
           }
         }
     """.trimIndent()
