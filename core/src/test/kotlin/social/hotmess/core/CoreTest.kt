@@ -763,11 +763,11 @@ class HotMessApiTest {
     fun venueOverviewHasTheFriendsHere() = runTest {
         val (api, bodies) = api(
             "query Venue(" to """{"data":{"venue":{"id":"v1","name":"Nyne","chatOpen":true,"events":[],
-                "friends":[{"id":"f1","name":"Alex Friend","facebookId":"4242","presence":"ONLINE"}]}}}""",
+                "friends":{"list":[{"id":"f1","name":"Alex Friend","facebookId":"4242","presence":"ONLINE"}]}}}}""",
         )
         val overview = api.venueOverview("v1")
 
-        assertTrue(bodies.single().contains("friends { id name facebookId presence }"))
+        assertTrue(bodies.single().contains("friends { list { id name facebookId presence } }"))
         val friend = overview.friends.single()
         assertEquals("Alex Friend", friend.name)
         assertEquals("https://m.me/4242", friend.messengerUrl)
