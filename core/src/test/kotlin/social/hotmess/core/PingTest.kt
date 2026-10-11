@@ -248,8 +248,8 @@ class PingApiTest {
     @Test
     fun nowCarriesYourPingAndYourFriends() = runTest {
         val (api, bodies) = api(
-            "ReportLocation" to """{"data":{"reportLocation":{"now":{"title":"Capitol Hill","venues":[],"events":[],
-                "myPing":${PingFixtures.MY_PING},"friendPings":[${PingFixtures.FRIEND_PING}]}}}}""",
+            "ReportLocation" to """{"data":{"reportLocation":{"nearbyVenues":[],"locale":{"id":"l1","name":"Capitol Hill"},
+                "audience":{"ping":{"myPing":${PingFixtures.MY_PING},"friendPings":[${PingFixtures.FRIEND_PING}]}}}}}""",
         )
         val now = api.now(Coordinates(47.61, -122.32))
 
@@ -274,7 +274,7 @@ class PingApiTest {
 
     @Test
     fun nowWithoutPingsDecodes() = runTest {
-        val (api, _) = api("ReportLocation" to """{"data":{"reportLocation":{"now":{"title":"x","myPing":null,"friendPings":[]}}}}""")
+        val (api, _) = api("ReportLocation" to """{"data":{"reportLocation":{"audience":{"ping":null}}}}""")
         val now = api.now(Coordinates(1.0, 2.0))
         assertNull(now.myPing)
         assertTrue(now.friendPings.isEmpty())

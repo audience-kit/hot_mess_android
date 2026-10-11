@@ -278,6 +278,19 @@ data class Friend(
     val messengerUrl: String? get() = facebookId?.let { "https://m.me/$it" }
 }
 
+/**
+ * The friends module's facet on a venue or locale (`friends { list { nodes } venues { nodes } }`): your
+ * friends out there lately and, on a locale, how many at each of its venues. Null where the module is off.
+ */
+@Serializable
+data class FriendsFacet(
+    @SerialName("list") private val listNodes: Connection<Friend>? = null,
+    @SerialName("venues") private val venueNodes: Connection<FriendVenue>? = null,
+) {
+    val list: List<Friend> get() = listNodes?.nodes.orEmpty().filterNotNull()
+    val venues: List<FriendVenue> get() = venueNodes?.nodes.orEmpty().filterNotNull()
+}
+
 /** A venue where some of your friends have been lately, with how many. */
 @Serializable
 data class FriendVenue(val venue: Venue, val friendCount: Int = 0, val friends: List<Friend> = emptyList())
