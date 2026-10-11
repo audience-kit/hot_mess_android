@@ -223,12 +223,28 @@ data class Friend(
     val messengerUrl: String? get() = facebookId?.let { "https://m.me/$it" }
 }
 
+/** A GraphQL connection read as `{ nodes { … } }`, which is how the app asks for connections it doesn't page. */
+@Serializable
+data class Nodes<T>(val nodes: List<T> = emptyList())
+
 /**
- * The friends module's facet on a venue or locale (`friends { list venues }`): your friends out there
- * lately and, on a locale, how many at each of its venues. Null where the module is off.
+ * The friends module's facet on a venue or locale (`friends { list { nodes } venues { nodes } }`): your
+ * friends out there lately and, on a locale, how many at each of its venues. Null where the module is off.
  */
 @Serializable
-data class FriendsFacet(val list: List<Friend> = emptyList(), val venues: List<FriendVenue> = emptyList())
+data class FriendsFacet(
+    @SerialName("list") private val listNodes: Nodes<Friend> = Nodes(),
+    @SerialName("venues") private val venueNodes: Nodes<FriendVenue> = Nodes(),
+) {
+    val list: List<Friend> get() = listNodes.nodes
+    val venues: List<FriendVenue> get() = venueNodes.nodes
+}
+
+/** The events module's facet on a venue or locale, read as `events { upcoming { nodes } }`. */
+@Serializable
+data class EventsFacet(@SerialName("upcoming") private val upcomingNodes: Nodes<Event> = Nodes()) {
+    val upcoming: List<Event> get() = upcomingNodes.nodes
+}
 
 /** A venue where some of your friends have been lately, with how many. */
 @Serializable

@@ -7,6 +7,9 @@ import com.audiencekit.Queries
  * the models in Models.kt; ask for a field there before using it here.
  */
 object Documents {
+    /** How many of the locale's upcoming events Now lists away from a venue. */
+    const val LOCALE_EVENT_LIMIT: Int = 5
+
     const val VENUE_FIELDS: String =
         "id name address description phone distance point facebookId photoUrl heroUrl isLiked"
 
@@ -42,16 +45,16 @@ object Documents {
           reportLocation(input: { position: ${'$'}position }) {
             venue {
               $VENUE_FIELDS $RECENT_MESSAGES $VENUE_COVER_FIELDS
-              events { $EVENT_FIELDS }
-              friends { list { $FRIEND_OUT_FIELDS } }
+              events { upcoming { nodes { $EVENT_FIELDS } } }
+              friends { list { nodes { $FRIEND_OUT_FIELDS } } }
             }
             nearbyVenues { $VENUE_FIELDS }
             locale {
               id name heroUrl chatOpen $RECENT_MESSAGES
-              events { $EVENT_FIELDS }
+              events { upcoming(first: $LOCALE_EVENT_LIMIT) { nodes { $EVENT_FIELDS } } }
               friends {
-                list { $FRIEND_OUT_FIELDS }
-                venues { venue { $VENUE_FIELDS } friendCount friends { $FRIEND_OUT_FIELDS } }
+                list { nodes { $FRIEND_OUT_FIELDS } }
+                venues { nodes { venue { $VENUE_FIELDS } friendCount friends { $FRIEND_OUT_FIELDS } } }
               }
             }
             audience { ping { myPing { $PING_FIELDS } friendPings { $PING_FIELDS } } }
@@ -86,7 +89,7 @@ object Documents {
             $VENUE_COVER_FIELDS
             events { $EVENT_FIELDS }
             socialLinks { id handle provider url }
-            friends { list { $FRIEND_OUT_FIELDS } }
+            friends { list { nodes { $FRIEND_OUT_FIELDS } } }
             friendPings { $PING_FIELDS }
           }
         }

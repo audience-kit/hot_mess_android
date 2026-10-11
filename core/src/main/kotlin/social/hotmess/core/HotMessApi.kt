@@ -429,7 +429,7 @@ private data class LocationReport(
     val audience: AudienceNode? = null,
 ) {
     @Serializable
-    data class VenueFacets(val events: List<Event> = emptyList(), val friends: FriendsFacet? = null)
+    data class VenueFacets(val events: EventsFacet? = null, val friends: FriendsFacet? = null)
 
     @Serializable
     data class LocaleNode(
@@ -438,7 +438,7 @@ private data class LocationReport(
         @Serializable(with = BlankAsNullSerializer::class) val heroUrl: String? = null,
         val chatOpen: Boolean = false,
         val recentMessages: List<ChatLine> = emptyList(),
-        val events: List<Event> = emptyList(),
+        val events: EventsFacet? = null,
         val friends: FriendsFacet? = null,
     )
 
@@ -460,7 +460,7 @@ private data class LocationReport(
                 imageUrl = place.heroUrl,
                 venue = place,
                 venues = nearbyVenues,
-                events = facets.events,
+                events = facets.events?.upcoming.orEmpty(),
                 friends = facets.friends?.list.orEmpty(),
                 locale = nowLocale,
                 myPing = ping?.myPing,
@@ -471,18 +471,13 @@ private data class LocationReport(
             title = locale?.name?.let { "Happening Now in $it" } ?: "Happening Now",
             imageUrl = locale?.heroUrl,
             venues = nearbyVenues,
-            events = locale?.events.orEmpty().take(LOCALE_EVENT_LIMIT),
+            events = locale?.events?.upcoming.orEmpty().take(Documents.LOCALE_EVENT_LIMIT),
             friends = locale?.friends?.list.orEmpty(),
             friendVenues = locale?.friends?.venues.orEmpty(),
             locale = nowLocale,
             myPing = ping?.myPing,
             friendPings = ping?.friendPings.orEmpty(),
         )
-    }
-
-    private companion object {
-        /** How many of the locale's upcoming events Now lists away from a venue. */
-        const val LOCALE_EVENT_LIMIT = 5
     }
 }
 
