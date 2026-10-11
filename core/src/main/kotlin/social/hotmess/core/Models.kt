@@ -3,7 +3,6 @@ package social.hotmess.core
 import com.audiencekit.Admission
 import com.audiencekit.Coordinate
 import com.audiencekit.CoverCharge
-import com.audiencekit.GlobalID
 import com.audiencekit.Presence
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.SerialName
@@ -571,15 +570,11 @@ data class User(val id: String, val name: String, val avatarUrl: String? = null)
     val initials: String get() = name.initialsForDisplay()
 }
 
-/** Record IDs come as UUIDs, or as Relay global IDs wrapping one. Normalizes both to a lowercase UUID. */
+/** Record IDs are UUIDs, in whichever case they arrive. Normalizes one to a lowercase UUID. */
 object RecordId {
-    fun normalize(id: String): String? {
-        runCatching { return UUID.fromString(id).toString() }
-        val global = GlobalID.parse(id) ?: return null
-        return runCatching { UUID.fromString(global.modelId).toString() }.getOrNull()
-    }
+    fun normalize(id: String): String? = runCatching { UUID.fromString(id).toString() }.getOrNull()
 
-    /** Whether two IDs name the same record, whatever form each comes in. False when either is null. */
+    /** Whether two IDs name the same record, whatever case each comes in. False when either is null. */
     fun same(a: String?, b: String?): Boolean {
         if (a == null || b == null) return false
         if (a.equals(b, ignoreCase = true)) return true

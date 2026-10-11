@@ -97,10 +97,9 @@ class PingModelTest {
     }
 
     @Test
-    fun idsMatchAcrossForms() {
+    fun idsMatchAcrossCases() {
         val uuid = "b0f8b66a-e636-495d-9475-0f5317ea08e0"
-        val global = java.util.Base64.getUrlEncoder().withoutPadding().encodeToString("gid://audience-kit/Venue/$uuid".toByteArray())
-        assertTrue(RecordId.same(uuid.uppercase(), global))
+        assertTrue(RecordId.same(uuid.uppercase(), uuid))
         assertTrue(RecordId.same("t-1", "T-1"))
         assertFalse(RecordId.same("t-1", null))
         assertFalse(RecordId.same("t-1", "t-2"))

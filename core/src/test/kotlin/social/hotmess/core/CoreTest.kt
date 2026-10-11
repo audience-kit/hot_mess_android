@@ -111,13 +111,11 @@ class ModelDecodingTest {
     }
 
     @Test
-    fun recordIdsNormalizeGlobalIds() {
+    fun recordIdsNormalizeToLowercaseUuids() {
         val uuid = "B0F8B66A-E636-495D-9475-0F5317EA08E0"
-        val global = java.util.Base64.getUrlEncoder().withoutPadding()
-            .encodeToString("gid://audience-kit/Venue/${uuid.lowercase()}".toByteArray())
 
         assertEquals(uuid.lowercase(), RecordId.normalize(uuid))
-        assertEquals(uuid.lowercase(), RecordId.normalize(global))
+        assertEquals(uuid.lowercase(), RecordId.normalize(uuid.lowercase()))
         assertNull(RecordId.normalize("not-an-id"))
     }
 
