@@ -809,9 +809,9 @@ private object Fixtures {
 
     const val PERSON = """{"id":"p-1","name":"DJ Glitter","facebookId":null,"isLiked":false,"pictureUrl":"https://img/p",
         "bannerUrl":null,"events":{"upcoming":{"nodes":[$EVENT]}},"socialLinks":[{"id":"s-1","handle":"glitter","provider":"Instagram","url":"https://instagram.com/glitter"}],
-        "tracks":[{"id":"t-1","title":"Late Night","provider":"soundcloud","providerUrl":null,"waveformUrl":null,"artworkUrl":null}]}"""
+        "music":{"tracks":{"nodes":[{"id":"t-1","title":"Late Night","provider":"soundcloud","providerUrl":null,"waveformUrl":null,"artworkUrl":null},null]}}}"""
 
-    const val TROUPE = """{"id":"p-3","name":"The Glitterettes","pictureUrl":null,"bannerUrl":null,"events":{"upcoming":{"nodes":[]}},"socialLinks":[],"tracks":[],
+    const val TROUPE = """{"id":"p-3","name":"The Glitterettes","pictureUrl":null,"bannerUrl":null,"events":{"upcoming":{"nodes":[]}},"socialLinks":[],"music":{"tracks":{"nodes":[]}},
         "members":[{"id":"p-4","name":"Anita Cocktail","pictureUrl":"https://img/anita"},{"id":"p-5","name":"Ella Vator","pictureUrl":""}],
         "groups":[{"id":"p-2","name":"House of Glitter","pictureUrl":null}]}"""
 }

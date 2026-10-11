@@ -103,7 +103,7 @@ object Documents {
             socialLinks { id handle provider url }
             members { id name pictureUrl }
             groups { id name pictureUrl }
-            tracks { id title provider providerUrl waveformUrl artworkUrl }
+            music { tracks { nodes { id title provider providerUrl waveformUrl artworkUrl } } }
           }
         }
     """.trimIndent()

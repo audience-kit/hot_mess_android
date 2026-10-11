@@ -94,6 +94,14 @@ data class UpcomingEvents(private val upcoming: Connection<Event>? = null) {
     val events: List<Event> get() = upcoming?.nodes.orEmpty().filterNotNull()
 }
 
+/**
+ * A person's music facet (`Person.music`): their newest tracks, a connection asked for as `nodes`.
+ */
+@Serializable
+data class PersonMusic(private val tracks: Connection<Track>? = null) {
+    val trackList: List<Track> get() = tracks?.nodes.orEmpty().filterNotNull()
+}
+
 /** A Relay connection's `nodes`, which GraphQL types as nullable items. */
 @Serializable
 data class Connection<T>(val nodes: List<T?> = emptyList())
@@ -137,12 +145,15 @@ data class PersonDetail(
     @Serializable(with = BlankAsNullSerializer::class) val bannerUrl: String? = null,
     @SerialName("events") private val eventsFacet: UpcomingEvents? = null,
     val socialLinks: List<SocialLink> = emptyList(),
-    val tracks: List<Track> = emptyList(),
+    @SerialName("music") private val musicFacet: PersonMusic? = null,
     val members: List<Person> = emptyList(),
     val groups: List<Person> = emptyList(),
 ) {
     /** Their upcoming events, from the events facet; empty when the audience has no events. */
     val events: List<Event> get() = eventsFacet?.events.orEmpty()
+
+    /** Their newest tracks, from the music facet; empty when the audience has no music. */
+    val tracks: List<Track> get() = musicFacet?.trackList.orEmpty()
 
     val person: Person
         get() = Person(id = id, name = name, facebookId = facebookId, isLiked = isLiked, pictureUrl = pictureUrl, bannerUrl = bannerUrl)
