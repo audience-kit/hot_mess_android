@@ -544,9 +544,9 @@ class FormattingTest {
 
     @Test
     fun eventSubtitleJoinsWithAMiddleDot() {
-        val event = Event(id = "e", startAt = Instant.parse("2026-10-10T04:00:00Z"), venue = Venue(id = "v", name = "The Wildrose"))
+        val event = Event(id = "e", startAt = Instant.parse("2026-10-10T04:00:00Z"), venueFacet = EventVenueFacet(Venue(id = "v", name = "The Wildrose")))
         assertEquals("Fri 9pm · The Wildrose", Formatting.eventSubtitle(event, zone, Locale.US))
-        assertEquals("Fri 9pm · To be announced", Formatting.eventSubtitle(event.copy(venue = null), zone, Locale.US))
+        assertEquals("Fri 9pm · To be announced", Formatting.eventSubtitle(event.copy(venueFacet = null), zone, Locale.US))
     }
 
     @Test
@@ -664,7 +664,7 @@ class HotMessApiTest {
     @Test
     fun venueOverviewAsksForAndKeepsItsRecentChat() = runTest {
         val (api, bodies) = api(
-            "query Venue(" to """{"data":{"venue":{"id":"v1","name":"Nyne","chatOpen":true,"events":[],
+            "query Venue(" to """{"data":{"venue":{"id":"v1","name":"Nyne","chatOpen":true,"events":{"upcoming":{"nodes":[]}},
                 "recentMessages":[{"id":"m1","message":"who's here?","name":"Sam","userId":"u1","avatarUrl":"",
                   "sentAt":"2026-10-07T08:00:00Z"}]}}}""",
         )
@@ -735,7 +735,7 @@ class HotMessApiTest {
     @Test
     fun venueOverviewHasItsSocialLinks() = runTest {
         val (api, bodies) = api(
-            "query Venue(" to """{"data":{"venue":{"id":"v-1","name":"The Wildrose","chatOpen":true,"events":[${Fixtures.EVENT}],
+            "query Venue(" to """{"data":{"venue":{"id":"v-1","name":"The Wildrose","chatOpen":true,"events":{"upcoming":{"nodes":[${Fixtures.EVENT}]}},
                 "socialLinks":[{"id":"s-1","handle":"thewildrosebar","provider":"instagram","url":"https://instagram.com/thewildrosebar"},
                   {"id":"s-2","handle":"wildrose","provider":"facebook","url":""}]}}}""",
         )
@@ -753,7 +753,7 @@ class HotMessApiTest {
     @Test
     fun venueOverviewHasTheFriendsHere() = runTest {
         val (api, bodies) = api(
-            "query Venue(" to """{"data":{"venue":{"id":"v1","name":"Nyne","chatOpen":true,"events":[],
+            "query Venue(" to """{"data":{"venue":{"id":"v1","name":"Nyne","chatOpen":true,"events":{"upcoming":{"nodes":[]}},
                 "friends":[{"id":"f1","name":"Alex Friend","facebookId":"4242","presence":"ONLINE"}]}}}""",
         )
         val overview = api.venueOverview("v1")
@@ -768,7 +768,7 @@ class HotMessApiTest {
 
     @Test
     fun aVenueWithoutFriendsHasNone() = runTest {
-        val (api, _) = api("query Venue(" to """{"data":{"venue":{"id":"v1","name":"Nyne","events":[]}}}""")
+        val (api, _) = api("query Venue(" to """{"data":{"venue":{"id":"v1","name":"Nyne","events":{"upcoming":{"nodes":[]}}}}}""")
         assertTrue(api.venueOverview("v1").friends.isEmpty())
     }
 
@@ -805,13 +805,13 @@ private object Fixtures {
         "point":"POINT (-122.3194 47.6145)","facebookId":"55","photoUrl":"https://img/v","heroUrl":null,"isLiked":true}"""
 
     const val EVENT = """{"id":"e-1","name":"Drag Brunch","startAt":"2026-10-10T04:00:00Z","endAt":null,
-        "facebookId":"1234","coverPhotoUrl":"","isFeatured":false,"viewerRsvp":"MAYBE","venue":$VENUE}"""
+        "facebookId":"1234","coverPhotoUrl":"","isFeatured":false,"viewerRsvp":"MAYBE","venue":{"name":"The Wildrose","venue":$VENUE}}"""
 
     const val PERSON = """{"id":"p-1","name":"DJ Glitter","facebookId":null,"isLiked":false,"pictureUrl":"https://img/p",
-        "coverUrl":null,"events":[$EVENT],"socialLinks":[{"id":"s-1","handle":"glitter","provider":"Instagram","url":"https://instagram.com/glitter"}],
+        "coverUrl":null,"events":{"upcoming":{"nodes":[$EVENT]}},"socialLinks":[{"id":"s-1","handle":"glitter","provider":"Instagram","url":"https://instagram.com/glitter"}],
         "tracks":[{"id":"t-1","title":"Late Night","provider":"soundcloud","providerUrl":null,"waveformUrl":null,"artworkUrl":null}]}"""
 
-    const val TROUPE = """{"id":"p-3","name":"The Glitterettes","pictureUrl":null,"coverUrl":null,"events":[],"socialLinks":[],"tracks":[],
+    const val TROUPE = """{"id":"p-3","name":"The Glitterettes","pictureUrl":null,"coverUrl":null,"events":{"upcoming":{"nodes":[]}},"socialLinks":[],"tracks":[],
         "members":[{"id":"p-4","name":"Anita Cocktail","pictureUrl":"https://img/anita"},{"id":"p-5","name":"Ella Vator","pictureUrl":""}],
         "groups":[{"id":"p-2","name":"House of Glitter","pictureUrl":null}]}"""
 }

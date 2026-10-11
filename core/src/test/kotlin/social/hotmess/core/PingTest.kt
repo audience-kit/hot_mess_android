@@ -385,7 +385,7 @@ private object PingFixtures {
         "user":{"id":"u-jordan","name":"Jordan Lee","facebookId":"77"},"via":{"id":"u-sam","name":"Sam Chatter"},
         "targets":[
           {"id":"t-1","venue":null,"event":{"id":"e-bingo","name":"Drag Bingo","startAt":"2026-10-10T04:00:00Z",
-            "venue":{"id":"v-neighbours","name":"Neighbours"}},
+            "venue":{"venue":{"id":"v-neighbours","name":"Neighbours"}}},
             "joins":[{"id":"j-1","targetId":"t-1","user":{"id":"u-sam","name":"Sam Chatter"}}]},
           {"id":"t-2","venue":{"id":"v-wildrose","name":"The Wildrose","photoUrl":""},"event":null,"joins":[]}
         ],

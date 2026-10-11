@@ -5,7 +5,6 @@ import com.audiencekit.Admission
 import com.audiencekit.AudienceKitClient
 import com.audiencekit.AudienceKitException
 import com.audiencekit.Coordinates
-import com.audiencekit.CoverCharge
 import com.audiencekit.CoverPurchase
 import com.audiencekit.DeviceDescription
 import com.audiencekit.DoorNight
@@ -21,6 +20,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.serialization.KSerializer
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
@@ -451,11 +451,9 @@ private data class VenueNode(
     val point: String? = null,
     val isLiked: Boolean = false,
     val chatOpen: Boolean = false,
-    val canWorkDoor: Boolean = false,
-    val coverCharge: CoverCharge? = null,
-    val viewerAdmission: Admission? = null,
+    val cover: VenueCoverFacet? = null,
     val recentMessages: List<ChatLine> = emptyList(),
-    val events: List<Event> = emptyList(),
+    @SerialName("events") val eventsFacet: UpcomingEvents? = null,
     val socialLinks: List<SocialLink> = emptyList(),
     val friends: List<Friend> = emptyList(),
     val friendPings: List<Ping> = emptyList(),
@@ -474,10 +472,10 @@ private data class VenueNode(
         isLiked = isLiked,
         socialLinks = socialLinks,
         recentMessages = recentMessages,
-        coverCharge = coverCharge,
-        viewerAdmission = viewerAdmission,
-        canWorkDoor = canWorkDoor,
+        cover = cover,
     )
+
+    val events: List<Event> get() = eventsFacet?.events.orEmpty()
 }
 
 @Serializable
@@ -491,7 +489,9 @@ private data class PersonResponse(val person: PersonDetail? = null)
 
 @Serializable
 private data class LocaleEventsResponse(val locale: Locale? = null) {
-    @Serializable data class Locale(val events: List<Event> = emptyList())
+    @Serializable data class Locale(@SerialName("events") val eventsFacet: UpcomingEvents? = null) {
+        val events: List<Event> get() = eventsFacet?.events.orEmpty()
+    }
 }
 
 @Serializable
