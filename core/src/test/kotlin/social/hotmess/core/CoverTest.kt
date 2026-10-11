@@ -240,7 +240,7 @@ class CoverApiTest {
     @Test
     fun theVenueAsksForTonightsCoverAndPass() = runTest {
         val (api, bodies) = api {
-            """{"data":{"venue":{"id":"v-1","name":"The Wildrose","chatOpen":false,"events":{"upcoming":{"nodes":[]}},
+            """{"data":{"venue":{"id":"v-1","name":"The Wildrose","chat":{"open":false},"events":{"upcoming":{"nodes":[]}},
                "cover":{"canWorkDoor":true,"charge":{"amountCents":1000,"totalCents":1112,"feeCents":50,"currency":"usd","night":"2026-10-09",
                  "from":"21:00","payable":true,"event":null},
                "viewerAdmission":{"id":"a-1","status":"PAID","night":"2026-10-09","totalCents":1112,"isRefundable":true,

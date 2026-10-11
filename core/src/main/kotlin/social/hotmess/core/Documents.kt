@@ -17,8 +17,11 @@ object Documents {
     /** A chat line as a preview shows it: rich messages in words (`message`), with the sender's role and presence. */
     const val CHAT_LINE_FIELDS: String = "id message name userId avatarUrl sentAt presence role kind endsAt postedAsVenue postedAsPerson"
 
-    /** A venue's last few chat lines, oldest first; empty unless the viewer is at the venue or an admin. */
-    const val RECENT_MESSAGES: String = "recentMessages(limit: 3) { $CHAT_LINE_FIELDS }"
+    /**
+     * A room's last few chat lines, oldest first, in the venue's or locale's chat facet (`chat { ... }`); empty unless
+     * the viewer is in the room or an admin.
+     */
+    const val RECENT_MESSAGES: String = "recentMessages(limit: 3) { nodes { $CHAT_LINE_FIELDS } }"
 
     /** Tonight's cover at a venue and the user's pass for it, in the venue's cover facet (null when the audience has no cover). */
     const val VENUE_COVER_FIELDS: String =
@@ -50,13 +53,13 @@ object Documents {
         mutation ReportLocation(${'$'}position: CoordinatesInput!) {
           reportLocation(input: { position: ${'$'}position }) {
             venue {
-              $VENUE_FIELDS $RECENT_MESSAGES $VENUE_COVER_FIELDS
+              $VENUE_FIELDS chat { $RECENT_MESSAGES } $VENUE_COVER_FIELDS
               events { upcoming { nodes { $EVENT_FIELDS } } }
               friends { list { nodes { $FRIEND_OUT_FIELDS } } }
             }
             nearbyVenues { $VENUE_FIELDS }
             locale {
-              id name heroUrl chatOpen $RECENT_MESSAGES
+              id name heroUrl chat { open $RECENT_MESSAGES }
               events { upcoming(first: $LOCALE_EVENT_LIMIT) { nodes { $EVENT_FIELDS } } }
               friends {
                 list { nodes { $FRIEND_OUT_FIELDS } }
@@ -90,8 +93,8 @@ object Documents {
     val VENUE: String = """
         query Venue(${'$'}id: ID!) {
           venue(id: ${'$'}id) {
-            $VENUE_FIELDS chatOpen
-            $RECENT_MESSAGES
+            $VENUE_FIELDS
+            chat { open $RECENT_MESSAGES }
             cover { charge { ${Queries.COVER_CHARGE_FIELDS} } viewerAdmission { ${Queries.ADMISSION_FIELDS} } canWorkDoor }
             events { upcoming { nodes { $EVENT_FIELDS } } }
             $PROFILE_SOCIAL_LINKS
@@ -132,7 +135,7 @@ object Documents {
             $EVENT_FIELDS
             cover { charge { ${Queries.COVER_CHARGE_FIELDS} } }
             venue { venue { id $VENUE_COVER_FIELDS } }
-            people { $PERSON_FIELDS }
+            people { lineup { nodes { $PERSON_FIELDS } } }
             ping { friendPings { $PING_FIELDS } }
           }
         }

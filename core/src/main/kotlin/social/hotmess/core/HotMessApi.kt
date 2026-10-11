@@ -123,7 +123,7 @@ class HotMessApi(val client: AudienceKitClient) {
         return VenueOverview(
             venue = venue.venue(),
             events = venue.events,
-            chatOpen = venue.chatOpen,
+            chatOpen = venue.chat?.open == true,
             friends = venueFriends,
             friendPings = venue.friendPings,
         )
@@ -436,8 +436,7 @@ private data class LocationReport(
         val id: String,
         val name: String? = null,
         @Serializable(with = BlankAsNullSerializer::class) val heroUrl: String? = null,
-        val chatOpen: Boolean = false,
-        val recentMessages: List<ChatLine> = emptyList(),
+        val chat: ChatFacet? = null,
         val events: UpcomingEvents? = null,
         val friends: FriendsFacet? = null,
     )
@@ -450,7 +449,7 @@ private data class LocationReport(
 
     fun now(json: Json): Now {
         val node = venue
-        val nowLocale = locale?.let { NowLocale(it.id, it.name, it.chatOpen, it.recentMessages) }
+        val nowLocale = locale?.let { NowLocale(it.id, it.name, it.chat?.open == true, it.chat?.lines.orEmpty()) }
         val ping = audience?.ping
         if (node != null) {
             val place = json.decodeFromJsonElement(Venue.serializer(), node)
@@ -512,9 +511,8 @@ private data class VenueNode(
     @Serializable(with = BlankAsNullSerializer::class) val heroUrl: String? = null,
     val point: String? = null,
     val profile: ListingProfile? = null,
-    val chatOpen: Boolean = false,
+    val chat: ChatFacet? = null,
     val cover: VenueCoverFacet? = null,
-    val recentMessages: List<ChatLine> = emptyList(),
     @SerialName("events") val eventsFacet: UpcomingEvents? = null,
     val friends: FriendsFacet? = null,
     val ping: PingFeedFacet? = null,
@@ -530,7 +528,7 @@ private data class VenueNode(
         heroUrl = heroUrl,
         point = point,
         profile = profile,
-        recentMessages = recentMessages,
+        chat = chat,
         cover = cover,
     )
 

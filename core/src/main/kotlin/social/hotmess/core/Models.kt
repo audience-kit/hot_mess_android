@@ -39,13 +39,16 @@ data class Venue(
     val locale: LocaleSummary? = null,
     val hidden: Boolean = false,
     val order: Int = 0,
-    /** The last few lines of its chat room, oldest first; Now and the venue screen ask, and only people there (or admins) get them. */
-    val recentMessages: List<ChatLine> = emptyList(),
+    /** Its chat facet; read through [recentMessages]. */
+    private val chat: ChatFacet? = null,
     /** Its profile facet: address, phone, links and Facebook Page. Read through [address] and friends. */
     private val profile: ListingProfile? = null,
     /** Its cover facet; null when not asked for or the audience doesn't take cover. Read through [coverCharge] and friends. */
     private val cover: VenueCoverFacet? = null,
 ) {
+    /** The last few lines of its chat room, oldest first; Now and the venue screen ask, and only people there (or admins) get them. */
+    val recentMessages: List<ChatLine> get() = chat?.lines.orEmpty()
+
     val address: String? get() = profile?.address
 
     val phone: String? get() = profile?.phone
@@ -95,6 +98,21 @@ data class EventVenueFacet(val venue: Venue? = null)
 /** A venue's or event's ping facet (`Venue.ping`, `Event.ping`): friends' active Pings that pick it. */
 @Serializable
 data class PingFeedFacet(val friendPings: List<Ping> = emptyList())
+
+/**
+ * A venue's or locale's chat facet (`chat { open recentMessages }`): whether the user can join its room, and the
+ * room's last few lines, oldest first (a connection, asked for as `nodes`).
+ */
+@Serializable
+data class ChatFacet(val open: Boolean = false, private val recentMessages: Connection<ChatLine>? = null) {
+    val lines: List<ChatLine> get() = recentMessages?.nodes.orEmpty().filterNotNull()
+}
+
+/** An event's people facet (`people { lineup }`): who's hosting or playing, a connection asked for as `nodes`. */
+@Serializable
+data class EventPeopleFacet(private val lineup: Connection<Person>? = null) {
+    val people: List<Person> get() = lineup?.nodes.orEmpty().filterNotNull()
+}
 
 /**
  * An events facet's upcoming events (`Venue.events`, `Locale.events`, `Person.events`): `upcoming` is a
@@ -278,8 +296,8 @@ data class Event(
     @SerialName("viewerRsvp") val rsvp: Rsvp = Rsvp.UNSURE,
     /** Its venue facet; read the venue through [venue]. */
     @SerialName("venue") private val venueFacet: EventVenueFacet? = null,
-    /** Who's hosting or playing; only the event screen asks for it. */
-    val people: List<Person> = emptyList(),
+    /** Its people facet; read through [people]. Only the event screen asks for it. */
+    @SerialName("people") private val peopleFacet: EventPeopleFacet? = null,
     /** Its cover facet; read through [coverCharge]. Only the event screen asks. */
     private val cover: EventCoverFacet? = null,
     /** Its ping facet; read through [friendPings]. Only the event screen asks for it. */
@@ -287,6 +305,9 @@ data class Event(
 ) {
     /** Where it is; null when it has no venue yet ("To be announced"). */
     val venue: Venue? get() = venueFacet?.venue
+
+    /** Who's hosting or playing; only the event screen asks for it. */
+    val people: List<Person> get() = peopleFacet?.people.orEmpty()
 
     /** Friends' active Pings that pick this event; only the event screen asks for it. */
     val friendPings: List<Ping> get() = pingFeed?.friendPings.orEmpty()
