@@ -57,11 +57,19 @@ data class VenueMessage(
      * says so about the viewer's friends, and to admins.
      */
     val reachable: Boolean = false,
+    /** Posted by talent as their listing (role HOST): [name] and [avatarUrl] are this person's. */
+    val personId: String? = null,
 ) {
     fun isOutgoing(currentUserId: String?): Boolean = currentUserId != null && userId.equals(currentUserId, ignoreCase = true)
 
     /** Posted as the venue: [name] and [avatarUrl] are the venue's, never the sender's. */
     val isPostedAsVenue: Boolean get() = role == ChatRole.VENUE
+
+    /**
+     * A listing, not the human who typed it: the venue, or talent posting as themselves from Backstage. It
+     * has no presence, never takes a friend's name, and groups apart from the sender's own lines.
+     */
+    val isFromListing: Boolean get() = isPostedAsVenue || personId != null
 
     /** Whether the room still shows it: a special stops at its end time. */
     fun isShowing(at: Instant = Instant.now()): Boolean = !(kind == ChatKind.SPECIAL && endsAt != null && !endsAt.isAfter(at))
@@ -336,6 +344,8 @@ object ChatProtocol {
         @SerialName("ends_at") val endsAt: String? = null,
         val pinned: Boolean? = null,
         val presence: String? = null,
+        @SerialName("posted_as_person") val postedAsPerson: Boolean? = null,
+        @SerialName("person_id") val personId: String? = null,
     ) {
         fun toMessage(): VenueMessage {
             val base = VenueMessage(body = message, userId = userId, avatarUrl = avatarUrl.blankToNull())
@@ -352,6 +362,7 @@ object ChatProtocol {
                 endsAt = endsAt?.let(InstantSerializer::parse),
                 pinned = pinned ?: false,
                 reachable = presence.equals("push", ignoreCase = true),
+                personId = if (postedAsPerson == true) personId.blankToNull()?.lowercase() else null,
             )
         }
     }

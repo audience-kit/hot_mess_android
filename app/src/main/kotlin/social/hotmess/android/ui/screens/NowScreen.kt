@@ -338,8 +338,8 @@ internal fun rememberPeekMessages(lines: List<ChatLine>): List<ChatThreadMessage
         lines.filter { it.isShowing(now) }.map { line ->
             ChatThreadMessage(
                 id = line.id,
-                senderId = line.userId.ifEmpty { line.id }.lowercase(),
-                senderName = if (line.postedAsVenue) line.name else graph.api.friends.displayName(line.userId, line.name),
+                senderId = if (line.postedAsPerson) "person:${line.name}" else line.userId.ifEmpty { line.id }.lowercase(),
+                senderName = if (line.isFromListing) line.name else graph.api.friends.displayName(line.userId, line.name),
                 avatarUrl = line.avatarUrl,
                 text = line.message,
                 sentAt = line.sentAt,
@@ -353,7 +353,7 @@ internal fun rememberPeekMessages(lines: List<ChatLine>): List<ChatThreadMessage
 
 /** The presence dots for a peek's senders, by the same ids [rememberPeekMessages] groups them by. */
 internal fun peekPresence(lines: List<ChatLine>): Map<String, Presence> =
-    lines.filter { it.userId.isNotEmpty() && !it.postedAsVenue }
+    lines.filter { it.userId.isNotEmpty() && !it.isFromListing }
         .mapNotNull { line -> presenceOf(line.presence)?.let { line.userId.lowercase() to it } }
         .toMap()
 
