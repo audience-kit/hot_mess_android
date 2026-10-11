@@ -16,11 +16,13 @@ import social.hotmess.android.MainActivity
 import social.hotmess.android.R
 import social.hotmess.android.appGraph
 import social.hotmess.core.PingPush
+import social.hotmess.core.PushNotification
 
 /**
  * Firebase hands new tokens here. In the background Firebase shows notifications itself, and tapping
  * one opens [MainActivity] with the message's data (`kind`, `ping_id`) as extras. In the foreground
- * Firebase shows nothing, so a Ping push is shown here, with the same extras, and Now reloads.
+ * Firebase shows nothing, so a Ping push is shown here, with the same extras, and Now reloads, unless
+ * the same notification (by `notification_id`) came over the cable and [InAppNotifications] showed it.
  */
 class HotMessMessagingService : FirebaseMessagingService() {
     override fun onNewToken(token: String) {
@@ -30,7 +32,10 @@ class HotMessMessagingService : FirebaseMessagingService() {
 
     override fun onMessageReceived(message: RemoteMessage) {
         val push = PingPush.parse(message.data) ?: return
-        applicationContext.appGraph.pingUpdated(push.pingId)
+        val graph = applicationContext.appGraph
+        // The in-app copy was shown (and reloaded Now) already, or gets a moment to be: drop this one.
+        if (!graph.notifications.shouldPostSystemCopy(message.data[PushNotification.NOTIFICATION_ID])) return
+        graph.pingUpdated(push.pingId)
         val notification = message.notification ?: return
         show(applicationContext, notification.title, notification.body, message.data)
     }

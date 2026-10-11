@@ -1,8 +1,6 @@
 package social.hotmess.core
 
-import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -11,13 +9,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
-import kotlinx.serialization.json.jsonObject
 import okhttp3.OkHttpClient
-import okhttp3.Request
-import okhttp3.Response
-import okhttp3.WebSocket
-import okhttp3.WebSocketListener
-import java.net.URI
 import java.time.Instant
 import java.util.UUID
 
@@ -251,66 +243,43 @@ object ChatProtocol {
         data object Cleared : Frame
     }
 
-    /**
-     * Action Cable names a subscription by a JSON *string*, not an object: the GraphQL channel, the
-     * audience, and [channelId], which keeps one operation's identifier apart from another's.
-     */
-    fun identifier(audienceId: String, channelId: String): String = JsonObject(
-        mapOf(
-            "channel" to JsonPrimitive("GraphQLChannel"),
-            "audience_id" to JsonPrimitive(audienceId.lowercase()),
-            "channelId" to JsonPrimitive(channelId),
-        ),
-    ).toString()
+    /** The channel's identifier (see [GraphQLCable.identifier]). */
+    fun identifier(audienceId: String, channelId: String): String = GraphQLCable.identifier(audienceId, channelId)
 
     /** A fresh id for [identifier]. */
-    fun newChannelId(): String = UUID.randomUUID().toString().replace("-", "").take(12)
+    fun newChannelId(): String = GraphQLCable.newChannelId()
 
-    fun subscribe(identifier: String): String =
-        json.encodeToString(OutgoingFrame.serializer(), OutgoingFrame("subscribe", identifier, null))
+    fun subscribe(identifier: String): String = GraphQLCable.subscribe(identifier)
 
     /** Runs the room's subscription on the channel [identifier] names. */
-    fun execute(identifier: String, room: ChatRoom): String {
-        val data = JsonObject(
-            mapOf(
-                "action" to JsonPrimitive("execute"),
-                "query" to JsonPrimitive(document(room)),
-                "variables" to JsonObject(mapOf("id" to JsonPrimitive(room.id.lowercase()))),
-            ),
-        ).toString()
-        return json.encodeToString(OutgoingFrame.serializer(), OutgoingFrame("message", identifier, data))
-    }
+    fun execute(identifier: String, room: ChatRoom): String =
+        GraphQLCable.execute(identifier, document(room), JsonObject(mapOf("id" to JsonPrimitive(room.id.lowercase()))))
 
     /**
      * Reads one frame from the server: what it says, in order, or nothing for pings and anything
      * unrecognized. ChatJoined is several things at once, and a result with `more: false` also ends.
      */
-    fun parse(text: String): List<Frame> {
-        val frame = runCatching { json.parseToJsonElement(text).jsonObject }.getOrNull() ?: return emptyList()
-        return when ((frame["type"] as? JsonPrimitive)?.contentOrNull) {
-            "confirm_subscription" -> listOf(Frame.Subscribed)
-            "disconnect" -> listOf(Frame.Disconnected)
-            "reject_subscription" -> listOf(Frame.Rejected)
-            // Action Cable reuses `message` for its ping counter, so only an object there is a result.
-            null -> (frame["message"] as? JsonObject)?.let(::result).orEmpty()
-            else -> emptyList()
-        }
+    fun parse(text: String): List<Frame> = frames(GraphQLCable.parse(text))
+
+    /** What one [GraphQLCable.Envelope] says about the room. */
+    fun frames(envelope: GraphQLCable.Envelope?): List<Frame> = when (envelope) {
+        null -> emptyList()
+        GraphQLCable.Envelope.Subscribed -> listOf(Frame.Subscribed)
+        GraphQLCable.Envelope.Disconnected -> listOf(Frame.Disconnected)
+        GraphQLCable.Envelope.Rejected -> listOf(Frame.Rejected)
+        is GraphQLCable.Envelope.Result -> result(envelope)
     }
 
     /** `{"result":{"data":…,"errors":…},"more":…}`. */
-    private fun result(message: JsonObject): List<Frame> {
-        val result = message["result"] as? JsonObject
-        val more = (message["more"] as? JsonPrimitive)?.booleanOrNull ?: true
-        val data = result?.get("data") as? JsonObject
-        val errors = (result?.get("errors") as? JsonArray).orEmpty()
-        val event = data?.values?.firstOrNull() as? JsonObject
+    private fun result(result: GraphQLCable.Envelope.Result): List<Frame> {
+        val event = result.event
         val frames = when {
             event != null -> event(event)
             // Refused: not in the room, banned, or the room isn't there.
-            errors.isNotEmpty() -> return listOf(Frame.Rejected)
+            result.errors.isNotEmpty() -> return listOf(Frame.Rejected)
             else -> emptyList()
         }
-        return if (more) frames else frames + Frame.Ended
+        return if (result.more) frames else frames + Frame.Ended
     }
 
     /** One ChatRoomEvent, by its `__typename`. An unknown event is skipped. */
@@ -391,15 +360,7 @@ object ChatProtocol {
     private fun JsonObject.boolean(key: String): Boolean = (this[key] as? JsonPrimitive)?.booleanOrNull ?: false
 
     /** The websocket endpoint, derived from the HTTP base URL: `wss://<host>/connection`. */
-    fun realtimeUrl(baseUrl: String): String? {
-        val uri = runCatching { URI(baseUrl) }.getOrNull() ?: return null
-        val scheme = if (uri.scheme == "http") "ws" else "wss"
-        val path = uri.path.orEmpty().trimEnd('/') + "/connection"
-        return runCatching { URI(scheme, uri.userInfo, uri.host, uri.port, path, null, null).toString() }.getOrNull()
-    }
-
-    @Serializable
-    private data class OutgoingFrame(val command: String, val identifier: String, val data: String?)
+    fun realtimeUrl(baseUrl: String): String? = GraphQLCable.realtimeUrl(baseUrl)
 
     /** A ChatMessage. `message` (the line in words) and `userId` are required; the rest default to a plain line. */
     @Serializable
@@ -490,56 +451,40 @@ class VenueChatConnection(
     }
 
     /** Connects when collected and closes the socket when the collector goes away. */
-    fun events(): Flow<Event> = callbackFlow {
-        val identifier = ChatProtocol.identifier(audienceId, ChatProtocol.newChannelId())
-        val request = Request.Builder().url(url).apply {
-            token?.let { header("Authorization", "JWT $it") }
-        }.build()
-
-        val listener = object : WebSocketListener() {
-            override fun onOpen(webSocket: WebSocket, response: Response) {
-                webSocket.send(ChatProtocol.subscribe(identifier))
-            }
-
-            override fun onMessage(webSocket: WebSocket, text: String) {
-                for (frame in ChatProtocol.parse(text)) {
-                    when (frame) {
-                        ChatProtocol.Frame.Subscribed -> webSocket.send(ChatProtocol.execute(identifier, room))
-                        ChatProtocol.Frame.Connected -> trySend(Event.Connected)
-                        ChatProtocol.Frame.Disconnected -> trySend(Event.Disconnected(null))
-                        ChatProtocol.Frame.Rejected -> trySend(Event.Rejected)
-                        ChatProtocol.Frame.Left -> trySend(Event.Left)
-                        ChatProtocol.Frame.Ended -> {
-                            // The server ended the room's operation; the caller reconnects to start it over.
-                            trySend(Event.Disconnected(null))
-                            webSocket.close(1000, null)
-                            channel.close()
-                        }
-                        is ChatProtocol.Frame.Message -> trySend(Event.Received(frame.message))
-                        is ChatProtocol.Frame.Range -> trySend(Event.Range(frame.outOfRange))
-                        is ChatProtocol.Frame.Roster -> trySend(Event.Roster(frame.online, frame.people, frame.friends))
-                        is ChatProtocol.Frame.PresenceChanged ->
-                            trySend(Event.PresenceChanged(frame.userId, frame.online, frame.name, frame.avatarUrl, frame.reachable))
-                        is ChatProtocol.Frame.History -> trySend(Event.History(frame.messages, frame.pinned))
-                        is ChatProtocol.Frame.Pin -> trySend(Event.Pin(frame.id, frame.announcement))
-                        is ChatProtocol.Frame.Removed -> trySend(Event.Removed(frame.id))
-                        ChatProtocol.Frame.Cleared -> trySend(Event.Cleared)
+    fun events(): Flow<Event> = GraphQLCable.connect(
+        client,
+        url,
+        token,
+        audienceId,
+        execute = { identifier -> ChatProtocol.execute(identifier, room) },
+        onFrame = { envelope, emit ->
+            var open = true
+            for (frame in ChatProtocol.frames(envelope)) {
+                when (frame) {
+                    // GraphQLCable runs the operation once the channel is confirmed.
+                    ChatProtocol.Frame.Subscribed -> Unit
+                    ChatProtocol.Frame.Connected -> emit(Event.Connected)
+                    ChatProtocol.Frame.Disconnected -> emit(Event.Disconnected(null))
+                    ChatProtocol.Frame.Rejected -> emit(Event.Rejected)
+                    ChatProtocol.Frame.Left -> emit(Event.Left)
+                    ChatProtocol.Frame.Ended -> {
+                        // The server ended the room's operation; the caller reconnects to start it over.
+                        emit(Event.Disconnected(null))
+                        open = false
                     }
+                    is ChatProtocol.Frame.Message -> emit(Event.Received(frame.message))
+                    is ChatProtocol.Frame.Range -> emit(Event.Range(frame.outOfRange))
+                    is ChatProtocol.Frame.Roster -> emit(Event.Roster(frame.online, frame.people, frame.friends))
+                    is ChatProtocol.Frame.PresenceChanged ->
+                        emit(Event.PresenceChanged(frame.userId, frame.online, frame.name, frame.avatarUrl, frame.reachable))
+                    is ChatProtocol.Frame.History -> emit(Event.History(frame.messages, frame.pinned))
+                    is ChatProtocol.Frame.Pin -> emit(Event.Pin(frame.id, frame.announcement))
+                    is ChatProtocol.Frame.Removed -> emit(Event.Removed(frame.id))
+                    ChatProtocol.Frame.Cleared -> emit(Event.Cleared)
                 }
             }
-
-            override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
-                trySend(Event.Disconnected(reason.ifBlank { null }))
-                channel.close()
-            }
-
-            override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-                trySend(Event.Disconnected(t.message))
-                channel.close()
-            }
-        }
-
-        val socket = client.newWebSocket(request, listener)
-        awaitClose { socket.close(1001, null) }
-    }
+            open
+        },
+        onClosed = { reason, emit -> emit(Event.Disconnected(reason)) },
+    )
 }
