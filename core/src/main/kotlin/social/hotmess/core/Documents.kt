@@ -20,11 +20,11 @@ object Documents {
     const val VENUE_COVER_FIELDS: String =
         "cover { charge { ${Queries.COVER_CHARGE_FIELDS} } viewerAdmission { ${Queries.ADMISSION_FIELDS} } }"
 
-    const val PERSON_FIELDS: String = "id name facebookId isLiked pictureUrl coverUrl"
+    const val PERSON_FIELDS: String = "id name facebookId isLiked pictureUrl bannerUrl"
 
     /** An event, with its venue under the event's venue facet (`venue { venue }`). */
     const val EVENT_FIELDS: String =
-        "id name startAt endAt facebookId coverPhotoUrl isFeatured viewerRsvp venue { venue { $VENUE_FIELDS } }"
+        "id name startAt endAt facebookId bannerUrl isFeatured viewerRsvp venue { venue { $VENUE_FIELDS } }"
 
     const val FRIEND_FIELDS: String = "id name facebookId"
 

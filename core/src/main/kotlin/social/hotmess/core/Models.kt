@@ -117,7 +117,7 @@ data class Person(
     val role: String? = null,
     val isLiked: Boolean = false,
     @Serializable(with = BlankAsNullSerializer::class) val pictureUrl: String? = null,
-    @Serializable(with = BlankAsNullSerializer::class) val coverUrl: String? = null,
+    @Serializable(with = BlankAsNullSerializer::class) val bannerUrl: String? = null,
     val order: Int = 0,
 ) {
     val facebookUrl: String? get() = facebookId?.let { "https://facebook.com/$it" }
@@ -134,7 +134,7 @@ data class PersonDetail(
     val facebookId: String? = null,
     val isLiked: Boolean = false,
     @Serializable(with = BlankAsNullSerializer::class) val pictureUrl: String? = null,
-    @Serializable(with = BlankAsNullSerializer::class) val coverUrl: String? = null,
+    @Serializable(with = BlankAsNullSerializer::class) val bannerUrl: String? = null,
     @SerialName("events") private val eventsFacet: UpcomingEvents? = null,
     val socialLinks: List<SocialLink> = emptyList(),
     val tracks: List<Track> = emptyList(),
@@ -145,7 +145,7 @@ data class PersonDetail(
     val events: List<Event> get() = eventsFacet?.events.orEmpty()
 
     val person: Person
-        get() = Person(id = id, name = name, facebookId = facebookId, isLiked = isLiked, pictureUrl = pictureUrl, coverUrl = coverUrl)
+        get() = Person(id = id, name = name, facebookId = facebookId, isLiked = isLiked, pictureUrl = pictureUrl, bannerUrl = bannerUrl)
 
     /** Where fans can tip them (Cash App, Venmo), each opening that app. */
     val tipLinks: List<SocialLink>
@@ -222,7 +222,7 @@ data class Event(
     @Serializable(with = InstantSerializer::class) val startAt: Instant,
     @Serializable(with = InstantSerializer::class) val endAt: Instant? = null,
     val facebookId: String? = null,
-    @Serializable(with = BlankAsNullSerializer::class) val coverPhotoUrl: String? = null,
+    @Serializable(with = BlankAsNullSerializer::class) val bannerUrl: String? = null,
     val isFeatured: Boolean = false,
     @SerialName("viewerRsvp") val rsvp: Rsvp = Rsvp.UNSURE,
     /** Its venue facet; read the venue through [venue]. */

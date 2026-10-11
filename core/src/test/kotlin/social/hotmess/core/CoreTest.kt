@@ -32,7 +32,7 @@ class ModelDecodingTest {
         assertEquals(Rsvp.MAYBE, event.rsvp)
         assertEquals("The Wildrose", event.venue?.name)
         assertEquals(47.6145, event.venue?.coordinate?.latitude)
-        assertNull(event.coverPhotoUrl, "an empty URL is no URL")
+        assertNull(event.bannerUrl, "an empty URL is no URL")
         assertEquals("https://facebook.com/events/1234", event.facebookUrl)
     }
 
@@ -124,7 +124,7 @@ class ModelDecodingTest {
 
 class ListingTest {
     private fun event(id: String, start: String, cover: String? = null) =
-        Event(id = id, name = id, startAt = Instant.parse(start), coverPhotoUrl = cover)
+        Event(id = id, name = id, startAt = Instant.parse(start), bannerUrl = cover)
 
     @Test
     fun featuresUpToTwoEventsWithCovers() {
@@ -805,13 +805,13 @@ private object Fixtures {
         "point":"POINT (-122.3194 47.6145)","facebookId":"55","photoUrl":"https://img/v","heroUrl":null,"isLiked":true}"""
 
     const val EVENT = """{"id":"e-1","name":"Drag Brunch","startAt":"2026-10-10T04:00:00Z","endAt":null,
-        "facebookId":"1234","coverPhotoUrl":"","isFeatured":false,"viewerRsvp":"MAYBE","venue":{"name":"The Wildrose","venue":$VENUE}}"""
+        "facebookId":"1234","bannerUrl":"","isFeatured":false,"viewerRsvp":"MAYBE","venue":{"name":"The Wildrose","venue":$VENUE}}"""
 
     const val PERSON = """{"id":"p-1","name":"DJ Glitter","facebookId":null,"isLiked":false,"pictureUrl":"https://img/p",
-        "coverUrl":null,"events":{"upcoming":{"nodes":[$EVENT]}},"socialLinks":[{"id":"s-1","handle":"glitter","provider":"Instagram","url":"https://instagram.com/glitter"}],
+        "bannerUrl":null,"events":{"upcoming":{"nodes":[$EVENT]}},"socialLinks":[{"id":"s-1","handle":"glitter","provider":"Instagram","url":"https://instagram.com/glitter"}],
         "tracks":[{"id":"t-1","title":"Late Night","provider":"soundcloud","providerUrl":null,"waveformUrl":null,"artworkUrl":null}]}"""
 
-    const val TROUPE = """{"id":"p-3","name":"The Glitterettes","pictureUrl":null,"coverUrl":null,"events":{"upcoming":{"nodes":[]}},"socialLinks":[],"tracks":[],
+    const val TROUPE = """{"id":"p-3","name":"The Glitterettes","pictureUrl":null,"bannerUrl":null,"events":{"upcoming":{"nodes":[]}},"socialLinks":[],"tracks":[],
         "members":[{"id":"p-4","name":"Anita Cocktail","pictureUrl":"https://img/anita"},{"id":"p-5","name":"Ella Vator","pictureUrl":""}],
         "groups":[{"id":"p-2","name":"House of Glitter","pictureUrl":null}]}"""
 }

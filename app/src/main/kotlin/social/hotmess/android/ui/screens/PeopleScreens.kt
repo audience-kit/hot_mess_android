@@ -184,7 +184,7 @@ fun PersonScreen(id: String, navigator: Navigator) {
 /** The cover photo, with their picture and name over it. */
 @Composable
 private fun Hero(detail: PersonDetail, topInset: Dp, onTone: (PhotoTone) -> Unit) {
-    HeroHeader(detail.coverUrl, topInset, onTone = onTone) {
+    HeroHeader(detail.bannerUrl, topInset, onTone = onTone) {
         Row(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.Bottom) {
             Avatar(
                 detail.pictureUrl,

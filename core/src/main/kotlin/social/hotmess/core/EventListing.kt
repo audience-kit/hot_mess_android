@@ -16,7 +16,7 @@ data class EventListing(val sections: List<EventSection> = emptyList()) {
          */
         fun upcoming(events: List<Event>): EventListing {
             val upcoming = events.sortedBy { it.startAt }
-            val featured = upcoming.filter { it.coverPhotoUrl != null }.take(2)
+            val featured = upcoming.filter { it.bannerUrl != null }.take(2)
             return EventListing(
                 listOf(
                     EventSection(id = "featured", title = "Featured", events = featured),
