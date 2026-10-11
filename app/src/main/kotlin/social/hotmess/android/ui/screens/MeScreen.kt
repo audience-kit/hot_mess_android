@@ -68,7 +68,7 @@ fun MeScreen(navigator: Navigator) {
                         horizontalArrangement = Arrangement.spacedBy(Space.s3),
                     ) {
                         val current = user
-                        Avatar(current?.let { configuration.avatarUrl(it.id) }, current?.name ?: "", size = 64.dp)
+                        Avatar(current?.avatarUrl, current?.name ?: "", size = 64.dp)
                         Column(Modifier.weight(1f)) {
                             Text(current?.name ?: "Signed in", style = HotMessType.heading, color = tokens.ink)
                             locale?.name?.let { Text(it, style = HotMessType.bodySmall, color = tokens.inkMuted) }

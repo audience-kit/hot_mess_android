@@ -162,12 +162,8 @@ class VenueChatModel(private val graph: AppGraph, private val room: ChatRoom) : 
         }
     }
 
-    /**
-     * Adds a line, with the sender's picture when it has none. A post as the venue never falls back
-     * to the sender's own face. A line the room sends again (by its id) replaces the first copy.
-     */
-    private fun receive(message: VenueMessage) {
-        val line = withAvatar(message)
+    /** Adds a line. A line the room sends again (by its id) replaces the first copy. */
+    private fun receive(line: VenueMessage) {
         if (line.reachable && !line.isPostedAsVenue) _reachable.value = _reachable.value + line.userId.lowercase()
         // An older server's roster has no names: a line someone sends names them in "Here now".
         if (!line.isPostedAsVenue) _people.value = _people.value.described(line.userId, line.name, line.avatarUrl)
@@ -176,20 +172,13 @@ class VenueChatModel(private val graph: AppGraph, private val room: ChatRoom) : 
         _messages.value = if (index >= 0) current.toMutableList().also { it[index] = line } else current + line
     }
 
-    private fun withAvatar(message: VenueMessage): VenueMessage =
-        if (message.avatarUrl != null || message.isPostedAsVenue) {
-            message
-        } else {
-            message.copy(avatarUrl = graph.configuration.avatarUrl(message.userId))
-        }
-
     /**
      * What the room sent on joining replaces what was shown, so a reconnect doesn't repeat lines. A
      * pinned announcement older than the lines the room shows goes first, so its bar has it.
      */
     private fun history(messages: List<VenueMessage>, pinned: VenueMessage?) {
-        val lines = messages.map(::withAvatar)
-        val older = pinned?.takeIf { p -> lines.none { it.id == p.id } }?.let(::withAvatar)
+        val lines = messages
+        val older = pinned?.takeIf { p -> lines.none { it.id == p.id } }
         _messages.value = listOfNotNull(older) + lines
         _reachable.value = lines.filter { it.reachable && !it.isPostedAsVenue }.map { it.userId.lowercase() }.toSet()
     }
@@ -200,7 +189,7 @@ class VenueChatModel(private val graph: AppGraph, private val room: ChatRoom) : 
             val pinned = announcement != null && line.id == id
             if (line.pinned == pinned) line else line.copy(pinned = pinned)
         }
-        _messages.value = if (announcement != null && lines.none { it.id == id }) lines + withAvatar(announcement) else lines
+        _messages.value = if (announcement != null && lines.none { it.id == id }) lines + announcement else lines
     }
 
     fun disconnect() {
@@ -277,7 +266,6 @@ fun VenueChatScreen(room: ChatRoom, venueName: String, navigator: Navigator) {
             // Who's here, friends first; a roster can add friends' full names, so it redraws the thread too.
             val hereNow = remember(people, userId) {
                 RoomPeople.hereNow(people.byId.values, userId) { friends.fullName(it) }
-                    .map { it.copy(avatarUrl = it.avatarUrl ?: graph.configuration.avatarUrl(it.userId)) }
             }
             HereNowStrip(hereNow)
             val thread = remember(messages, userId, people) { messages.map { it.threadMessage(userId, friends) } }

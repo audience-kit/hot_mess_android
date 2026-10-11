@@ -155,11 +155,10 @@ fun rememberUserId(): String? {
 /** The sender and everyone in, as overlapping faces. */
 @Composable
 fun CircleFaces(people: List<Friend>, size: Dp = 32.dp, limit: Int = 5) {
-    val configuration = LocalAppGraph.current.configuration
     Row(horizontalArrangement = Arrangement.spacedBy(-(size / 4))) {
         people.take(limit).forEach { friend ->
             Avatar(
-                configuration.avatarUrl(friend.id),
+                friend.avatarUrl,
                 friend.name,
                 size = size,
                 modifier = Modifier.border(2.dp, tokens.surfaceRaised, CircleShape),
@@ -376,7 +375,7 @@ fun PingStripSection(
                 val target = pickOf(ping)
                 RowDivider()
                 RowButton(null) {
-                    Avatar(LocalAppGraph.current.configuration.avatarUrl(ping.user.id), ping.user.name, size = 28.dp)
+                    Avatar(ping.user.avatarUrl, ping.user.name, size = 28.dp)
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                         Text(ping.user.firstName, style = HotMessType.subheading, color = tokens.ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         val detail = listOfNotNull(ping.viaText, ping.noteText?.let { "“$it”" }, ping.whoIsIn).joinToString(" · ")

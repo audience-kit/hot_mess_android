@@ -164,7 +164,8 @@ class SessionStore(
             )
             val id = social.hotmess.core.RecordId.normalize(result.user.id)
             _user.value = id?.let { User(it, result.user.name.orEmpty()) }
-            if (_user.value?.name.isNullOrBlank()) _user.value = runCatching { api.me() }.getOrNull() ?: _user.value
+            // Sign-in doesn't say what their photo is; Me does (and their name, if sign-in had none).
+            _user.value = runCatching { api.me() }.getOrNull() ?: _user.value
             signedIn()
         } catch (e: CancellationException) {
             throw e
