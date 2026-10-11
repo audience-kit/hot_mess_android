@@ -23,9 +23,9 @@ object Documents {
      */
     const val RECENT_MESSAGES: String = "recentMessages(limit: 3) { nodes { $CHAT_LINE_FIELDS } }"
 
-    /** Tonight's cover at a venue and the user's pass for it, in the venue's cover facet (null when the audience has no cover). */
+    /** Tonight's cover at a venue and the user's pass for it, in the cover facet inside the venue's tickets facet. */
     const val VENUE_COVER_FIELDS: String =
-        "cover { charge { ${Queries.COVER_CHARGE_FIELDS} } viewerAdmission { ${Queries.ADMISSION_FIELDS} } }"
+        "tickets { cover { charge { ${Queries.COVER_CHARGE_FIELDS} } viewerAdmission { ${Queries.ADMISSION_FIELDS} } } }"
 
     /** A person, with their Facebook Page under their profile facet. */
     const val PERSON_FIELDS: String = "id name pictureUrl bannerUrl profile { facebook { facebookId isLiked } }"
@@ -96,7 +96,7 @@ object Documents {
             venue(id: ${'$'}id) {
               $VENUE_FIELDS
               chat { open $RECENT_MESSAGES }
-              cover { charge { ${Queries.COVER_CHARGE_FIELDS} } viewerAdmission { ${Queries.ADMISSION_FIELDS} } canWorkDoor }
+              tickets { cover { charge { ${Queries.COVER_CHARGE_FIELDS} } viewerAdmission { ${Queries.ADMISSION_FIELDS} } canWorkDoor } }
               events { upcoming { nodes { $EVENT_FIELDS } } }
               $PROFILE_SOCIAL_LINKS
               friends { list { nodes { $FRIEND_OUT_FIELDS } } }
@@ -138,7 +138,7 @@ object Documents {
           events {
             event(id: ${'$'}id) {
               $EVENT_FIELDS
-              cover { charge { ${Queries.COVER_CHARGE_FIELDS} } }
+              tickets { cover { charge { ${Queries.COVER_CHARGE_FIELDS} } } }
               venue { venue { id $VENUE_COVER_FIELDS } }
               people { lineup { nodes { $PERSON_FIELDS } } }
               ping { friendPings { $PING_FIELDS } }

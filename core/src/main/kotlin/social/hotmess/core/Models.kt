@@ -42,9 +42,14 @@ data class Venue(
     private val chat: ChatFacet? = null,
     /** Its profile facet: address, phone, links and Facebook Page. Read through [address] and friends. */
     private val profile: ListingProfile? = null,
-    /** Its cover facet; null when not asked for or the audience doesn't take cover. Read through [coverCharge] and friends. */
-    private val cover: VenueCoverFacet? = null,
+    /**
+     * Its tickets facet, holding the cover facet (`tickets { cover }`); null when not asked for or the audience doesn't
+     * take cover. Read through [coverCharge] and friends.
+     */
+    private val tickets: VenueTicketsFacet? = null,
 ) {
+    private val cover: VenueCoverFacet? get() = tickets?.cover
+
     /** The last few lines of its chat room, oldest first; Now and the venue screen ask, and only people there (or admins) get them. */
     val recentMessages: List<ChatLine> get() = chat?.lines.orEmpty()
 
@@ -78,7 +83,11 @@ data class Venue(
     val shareUrl: String get() = "https://hotmess.social/venues/${id.lowercase()}"
 }
 
-/** A venue's cover facet (`Venue.cover`), as much of it as the app asks for. */
+/** A venue's tickets facet (`Venue.tickets`), read for the cover facet the cover module nests in it. */
+@Serializable
+data class VenueTicketsFacet(val cover: VenueCoverFacet? = null)
+
+/** A venue's cover facet (`Venue.tickets.cover`), as much of it as the app asks for. */
 @Serializable
 data class VenueCoverFacet(
     val charge: CoverCharge? = null,
@@ -86,7 +95,11 @@ data class VenueCoverFacet(
     val canWorkDoor: Boolean = false,
 )
 
-/** An event's cover facet (`Event.cover`). */
+/** An event's tickets facet (`Event.tickets`), read for the cover facet the cover module nests in it. */
+@Serializable
+data class EventTicketsFacet(val cover: EventCoverFacet? = null)
+
+/** An event's cover facet (`Event.tickets.cover`). */
 @Serializable
 data class EventCoverFacet(val charge: CoverCharge? = null)
 
@@ -297,8 +310,8 @@ data class Event(
     @SerialName("venue") private val venueFacet: EventVenueFacet? = null,
     /** Its people facet; read through [people]. Only the event screen asks for it. */
     @SerialName("people") private val peopleFacet: EventPeopleFacet? = null,
-    /** Its cover facet; read through [coverCharge]. Only the event screen asks. */
-    private val cover: EventCoverFacet? = null,
+    /** Its tickets facet, holding the cover facet; read through [coverCharge]. Only the event screen asks. */
+    private val tickets: EventTicketsFacet? = null,
     /** Its ping facet; read through [friendPings]. Only the event screen asks for it. */
     @SerialName("ping") private val pingFeed: PingFeedFacet? = null,
 ) {
@@ -316,7 +329,7 @@ data class Event(
         copy(pingFeed = PingFeedFacet(friendPings.map { if (it.id == ping.id) ping else it }))
 
     /** The cover at its venue that night; null when there's none or it sells tickets. Only the event screen asks. */
-    val coverCharge: CoverCharge? get() = cover?.charge
+    val coverCharge: CoverCharge? get() = tickets?.cover?.charge
 
     val facebookUrl: String? get() = facebookId?.let { "https://facebook.com/events/$it" }
 

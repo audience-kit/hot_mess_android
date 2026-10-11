@@ -522,7 +522,7 @@ private data class VenueNode(
     val point: String? = null,
     val profile: ListingProfile? = null,
     val chat: ChatFacet? = null,
-    val cover: VenueCoverFacet? = null,
+    val tickets: VenueTicketsFacet? = null,
     @SerialName("events") val eventsFacet: UpcomingEvents? = null,
     val friends: FriendsFacet? = null,
     val ping: PingFeedFacet? = null,
@@ -539,7 +539,7 @@ private data class VenueNode(
         point = point,
         profile = profile,
         chat = chat,
-        cover = cover,
+        tickets = tickets,
     )
 
     val events: List<Event> get() = eventsFacet?.events.orEmpty()
