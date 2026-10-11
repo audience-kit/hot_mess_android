@@ -41,17 +41,28 @@ AudienceKit Kotlin SDK, styled with the AudienceKit design system's `hot_mess` p
 
 4. Open the project in Android Studio, or run `./gradlew installDebug`.
 
+## Version and build numbers
+
+The app version is **2.0**. Each Gradle invocation defaults to a build number (`versionCode`)
+computed from the seconds since 2026-01-01 UTC, so later builds automatically get higher numbers
+on both developer machines and CI. Builds started in the same second share a number; APK and AAB
+built together also share it. The clock is rechecked when Gradle reuses its configuration cache.
+
+For a reproducible rebuild, pass `-Photmess.buildNumber=12345678` or set `BUILD_NUMBER` (the Gradle
+property takes precedence). Overrides must be integers from 1 through 2,100,000,000, and published
+builds must use a number higher than the previous release.
+
 ## Environments
 
 | Build type | API | Facebook app | Application id |
 | --- | --- | --- | --- |
 | `debug` | `http://10.0.2.2:3000` (the API on your machine, from the emulator) | 842337999153841 | `social.hotmess.android.development` |
-| `staging` | `https://api-staging.audiencekit.com` | 1660272792277019 | `social.hotmess.android.staging` |
+| `staging` | `https://api.next.audiencekit.com` | 1660272792277019 | `social.hotmess.android.staging` |
 | `release` | `https://api.audiencekit.com` | 1168782378316790 | `social.hotmess.android.app` |
-| `signInTest` | `https://api-staging.audiencekit.com` | 713525445368431 (AudienceKit platform) | `social.hotmess.android.signintest` |
+| `signInTest` | `https://api.next.audiencekit.com` | 713525445368431 (AudienceKit platform) | `social.hotmess.android.signintest` |
 
 Hot Mess is a consumer app: sign-in is classic Facebook Login on the build's Facebook app, asking
-for `public_profile`, `email` and `user_friends`, like the iOS app. It opens Facebook's OAuth dialog
+only for `public_profile` until App Review is approved, like the iOS app. It opens Facebook's OAuth dialog
 in a Custom Tab, which redirects to `fbconnect://cct.<application id>` with a code that the API
 exchanges. Each Facebook app needs an Android platform listing this app's package names and key
 hashes, and the redirect has to be accepted as a Valid OAuth Redirect URI.
