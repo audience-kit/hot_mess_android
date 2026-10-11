@@ -40,17 +40,21 @@ object Documents {
     val REPORT_LOCATION: String = """
         mutation ReportLocation(${'$'}position: CoordinatesInput!) {
           reportLocation(input: { position: ${'$'}position }) {
-            now {
-              title imageUrl
-              venue { $VENUE_FIELDS $RECENT_MESSAGES $VENUE_COVER_FIELDS }
-              venues { $VENUE_FIELDS }
-              locale { id name chatOpen $RECENT_MESSAGES }
+            venue {
+              $VENUE_FIELDS $RECENT_MESSAGES $VENUE_COVER_FIELDS
               events { $EVENT_FIELDS }
-              friends { $FRIEND_OUT_FIELDS }
-              friendVenues { venue { $VENUE_FIELDS } friendCount friends { $FRIEND_OUT_FIELDS } }
-              myPing { $PING_FIELDS }
-              friendPings { $PING_FIELDS }
+              friends { list { $FRIEND_OUT_FIELDS } }
             }
+            nearbyVenues { $VENUE_FIELDS }
+            locale {
+              id name heroUrl chatOpen $RECENT_MESSAGES
+              events { $EVENT_FIELDS }
+              friends {
+                list { $FRIEND_OUT_FIELDS }
+                venues { venue { $VENUE_FIELDS } friendCount friends { $FRIEND_OUT_FIELDS } }
+              }
+            }
+            audience { ping { myPing { $PING_FIELDS } friendPings { $PING_FIELDS } } }
           }
         }
     """.trimIndent()
@@ -82,7 +86,7 @@ object Documents {
             $VENUE_COVER_FIELDS
             events { $EVENT_FIELDS }
             socialLinks { id handle provider url }
-            friends { $FRIEND_OUT_FIELDS }
+            friends { list { $FRIEND_OUT_FIELDS } }
             friendPings { $PING_FIELDS }
           }
         }

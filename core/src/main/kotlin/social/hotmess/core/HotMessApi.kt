@@ -65,7 +65,7 @@ class HotMessApi(val client: AudienceKitClient) {
                     Documents.REPORT_LOCATION,
                     ReportLocationResponse.serializer(),
                     mapOf("position" to near.toGraphQLValue()),
-                ).reportLocation.now
+                ).reportLocation.now(json)
             }.also { request ->
                 reports[near] = request
                 request.invokeOnCompletion { synchronized(reports) { if (reports[near] === request) reports.remove(near) } }
@@ -118,12 +118,13 @@ class HotMessApi(val client: AudienceKitClient) {
     suspend fun venueOverview(id: String): VenueOverview {
         val venue = query(Documents.VENUE, VenueResponse.serializer(), graphQLVariables("id" to id)).venue
             ?: throw ApiError.NotFound
-        friends.record(venue.friends)
+        val venueFriends = venue.friends?.list.orEmpty()
+        friends.record(venueFriends)
         return VenueOverview(
             venue = venue.venue(),
             events = venue.events,
             chatOpen = venue.chatOpen,
-            friends = venue.friends,
+            friends = venueFriends,
             friendPings = venue.friendPings,
         )
     }
@@ -412,8 +413,77 @@ fun Venue.isIn(localeId: String?): Boolean {
 private data class ManifestRequest(val device: DeviceDescription)
 
 @Serializable
-private data class ReportLocationResponse(val reportLocation: Payload) {
-    @Serializable data class Payload(val now: Now)
+private data class ReportLocationResponse(val reportLocation: LocationReport)
+
+/**
+ * What reportLocation says about where the user is: the [venue] they're in, else their [locale] and its
+ * [nearbyVenues]. Friends, events and Pings come from those objects' facets; [now] shapes it all for the
+ * Now screen, with the title and hero taken from the venue or the locale.
+ */
+@Serializable
+private data class LocationReport(
+    /** Read twice: as the [Venue] and for its [VenueFacets]. */
+    val venue: JsonObject? = null,
+    val nearbyVenues: List<Venue>? = null,
+    val locale: LocaleNode? = null,
+    val audience: AudienceNode? = null,
+) {
+    @Serializable
+    data class VenueFacets(val events: List<Event> = emptyList(), val friends: FriendsFacet? = null)
+
+    @Serializable
+    data class LocaleNode(
+        val id: String,
+        val name: String? = null,
+        @Serializable(with = BlankAsNullSerializer::class) val heroUrl: String? = null,
+        val chatOpen: Boolean = false,
+        val recentMessages: List<ChatLine> = emptyList(),
+        val events: List<Event> = emptyList(),
+        val friends: FriendsFacet? = null,
+    )
+
+    @Serializable
+    data class AudienceNode(val ping: PingFeed? = null)
+
+    @Serializable
+    data class PingFeed(val myPing: Ping? = null, val friendPings: List<Ping> = emptyList())
+
+    fun now(json: Json): Now {
+        val node = venue
+        val nowLocale = locale?.let { NowLocale(it.id, it.name, it.chatOpen, it.recentMessages) }
+        val ping = audience?.ping
+        if (node != null) {
+            val place = json.decodeFromJsonElement(Venue.serializer(), node)
+            val facets = json.decodeFromJsonElement(VenueFacets.serializer(), node)
+            return Now(
+                title = place.name,
+                imageUrl = place.heroUrl,
+                venue = place,
+                venues = nearbyVenues,
+                events = facets.events,
+                friends = facets.friends?.list.orEmpty(),
+                locale = nowLocale,
+                myPing = ping?.myPing,
+                friendPings = ping?.friendPings.orEmpty(),
+            )
+        }
+        return Now(
+            title = locale?.name?.let { "Happening Now in $it" } ?: "Happening Now",
+            imageUrl = locale?.heroUrl,
+            venues = nearbyVenues,
+            events = locale?.events.orEmpty().take(LOCALE_EVENT_LIMIT),
+            friends = locale?.friends?.list.orEmpty(),
+            friendVenues = locale?.friends?.venues.orEmpty(),
+            locale = nowLocale,
+            myPing = ping?.myPing,
+            friendPings = ping?.friendPings.orEmpty(),
+        )
+    }
+
+    private companion object {
+        /** How many of the locale's upcoming events Now lists away from a venue. */
+        const val LOCALE_EVENT_LIMIT = 5
+    }
 }
 
 @Serializable
@@ -457,7 +527,7 @@ private data class VenueNode(
     val recentMessages: List<ChatLine> = emptyList(),
     val events: List<Event> = emptyList(),
     val socialLinks: List<SocialLink> = emptyList(),
-    val friends: List<Friend> = emptyList(),
+    val friends: FriendsFacet? = null,
     val friendPings: List<Ping> = emptyList(),
 ) {
     fun venue() = Venue(
