@@ -653,8 +653,8 @@ class HotMessApiTest {
         val (api, _) = api(
             "ReportLocation" to """{"data":{"reportLocation":{"nearbyVenues":null,
                 "venue":{"id":"v1","name":"Nyne","heroUrl":"https://cdn.example/nyne.jpg","events":{"upcoming":{"nodes":[]}},
-                  "recentMessages":[{"id":"m1","message":"who's here?","name":"Sam",
-                  "userId":"u1","avatarUrl":"","sentAt":"2026-10-07T08:00:00Z"}],
+                  "chat":{"recentMessages":{"nodes":[{"id":"m1","message":"who's here?","name":"Sam",
+                  "userId":"u1","avatarUrl":"","sentAt":"2026-10-07T08:00:00Z"}]}},
                   "friends":{"list":{"nodes":[{"id":"f1","name":"Alex Friend","facebookId":"4242"}]}}}}}}""",
         )
         val now = api.now(Coordinates(47.66, -117.41))
@@ -674,9 +674,9 @@ class HotMessApiTest {
     @Test
     fun venueOverviewAsksForAndKeepsItsRecentChat() = runTest {
         val (api, bodies) = api(
-            "query Venue(" to """{"data":{"venue":{"id":"v1","name":"Nyne","chatOpen":true,"events":{"upcoming":{"nodes":[]}},
-                "recentMessages":[{"id":"m1","message":"who's here?","name":"Sam","userId":"u1","avatarUrl":"",
-                  "sentAt":"2026-10-07T08:00:00Z"}]}}}""",
+            "query Venue(" to """{"data":{"venue":{"id":"v1","name":"Nyne","events":{"upcoming":{"nodes":[]}},
+                "chat":{"open":true,"recentMessages":{"nodes":[{"id":"m1","message":"who's here?","name":"Sam","userId":"u1",
+                  "avatarUrl":"","sentAt":"2026-10-07T08:00:00Z"}]}}}}}""",
         )
         val overview = api.venueOverview("v1")
 
@@ -707,9 +707,9 @@ class HotMessApiTest {
     fun nowAwayFromVenuesHasTheLocaleChat() = runTest {
         val (api, bodies) = api(
             "ReportLocation" to """{"data":{"reportLocation":{"nearbyVenues":[],
-                "locale":{"id":"l1","name":"Seattle","heroUrl":"https://cdn.example/seattle.jpg","chatOpen":true,
-                  "recentMessages":[{"id":"m1",
-                  "message":"anyone out?","name":"Ada","userId":"u1","sentAt":"2026-10-07T08:00:00Z"}]}}}}""",
+                "locale":{"id":"l1","name":"Seattle","heroUrl":"https://cdn.example/seattle.jpg","chat":{"open":true,
+                  "recentMessages":{"nodes":[{"id":"m1",
+                  "message":"anyone out?","name":"Ada","userId":"u1","sentAt":"2026-10-07T08:00:00Z"}]}}}}}}""",
         )
         val now = api.now(Coordinates(47.62, -122.32))
         val locale = now.locale!!
@@ -719,17 +719,17 @@ class HotMessApiTest {
         assertTrue(locale.chatOpen)
         assertEquals("Seattle", locale.name)
         assertEquals("anyone out?", locale.recentMessages.single().message)
-        assertTrue(bodies.single().contains("chatOpen"))
+        assertTrue(bodies.single().contains("chat { open recentMessages"))
     }
 
     @Test
     fun recentChatAndFriendsCarryPresenceAndRoles() = runTest {
         val (api, bodies) = api(
             "ReportLocation" to """{"data":{"reportLocation":{"nearbyVenues":null,
-                "venue":{"id":"v1","name":"Nyne","recentMessages":[{"id":"m1","message":"Special: Two for one",
+                "venue":{"id":"v1","name":"Nyne","chat":{"recentMessages":{"nodes":[{"id":"m1","message":"Special: Two for one",
                   "name":"Nyne","userId":"u1","avatarUrl":"","sentAt":"2026-10-07T08:00:00Z","presence":"OFFLINE",
                   "role":"VENUE","kind":"SPECIAL","endsAt":"2026-10-07T09:00:00Z","postedAsVenue":true},
-                  {"id":"m2","message":"hi","name":"Alex Friend","userId":"f1","presence":"ONLINE","kind":"TEXT"}],
+                  {"id":"m2","message":"hi","name":"Alex Friend","userId":"f1","presence":"ONLINE","kind":"TEXT"}]}},
                   "friends":{"list":{"nodes":[{"id":"f1","name":"Alex Friend","facebookId":"4242","presence":"PUSH"}]}}}}}}""",
         )
         val now = api.now(Coordinates(47.66, -117.41))
@@ -750,7 +750,7 @@ class HotMessApiTest {
     @Test
     fun venueOverviewHasItsSocialLinks() = runTest {
         val (api, bodies) = api(
-            "query Venue(" to """{"data":{"venue":{"id":"v-1","name":"The Wildrose","chatOpen":true,"events":{"upcoming":{"nodes":[${Fixtures.EVENT}]}},
+            "query Venue(" to """{"data":{"venue":{"id":"v-1","name":"The Wildrose","chat":{"open":true},"events":{"upcoming":{"nodes":[${Fixtures.EVENT}]}},
                 "profile":{"socialLinks":{"nodes":[{"id":"s-1","handle":"thewildrosebar","provider":"instagram","url":"https://instagram.com/thewildrosebar"},
                   null,{"id":"s-2","handle":"wildrose","provider":"facebook","url":""}]}}}}}""",
         )
@@ -768,7 +768,7 @@ class HotMessApiTest {
     @Test
     fun venueOverviewHasTheFriendsHere() = runTest {
         val (api, bodies) = api(
-            "query Venue(" to """{"data":{"venue":{"id":"v1","name":"Nyne","chatOpen":true,"events":{"upcoming":{"nodes":[]}},
+            "query Venue(" to """{"data":{"venue":{"id":"v1","name":"Nyne","chat":{"open":true},"events":{"upcoming":{"nodes":[]}},
                 "friends":{"list":{"nodes":[{"id":"f1","name":"Alex Friend","facebookId":"4242","presence":"ONLINE"}]}}}}}""",
         )
         val overview = api.venueOverview("v1")
