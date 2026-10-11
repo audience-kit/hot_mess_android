@@ -262,8 +262,8 @@ class PingApiTest {
     @Test
     fun withoutAPositionNowStillHasPings() = runTest {
         val (api, bodies) = api(
-            "query MyPing" to """{"data":{"myPing":${PingFixtures.MY_PING}}}""",
-            "query FriendPings" to """{"data":{"friendPings":[${PingFixtures.FRIEND_PING}]}}""",
+            "query MyPing" to """{"data":{"audience":{"ping":{"myPing":${PingFixtures.MY_PING}}}}}""",
+            "query FriendPings" to """{"data":{"audience":{"ping":{"friendPings":[${PingFixtures.FRIEND_PING}]}}}}""",
         )
         val now = api.nowOrPings(null)
         assertEquals("p-mine", now.myPing?.id)
@@ -334,8 +334,8 @@ class PingApiTest {
     @Test
     fun queriesPingsWithoutReportingLocation() = runTest {
         val (api, _) = api(
-            "query MyPing" to """{"data":{"myPing":null}}""",
-            "query FriendPings" to """{"data":{"friendPings":[${PingFixtures.FRIEND_PING}]}}""",
+            "query MyPing" to """{"data":{"audience":{"ping":{"myPing":null}}}}""",
+            "query FriendPings" to """{"data":{"audience":{"ping":{"friendPings":[${PingFixtures.FRIEND_PING}]}}}}""",
         )
         assertNull(api.myPing())
         assertEquals(1, api.friendPings().size)
@@ -369,9 +369,9 @@ class PingApiTest {
     @Test
     fun venueAndEventPagesCarryFriendsPings() = runTest {
         val (api, _) = api(
-            "query Venue" to """{"data":{"venue":{"id":"v-wildrose","name":"The Wildrose","ping":{"friendPings":[${PingFixtures.FRIEND_PING}]}}}}""",
-            "query Event" to """{"data":{"event":{"id":"e-bingo","name":"Drag Bingo","startAt":"2026-10-10T04:00:00Z",
-                "ping":{"friendPings":[${PingFixtures.FRIEND_PING}]}}}}""",
+            "query Venue" to """{"data":{"venues":{"venue":{"id":"v-wildrose","name":"The Wildrose","ping":{"friendPings":[${PingFixtures.FRIEND_PING}]}}}}}""",
+            "query Event" to """{"data":{"events":{"event":{"id":"e-bingo","name":"Drag Bingo","startAt":"2026-10-10T04:00:00Z",
+                "ping":{"friendPings":[${PingFixtures.FRIEND_PING}]}}}}}""",
         )
         assertEquals("p-1", api.venueOverview("v-wildrose").friendPings.single().id)
         assertEquals("p-1", api.event("e-bingo").friendPings.single().id)
