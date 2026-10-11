@@ -54,6 +54,8 @@ class ModelDecodingTest {
 
         assertEquals("DJ Glitter", person.name)
         assertEquals(SocialLink.Network.INSTAGRAM, person.socialLinks.single().network)
+        assertEquals("https://facebook.com/99", person.person.facebookUrl, "the Page comes through the profile facet")
+        assertFalse(person.isLiked)
         assertEquals("Late Night", person.tracks.single().title)
         assertEquals(1, person.events.size)
     }
@@ -93,10 +95,14 @@ class ModelDecodingTest {
     fun splitsTipLinksFromProfiles() {
         val person = PersonDetail(
             id = "p-1",
-            socialLinks = listOf(
-                SocialLink("s-1", "glitter", "instagram", "https://instagram.com/glitter"),
-                SocialLink("s-2", "GlitterTips", "cashapp", "https://cash.app/\$GlitterTips"),
-                SocialLink("s-3", "glitter-tips", "venmo", "https://venmo.com/u/glitter-tips"),
+            profile = ListingProfile(
+                socialLinks = Connection(
+                    listOf(
+                        SocialLink("s-1", "glitter", "instagram", "https://instagram.com/glitter"),
+                        SocialLink("s-2", "GlitterTips", "cashapp", "https://cash.app/\$GlitterTips"),
+                        SocialLink("s-3", "glitter-tips", "venmo", "https://venmo.com/u/glitter-tips"),
+                    ),
+                ),
             ),
         )
 
@@ -745,12 +751,12 @@ class HotMessApiTest {
     fun venueOverviewHasItsSocialLinks() = runTest {
         val (api, bodies) = api(
             "query Venue(" to """{"data":{"venue":{"id":"v-1","name":"The Wildrose","chatOpen":true,"events":{"upcoming":{"nodes":[${Fixtures.EVENT}]}},
-                "socialLinks":[{"id":"s-1","handle":"thewildrosebar","provider":"instagram","url":"https://instagram.com/thewildrosebar"},
-                  {"id":"s-2","handle":"wildrose","provider":"facebook","url":""}]}}}""",
+                "profile":{"socialLinks":{"nodes":[{"id":"s-1","handle":"thewildrosebar","provider":"instagram","url":"https://instagram.com/thewildrosebar"},
+                  null,{"id":"s-2","handle":"wildrose","provider":"facebook","url":""}]}}}}}""",
         )
         val overview = api.venueOverview("v-1")
 
-        assertTrue(bodies.single().contains("socialLinks"))
+        assertTrue(bodies.single().contains("profile { socialLinks { nodes {"))
         assertTrue(overview.chatOpen)
         assertEquals(1, overview.events.size)
         val links = overview.venue.socialLinks
@@ -787,6 +793,25 @@ class HotMessApiTest {
     }
 
     @Test
+    fun aVenuesAddressPhoneAndPageComeFromItsProfile() {
+        val venue = HotMessApi.json.decodeFromString(Venue.serializer(), Fixtures.VENUE)
+
+        assertEquals("1021 E Pike St", venue.address)
+        assertNull(venue.phone)
+        assertEquals("https://facebook.com/55", venue.facebookUrl)
+        assertTrue(venue.isLiked)
+    }
+
+    @Test
+    fun aVenueWithoutAProfileHasNoAddressOrPage() {
+        val venue = HotMessApi.json.decodeFromString(Venue.serializer(), """{"id":"v-2","name":"Pop-up"}""")
+
+        assertNull(venue.address)
+        assertNull(venue.facebookId)
+        assertFalse(venue.isLiked)
+    }
+
+    @Test
     fun missingRecordsAreNotFound() = runTest {
         val (api, _) = api("query Event" to """{"data":{"event":null}}""")
         assertFailsWith<ApiError.NotFound> { api.event("e") }
@@ -810,17 +835,17 @@ class HotMessApiTest {
 }
 
 private object Fixtures {
-    const val VENUE = """{"id":"v-1","name":"The Wildrose","address":"1021 E Pike St","distance":120.5,
-        "point":"POINT (-122.3194 47.6145)","facebookId":"55","photoUrl":"https://img/v","heroUrl":null,"isLiked":true}"""
+    const val VENUE = """{"id":"v-1","name":"The Wildrose","distance":120.5,"point":"POINT (-122.3194 47.6145)",
+        "photoUrl":"https://img/v","heroUrl":null,"profile":{"address":"1021 E Pike St","phone":null,"facebook":{"facebookId":"55","isLiked":true}}}"""
 
     const val EVENT = """{"id":"e-1","name":"Drag Brunch","startAt":"2026-10-10T04:00:00Z","endAt":null,
         "facebookId":"1234","bannerUrl":"","isFeatured":false,"viewerRsvp":"MAYBE","venue":{"name":"The Wildrose","venue":$VENUE}}"""
 
-    const val PERSON = """{"id":"p-1","name":"DJ Glitter","facebookId":null,"isLiked":false,"pictureUrl":"https://img/p",
-        "bannerUrl":null,"events":{"upcoming":{"nodes":[$EVENT]}},"socialLinks":[{"id":"s-1","handle":"glitter","provider":"Instagram","url":"https://instagram.com/glitter"}],
+    const val PERSON = """{"id":"p-1","name":"DJ Glitter","pictureUrl":"https://img/p","bannerUrl":null,"events":{"upcoming":{"nodes":[$EVENT]}},
+        "profile":{"facebook":{"facebookId":"99","isLiked":false},"socialLinks":{"nodes":[{"id":"s-1","handle":"glitter","provider":"Instagram","url":"https://instagram.com/glitter"}]}},
         "music":{"tracks":{"nodes":[{"id":"t-1","title":"Late Night","provider":"soundcloud","providerUrl":null,"waveformUrl":null,"artworkUrl":null},null]}}}"""
 
-    const val TROUPE = """{"id":"p-3","name":"The Glitterettes","pictureUrl":null,"bannerUrl":null,"events":{"upcoming":{"nodes":[]}},"socialLinks":[],"music":{"tracks":{"nodes":[]}},
+    const val TROUPE = """{"id":"p-3","name":"The Glitterettes","pictureUrl":null,"bannerUrl":null,"events":{"upcoming":{"nodes":[]}},"profile":{"socialLinks":{"nodes":[]}},"music":{"tracks":{"nodes":[]}},
         "members":[{"id":"p-4","name":"Anita Cocktail","pictureUrl":"https://img/anita"},{"id":"p-5","name":"Ella Vator","pictureUrl":""}],
         "groups":[{"id":"p-2","name":"House of Glitter","pictureUrl":null}]}"""
 }

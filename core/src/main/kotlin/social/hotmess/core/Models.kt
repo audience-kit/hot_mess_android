@@ -28,28 +28,35 @@ import java.util.UUID
 data class Venue(
     val id: String,
     val name: String = "",
-    val address: String? = null,
     /** A line about the place; list rows fall back to the address. */
     val description: String? = null,
-    val phone: String? = null,
-    val facebookId: String? = null,
     /** Metres from the position the venues were looked up near. */
     val distance: Double? = null,
     @Serializable(with = BlankAsNullSerializer::class) val photoUrl: String? = null,
     @Serializable(with = BlankAsNullSerializer::class) val heroUrl: String? = null,
     /** Where it is, as WKT: `POINT (<longitude> <latitude>)`. */
     val point: String? = null,
-    val isLiked: Boolean = false,
     val locale: LocaleSummary? = null,
     val hidden: Boolean = false,
     val order: Int = 0,
     /** The last few lines of its chat room, oldest first; Now and the venue screen ask, and only people there (or admins) get them. */
     val recentMessages: List<ChatLine> = emptyList(),
-    /** Where else to find it, like its Instagram; only the venue screen asks. */
-    val socialLinks: List<SocialLink> = emptyList(),
+    /** Its profile facet: address, phone, links and Facebook Page. Read through [address] and friends. */
+    private val profile: ListingProfile? = null,
     /** Its cover facet; null when not asked for or the audience doesn't take cover. Read through [coverCharge] and friends. */
     private val cover: VenueCoverFacet? = null,
 ) {
+    val address: String? get() = profile?.address
+
+    val phone: String? get() = profile?.phone
+
+    val facebookId: String? get() = profile?.facebook?.facebookId
+
+    val isLiked: Boolean get() = profile?.facebook?.isLiked == true
+
+    /** Where else to find it, like its Instagram; only the venue screen asks. */
+    val socialLinks: List<SocialLink> get() = profile?.links.orEmpty()
+
     /** Tonight's cover, or null when there's none; only the venue screen, the event screen and Now ask. */
     val coverCharge: CoverCharge? get() = cover?.charge
 
@@ -102,6 +109,25 @@ data class PersonMusic(private val tracks: Connection<Track>? = null) {
     val trackList: List<Track> get() = tracks?.nodes.orEmpty().filterNotNull()
 }
 
+/**
+ * A venue's or person's profile facet (`Venue.profile`, `Person.profile`), as much of it as the app asks
+ * for. `socialLinks` is a connection asked for as `nodes`; [facebook] is the facebook module's facet.
+ */
+@Serializable
+data class ListingProfile(
+    val address: String? = null,
+    val phone: String? = null,
+    private val socialLinks: Connection<SocialLink>? = null,
+    val facebook: FacebookProfile? = null,
+) {
+    /** Its social links, dropping null nodes; empty when not asked for. */
+    val links: List<SocialLink> get() = socialLinks?.nodes.orEmpty().filterNotNull()
+}
+
+/** A listing's Facebook Page ID and whether the user likes it (`profile.facebook`). */
+@Serializable
+data class FacebookProfile(val facebookId: String? = null, val isLiked: Boolean = false)
+
 /** A Relay connection's `nodes`, which GraphQL types as nullable items. */
 @Serializable
 data class Connection<T>(val nodes: List<T?> = emptyList())
@@ -121,13 +147,17 @@ data class AppLocale(val id: String, val name: String)
 data class Person(
     val id: String,
     val name: String = "",
-    val facebookId: String? = null,
     val role: String? = null,
-    val isLiked: Boolean = false,
     @Serializable(with = BlankAsNullSerializer::class) val pictureUrl: String? = null,
     @Serializable(with = BlankAsNullSerializer::class) val bannerUrl: String? = null,
     val order: Int = 0,
+    /** Their profile facet, for the Facebook Page. Read through [facebookId] and [isLiked]. */
+    private val profile: ListingProfile? = null,
 ) {
+    val facebookId: String? get() = profile?.facebook?.facebookId
+
+    val isLiked: Boolean get() = profile?.facebook?.isLiked == true
+
     val facebookUrl: String? get() = facebookId?.let { "https://facebook.com/$it" }
 }
 
@@ -139,12 +169,11 @@ data class Person(
 data class PersonDetail(
     val id: String,
     val name: String = "",
-    val facebookId: String? = null,
-    val isLiked: Boolean = false,
     @Serializable(with = BlankAsNullSerializer::class) val pictureUrl: String? = null,
     @Serializable(with = BlankAsNullSerializer::class) val bannerUrl: String? = null,
     @SerialName("events") private val eventsFacet: UpcomingEvents? = null,
-    val socialLinks: List<SocialLink> = emptyList(),
+    /** Their profile facet: links and Facebook Page. Read through [socialLinks], [facebookId] and [isLiked]. */
+    private val profile: ListingProfile? = null,
     @SerialName("music") private val musicFacet: PersonMusic? = null,
     val members: List<Person> = emptyList(),
     val groups: List<Person> = emptyList(),
@@ -155,8 +184,15 @@ data class PersonDetail(
     /** Their newest tracks, from the music facet; empty when the audience has no music. */
     val tracks: List<Track> get() = musicFacet?.trackList.orEmpty()
 
+    /** Where else to find them, from the profile facet. */
+    val socialLinks: List<SocialLink> get() = profile?.links.orEmpty()
+
+    val facebookId: String? get() = profile?.facebook?.facebookId
+
+    val isLiked: Boolean get() = profile?.facebook?.isLiked == true
+
     val person: Person
-        get() = Person(id = id, name = name, facebookId = facebookId, isLiked = isLiked, pictureUrl = pictureUrl, bannerUrl = bannerUrl)
+        get() = Person(id = id, name = name, pictureUrl = pictureUrl, bannerUrl = bannerUrl, profile = profile)
 
     /** Where fans can tip them (Cash App, Venmo), each opening that app. */
     val tipLinks: List<SocialLink>

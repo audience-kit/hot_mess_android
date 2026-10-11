@@ -10,8 +10,9 @@ object Documents {
     /** How many of the locale's upcoming events Now lists away from a venue. */
     const val LOCALE_EVENT_LIMIT: Int = 5
 
+    /** A venue, with its address, phone and Facebook Page under its profile facet. */
     const val VENUE_FIELDS: String =
-        "id name address description phone distance point facebookId photoUrl heroUrl isLiked"
+        "id name description distance point photoUrl heroUrl profile { address phone facebook { facebookId isLiked } }"
 
     /** A chat line as a preview shows it: rich messages in words (`message`), with the sender's role and presence. */
     const val CHAT_LINE_FIELDS: String = "id message name userId avatarUrl sentAt presence role kind endsAt postedAsVenue postedAsPerson"
@@ -23,7 +24,11 @@ object Documents {
     const val VENUE_COVER_FIELDS: String =
         "cover { charge { ${Queries.COVER_CHARGE_FIELDS} } viewerAdmission { ${Queries.ADMISSION_FIELDS} } }"
 
-    const val PERSON_FIELDS: String = "id name facebookId isLiked pictureUrl bannerUrl"
+    /** A person, with their Facebook Page under their profile facet. */
+    const val PERSON_FIELDS: String = "id name pictureUrl bannerUrl profile { facebook { facebookId isLiked } }"
+
+    /** A venue's or person's social links, a connection in the profile facet (merged with the fields' own `profile`). */
+    const val PROFILE_SOCIAL_LINKS: String = "profile { socialLinks { nodes { id handle provider url } } }"
 
     /** An event, with its venue under the event's venue facet (`venue { venue }`). */
     const val EVENT_FIELDS: String =
@@ -89,7 +94,7 @@ object Documents {
             $RECENT_MESSAGES
             cover { charge { ${Queries.COVER_CHARGE_FIELDS} } viewerAdmission { ${Queries.ADMISSION_FIELDS} } canWorkDoor }
             events { upcoming { nodes { $EVENT_FIELDS } } }
-            socialLinks { id handle provider url }
+            $PROFILE_SOCIAL_LINKS
             friends { list { nodes { $FRIEND_OUT_FIELDS } } }
             friendPings { $PING_FIELDS }
           }
@@ -107,7 +112,7 @@ object Documents {
           person(id: ${'$'}id) {
             $PERSON_FIELDS
             events { upcoming { nodes { $EVENT_FIELDS } } }
-            socialLinks { id handle provider url }
+            $PROFILE_SOCIAL_LINKS
             members { id name pictureUrl }
             groups { id name pictureUrl }
             music { tracks { nodes { id title provider providerUrl waveformUrl artworkUrl } } }
