@@ -92,6 +92,10 @@ data class EventCoverFacet(val charge: CoverCharge? = null)
 @Serializable
 data class EventVenueFacet(val venue: Venue? = null)
 
+/** A venue's or event's ping facet (`Venue.ping`, `Event.ping`): friends' active Pings that pick it. */
+@Serializable
+data class PingFeedFacet(val friendPings: List<Ping> = emptyList())
+
 /**
  * An events facet's upcoming events (`Venue.events`, `Locale.events`, `Person.events`): `upcoming` is a
  * connection, asked for as `nodes` (every event, since no `first` is given).
@@ -278,11 +282,18 @@ data class Event(
     val people: List<Person> = emptyList(),
     /** Its cover facet; read through [coverCharge]. Only the event screen asks. */
     private val cover: EventCoverFacet? = null,
-    /** Friends' active Pings that pick this event; only the event screen asks for it. */
-    val friendPings: List<Ping> = emptyList(),
+    /** Its ping facet; read through [friendPings]. Only the event screen asks for it. */
+    @SerialName("ping") private val pingFeed: PingFeedFacet? = null,
 ) {
     /** Where it is; null when it has no venue yet ("To be announced"). */
     val venue: Venue? get() = venueFacet?.venue
+
+    /** Friends' active Pings that pick this event; only the event screen asks for it. */
+    val friendPings: List<Ping> get() = pingFeed?.friendPings.orEmpty()
+
+    /** With [ping] in place of the copy among its friends' Pings. */
+    fun replacingFriendPing(ping: Ping): Event =
+        copy(pingFeed = PingFeedFacet(friendPings.map { if (it.id == ping.id) ping else it }))
 
     /** The cover at its venue that night; null when there's none or it sells tickets. Only the event screen asks. */
     val coverCharge: CoverCharge? get() = cover?.charge

@@ -517,8 +517,10 @@ private data class VenueNode(
     val recentMessages: List<ChatLine> = emptyList(),
     @SerialName("events") val eventsFacet: UpcomingEvents? = null,
     val friends: FriendsFacet? = null,
-    val friendPings: List<Ping> = emptyList(),
+    val ping: PingFeedFacet? = null,
 ) {
+    val friendPings: List<Ping> get() = ping?.friendPings.orEmpty()
+
     fun venue() = Venue(
         id = id,
         name = name,
