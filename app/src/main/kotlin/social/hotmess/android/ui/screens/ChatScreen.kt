@@ -20,6 +20,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -83,7 +84,10 @@ class VenueChatModel(private val graph: AppGraph, private val room: ChatRoom) : 
     private val _reachable = MutableStateFlow<Set<String>>(emptySet())
     val reachable: StateFlow<Set<String>> = _reachable.asStateFlow()
 
-    private var connection: VenueChatConnection? = null
+    /** A line on its way to the room; the composer waits for it. */
+    private val _sending = MutableStateFlow(false)
+    val sending: StateFlow<Boolean> = _sending.asStateFlow()
+
     private var job: Job? = null
     private var heartbeat: Job? = null
 
@@ -109,8 +113,21 @@ class VenueChatModel(private val graph: AppGraph, private val room: ChatRoom) : 
             var backoff = 1_000L
             while (true) {
                 _status.value = Status.CONNECTING
-                val current = VenueChatConnection(room, url, graph.session.sessionToken)
-                connection = current
+                // The cable runs GraphQL for one audience: the configured one, the session's, or the host's.
+                val audienceId = try {
+                    graph.api.client.audienceId()
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (_: Exception) {
+                    null
+                }
+                if (audienceId == null) {
+                    _status.value = Status.OFFLINE
+                    delay(backoff)
+                    backoff = (backoff * 2).coerceAtMost(30_000L)
+                    continue
+                }
+                val current = VenueChatConnection(room, url, graph.session.sessionToken, audienceId)
                 var away = false
                 current.events().takeWhile { event ->
                     when (event) {
@@ -149,7 +166,6 @@ class VenueChatModel(private val graph: AppGraph, private val room: ChatRoom) : 
                     }
                     !away
                 }.collect()
-                connection = null
                 if (away) {
                     // Reconnecting won't help until they're back; "Try again" reconnects.
                     _status.value = Status.AWAY
@@ -197,15 +213,32 @@ class VenueChatModel(private val graph: AppGraph, private val room: ChatRoom) : 
         job = null
         heartbeat?.cancel()
         heartbeat = null
-        connection = null
         _people.value = RoomPeople()
         _reachable.value = emptySet()
     }
 
-    fun send(body: String): Boolean {
+    /**
+     * Says [body] in the room with `sendMyChatMessage`, then tells [onResult] whether it went. The room
+     * delivers the line to everyone following it, this person included, and the copy the mutation returns
+     * shows it at once; the room's copy then replaces it by id. A failed send leaves the draft as it was.
+     */
+    fun send(body: String, onResult: (Boolean) -> Unit) {
         val text = body.trim()
-        if (text.isEmpty()) return false
-        return connection?.send(text) ?: false
+        if (text.isEmpty() || _sending.value || _status.value != Status.CONNECTED) return onResult(false)
+        _sending.value = true
+        viewModelScope.launch {
+            val sent = try {
+                graph.api.sendChatMessage(room, text)?.let(::receive)
+                true
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                false
+            } finally {
+                _sending.value = false
+            }
+            onResult(sent)
+        }
     }
 
     override fun onCleared() = disconnect()
@@ -233,8 +266,12 @@ fun VenueChatScreen(room: ChatRoom, venueName: String, navigator: Navigator) {
         onDispose { model.disconnect() }
     }
 
+    val sending by model.sending.collectAsStateWithLifecycle()
+
     fun send() {
-        if (model.send(draft)) draft = ""
+        val text = draft
+        // Clears only what was sent, not anything typed while it went.
+        model.send(text) { sent -> if (sent && draft == text) draft = "" }
     }
 
     ScreenScaffold(title = venueName, onBack = navigator::back) {
@@ -285,7 +322,7 @@ fun VenueChatScreen(room: ChatRoom, venueName: String, navigator: Navigator) {
                 value = draft,
                 onValueChange = { draft = it },
                 onSend = ::send,
-                sendEnabled = draft.isNotBlank() && status == VenueChatModel.Status.CONNECTED,
+                sendEnabled = draft.isNotBlank() && !sending && status == VenueChatModel.Status.CONNECTED,
             )
         }
     }

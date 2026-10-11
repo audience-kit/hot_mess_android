@@ -190,63 +190,111 @@ class DeepLinkTest {
 
 class ChatProtocolTest {
     private val venue = "b0f8b66a-e636-495d-9475-0f5317ea08e0"
+    private val audience = "A0F8B66A-E636-495D-9475-0F5317EA08E0"
+
+    /** A subscription result carrying one ChatRoomEvent, as GraphQLChannel transmits it. */
+    private fun result(event: String, more: Boolean = true) =
+        """{"identifier":"x","message":{"result":{"data":{"venueChat":$event}},"more":$more}}"""
+
+    /** A ChatMessagePosted with [fields] as its message. */
+    private fun posted(fields: String, presence: String? = null) =
+        result("""{"__typename":"ChatMessagePosted","senderPresence":${presence?.let { "\"$it\"" } ?: "null"},"message":{$fields}}""")
+
+    private fun line(fields: String): VenueMessage =
+        assertIs<ChatProtocol.Frame.Message>(ChatProtocol.parse(posted(fields)).single()).message
 
     @Test
-    fun subscribesWithAStringIdentifier() {
-        val frame = HotMessApi.json.parseToJsonElement(ChatProtocol.subscribe(venue)).toString()
-        assertTrue(frame.contains("\"command\":\"subscribe\""))
-        assertTrue(frame.contains("venue_id\\\":\\\"$venue"), frame)
-        assertTrue(frame.contains("\"identifier\":\"{"), "the identifier is a JSON string")
+    fun subscribesToTheGraphQLChannelWithAStringIdentifier() {
+        val identifier = ChatProtocol.identifier(audience, "c-1")
+        val fields = HotMessApi.json.parseToJsonElement(identifier).jsonObject
+        assertEquals("GraphQLChannel", fields["channel"]!!.jsonPrimitive.content)
+        assertEquals(audience.lowercase(), fields["audience_id"]!!.jsonPrimitive.content)
+        assertEquals("c-1", fields["channelId"]!!.jsonPrimitive.content)
+
+        val frame = HotMessApi.json.parseToJsonElement(ChatProtocol.subscribe(identifier)).jsonObject
+        assertEquals("subscribe", frame["command"]!!.jsonPrimitive.content)
+        assertEquals(identifier, frame["identifier"]!!.jsonPrimitive.content, "the identifier is a JSON string")
+        assertTrue(ChatProtocol.newChannelId() != ChatProtocol.newChannelId())
     }
 
     @Test
-    fun subscribesToALocaleRoom() {
+    fun executesTheRoomsSubscriptionOnTheChannel() {
+        val identifier = ChatProtocol.identifier(audience, "c-1")
+        val frame = HotMessApi.json.parseToJsonElement(ChatProtocol.execute(identifier, ChatRoom.venue(venue.uppercase()))).jsonObject
+        assertEquals("message", frame["command"]!!.jsonPrimitive.content)
+        assertEquals(identifier, frame["identifier"]!!.jsonPrimitive.content)
+        val data = HotMessApi.json.parseToJsonElement(frame["data"]!!.jsonPrimitive.content).jsonObject
+        assertEquals("execute", data["action"]!!.jsonPrimitive.content)
+        val query = data["query"]!!.jsonPrimitive.content
+        assertTrue(query.startsWith("subscription"), query)
+        assertTrue(query.contains("venueChat(venueId: \$id)"), query)
+        assertTrue(query.contains("pinnedMessage {"), query)
+        assertEquals(venue, data["variables"]!!.jsonObject["id"]!!.jsonPrimitive.content)
+    }
+
+    @Test
+    fun followsALocaleRoom() {
         val locale = "4e5f6071-8293-4A41-8d5e-6f7a8b9c0d1e"
-        val identifier = HotMessApi.json.parseToJsonElement(ChatProtocol.identifier(ChatRoom.locale(locale))).jsonObject
-        assertEquals("LocaleChannel", identifier["channel"]!!.jsonPrimitive.content)
-        assertEquals(locale.lowercase(), identifier["locale_id"]!!.jsonPrimitive.content)
-        assertNull(identifier["venue_id"])
+        val query = ChatProtocol.document(ChatRoom.locale(locale))
+        assertTrue(query.contains("localeChat(localeId: \$id)"), query)
+        assertFalse(query.contains("venueChat"))
+        assertEquals(
+            """{"localeId":"${locale.lowercase()}","message":"hi"}""",
+            ChatProtocol.sendInput(ChatRoom.locale(locale), "hi").toString(),
+        )
     }
 
     @Test
     fun readsServerFrames() {
-        assertEquals(ChatProtocol.Frame.Connected, ChatProtocol.parse("""{"type":"welcome"}"""))
-        assertEquals(ChatProtocol.Frame.Connected, ChatProtocol.parse("""{"type":"confirm_subscription","identifier":"x"}"""))
-        assertNull(ChatProtocol.parse("""{"type":"ping","message":1700000000}"""))
-        assertNull(ChatProtocol.parse("""{"message":1700000000}"""))
+        assertEquals(emptyList(), ChatProtocol.parse("""{"type":"welcome"}"""))
+        assertEquals(listOf(ChatProtocol.Frame.Subscribed), ChatProtocol.parse("""{"type":"confirm_subscription","identifier":"x"}"""))
+        assertEquals(listOf(ChatProtocol.Frame.Disconnected), ChatProtocol.parse("""{"type":"disconnect"}"""))
+        assertEquals(emptyList(), ChatProtocol.parse("""{"type":"ping","message":1700000000}"""))
+        assertEquals(emptyList(), ChatProtocol.parse("""{"message":1700000000}"""))
+        assertEquals(emptyList(), ChatProtocol.parse("not json"))
+        assertEquals(emptyList(), ChatProtocol.parse(result("""{"__typename":"ChatSomethingNew"}""")), "an unknown event is skipped")
 
-        val line = ChatProtocol.parse("""{"identifier":"x","message":{"message":"hi","user_id":"U-1","avatar_url":null}}""")
-        val message = assertIs<ChatProtocol.Frame.Message>(line).message
+        val message = line(""""message":"hi","userId":"U-1","avatarUrl":null""")
         assertEquals("hi", message.body)
         assertTrue(message.isOutgoing("u-1"))
     }
 
     @Test
     fun readsBeingTurnedAwayAndLeaving() {
-        assertEquals(ChatProtocol.Frame.Rejected, ChatProtocol.parse("""{"type":"reject_subscription","identifier":"x"}"""))
-        assertEquals(ChatProtocol.Frame.Left, ChatProtocol.parse("""{"identifier":"x","message":{"type":"left"}}"""))
+        assertEquals(listOf(ChatProtocol.Frame.Rejected), ChatProtocol.parse("""{"type":"reject_subscription","identifier":"x"}"""))
+        // Refused: errors and no data.
+        assertEquals(
+            listOf(ChatProtocol.Frame.Rejected),
+            ChatProtocol.parse("""{"identifier":"x","message":{"result":{"data":null,"errors":[{"message":"You're not at the venue"}]},"more":false}}"""),
+        )
+        assertEquals(listOf(ChatProtocol.Frame.Left), ChatProtocol.parse(result("""{"__typename":"ChatLeft","reason":"AWAY"}""")))
+        assertEquals(
+            listOf(ChatProtocol.Frame.Left, ChatProtocol.Frame.Ended),
+            ChatProtocol.parse(result("""{"__typename":"ChatLeft","reason":"BANNED"}""", more = false)),
+        )
+        // The server ending the operation with nothing more to say.
+        assertEquals(listOf(ChatProtocol.Frame.Ended), ChatProtocol.parse("""{"identifier":"x","message":{"more":false}}"""))
     }
 
     @Test
     fun readsWhetherAnAdminIsOutOfRange() {
         assertEquals(
-            ChatProtocol.Frame.Range(outOfRange = true),
-            ChatProtocol.parse("""{"identifier":"x","message":{"type":"range","out_of_range":true}}"""),
+            listOf(ChatProtocol.Frame.Range(outOfRange = true)),
+            ChatProtocol.parse(result("""{"__typename":"ChatRangeChanged","outOfRange":true}""")),
         )
         assertEquals(
-            ChatProtocol.Frame.Range(outOfRange = false),
-            ChatProtocol.parse("""{"identifier":"x","message":{"type":"range","out_of_range":false}}"""),
+            listOf(ChatProtocol.Frame.Range(outOfRange = false)),
+            ChatProtocol.parse(result("""{"__typename":"ChatRangeChanged","outOfRange":false}""")),
         )
     }
 
     @Test
     fun readsTheSenderAndTimeOfALine() {
-        val line = ChatProtocol.parse(
-            """{"identifier":"x","message":{"type":"incoming","id":"m-1","message":"hi","user_id":"U-1",
-              "name":"Aurora B.","avatar_url":"https://cdn/a.jpg","sent_at":"2026-10-10T04:02:00Z","role":null,
-              "kind":"text","title":null,"body":"hi","photo_url":null,"event":null,"ends_at":null,"pinned":false}}""",
+        val message = line(
+            """"id":"m-1","message":"hi","userId":"U-1","name":"Aurora B.","avatarUrl":"https://cdn/a.jpg",
+              "sentAt":"2026-10-10T04:02:00Z","role":null,"kind":"TEXT","title":null,"body":"hi","photoUrl":null,
+              "event":null,"endsAt":null,"pinned":false,"postedAsVenue":false,"postedAsPerson":false,"person":null""",
         )
-        val message = assertIs<ChatProtocol.Frame.Message>(line).message
         assertEquals("m-1", message.id)
         assertEquals("hi", message.body)
         assertEquals("Aurora B.", message.name)
@@ -256,41 +304,39 @@ class ChatProtocolTest {
         assertEquals(ChatKind.TEXT, message.kind)
         assertFalse(message.pinned)
         assertFalse(message.isPostedAsVenue)
+        assertFalse(message.reachable)
+        assertNull(message.personId)
     }
 
     @Test
-    fun anOlderLineStillReadsAsPlainText() {
-        val message = assertIs<ChatProtocol.Frame.Message>(
-            ChatProtocol.parse("""{"identifier":"x","message":{"message":"hi","user_id":"u-1","avatar_url":""}}"""),
-        ).message
+    fun aBareLineStillReadsAsPlainText() {
+        val message = line(""""message":"hi","userId":"u-1","avatarUrl":"" """)
         assertNull(message.name)
         assertNull(message.sentAt)
         assertNull(message.avatarUrl, "an empty URL is no URL")
         assertEquals(ChatKind.TEXT, message.kind)
         assertTrue(message.id.isNotEmpty())
+        // A line with no sender is dropped.
+        assertEquals(emptyList(), ChatProtocol.parse(posted(""""message":"no sender"""")))
     }
 
     @Test
     fun readsRolesInAnyCase() {
-        fun role(raw: String) = assertIs<ChatProtocol.Frame.Message>(
-            ChatProtocol.parse("""{"identifier":"x","message":{"message":"hi","user_id":"u-1","role":"$raw"}}"""),
-        ).message.role
+        fun role(raw: String) = line(""""message":"hi","userId":"u-1","role":"$raw"""").role
 
-        assertEquals(ChatRole.VENUE, role("venue"))
-        assertEquals(ChatRole.HOST, role("host"))
-        assertEquals(ChatRole.STAFF, role("STAFF"))
-        assertNull(role("bouncer"))
+        assertEquals(ChatRole.VENUE, role("VENUE"))
+        assertEquals(ChatRole.HOST, role("HOST"))
+        assertEquals(ChatRole.STAFF, role("staff"))
+        assertNull(role("BOUNCER"))
         assertEquals("Host", ChatRole.HOST.label)
     }
 
     @Test
     fun aPostAsTheVenueCarriesTheVenuesNameAndPhoto() {
-        val message = assertIs<ChatProtocol.Frame.Message>(
-            ChatProtocol.parse(
-                """{"identifier":"x","message":{"message":"Doors at 9","user_id":"u-1","role":"venue",
-                  "name":"Neighbours","avatar_url":"https://cdn/venue.jpg"}}""",
-            ),
-        ).message
+        val message = line(
+            """"message":"Doors at 9","userId":"u-1","role":"VENUE","postedAsVenue":true,
+              "name":"Neighbours","avatarUrl":"https://cdn/venue.jpg"""",
+        )
         assertTrue(message.isPostedAsVenue)
         assertEquals("Neighbours", message.name)
         assertEquals("https://cdn/venue.jpg", message.avatarUrl)
@@ -298,27 +344,26 @@ class ChatProtocolTest {
 
     @Test
     fun aPostAsAPersonIsTheirListingNotTheSender() {
-        val message = assertIs<ChatProtocol.Frame.Message>(
-            ChatProtocol.parse(
-                """{"identifier":"x","message":{"message":"Doors at 9","user_id":"u-1","role":"host",
-                  "name":"Miss Texas","posted_as_person":true,"person_id":"P-1"}}""",
-            ),
-        ).message
+        val message = line(
+            """"message":"Doors at 9","userId":"u-1","role":"HOST","name":"Miss Texas",
+              "postedAsPerson":true,"person":{"id":"P-1"}""",
+        )
         assertEquals("p-1", message.personId)
         assertTrue(message.isFromListing)
         assertFalse(message.isPostedAsVenue)
         assertEquals(ChatRole.HOST, message.role)
+
+        // A person on a line someone posted as themself doesn't make it a listing's.
+        assertNull(line(""""message":"hi","userId":"u-1","postedAsPerson":false,"person":{"id":"P-1"}""").personId)
     }
 
     @Test
     fun readsAnAnnouncement() {
-        val message = assertIs<ChatProtocol.Frame.Message>(
-            ChatProtocol.parse(
-                """{"identifier":"x","message":{"type":"incoming","id":"m-2","message":"Announcement: Coat check closes at midnight\nGrab your things",
-                  "user_id":"u-1","role":"venue","kind":"announcement","title":"Coat check closes at midnight",
-                  "body":"Grab your things","photo_url":"https://cdn/p.jpg","pinned":true}}""",
-            ),
-        ).message
+        val message = line(
+            """"id":"m-2","message":"Announcement: Coat check closes at midnight\nGrab your things",
+              "userId":"u-1","role":"VENUE","kind":"ANNOUNCEMENT","title":"Coat check closes at midnight",
+              "body":"Grab your things","photoUrl":"https://cdn/p.jpg","pinned":true""",
+        )
         assertEquals(ChatKind.ANNOUNCEMENT, message.kind)
         assertTrue(message.kind.isRich)
         assertEquals("Coat check closes at midnight", message.title)
@@ -330,22 +375,18 @@ class ChatProtocolTest {
 
     @Test
     fun readsASharedEventAndAPhoto() {
-        val event = assertIs<ChatProtocol.Frame.Message>(
-            ChatProtocol.parse(
-                """{"identifier":"x","message":{"message":"Shared an event: Sunset Social","user_id":"u-1","role":"host",
-                  "kind":"event","body":"","event":{"id":"E-1","name":"Sunset Social","start_at":"2026-10-18T02:00:00Z"}}}""",
-            ),
-        ).message
+        val event = line(
+            """"message":"Shared an event: Sunset Social","userId":"u-1","role":"HOST",
+              "kind":"EVENT","body":"","event":{"id":"E-1","name":"Sunset Social","startAt":"2026-10-18T02:00:00Z"}""",
+        )
         assertEquals(ChatKind.EVENT, event.kind)
         assertEquals(SharedEvent("E-1", "Sunset Social", Instant.parse("2026-10-18T02:00:00Z")), event.event)
         assertNull(event.caption, "an empty caption is none")
 
-        val photo = assertIs<ChatProtocol.Frame.Message>(
-            ChatProtocol.parse(
-                """{"identifier":"x","message":{"message":"Shared a photo: Full house","user_id":"u-1","role":"venue",
-                  "kind":"photo","body":"Full house","photo_url":"https://cdn/crowd.jpg"}}""",
-            ),
-        ).message
+        val photo = line(
+            """"message":"Shared a photo: Full house","userId":"u-1","role":"VENUE",
+              "kind":"PHOTO","body":"Full house","photoUrl":"https://cdn/crowd.jpg"""",
+        )
         assertEquals(ChatKind.PHOTO, photo.kind)
         assertEquals("Full house", photo.caption)
         assertEquals("https://cdn/crowd.jpg", photo.photoUrl)
@@ -353,12 +394,10 @@ class ChatProtocolTest {
 
     @Test
     fun aSpecialStopsShowingAtItsEnd() {
-        val special = assertIs<ChatProtocol.Frame.Message>(
-            ChatProtocol.parse(
-                """{"identifier":"x","message":{"message":"Special: Two for one","user_id":"u-1","role":"venue",
-                  "kind":"special","title":"Two for one","body":"Well drinks","ends_at":"2026-10-10T06:00:00Z"}}""",
-            ),
-        ).message
+        val special = line(
+            """"message":"Special: Two for one","userId":"u-1","role":"VENUE",
+              "kind":"SPECIAL","title":"Two for one","body":"Well drinks","endsAt":"2026-10-10T06:00:00Z"""",
+        )
         assertEquals(ChatKind.SPECIAL, special.kind)
         assertEquals(Instant.parse("2026-10-10T06:00:00Z"), special.endsAt)
         assertTrue(special.isShowing(Instant.parse("2026-10-10T05:59:00Z")))
@@ -367,39 +406,42 @@ class ChatProtocolTest {
 
     @Test
     fun anUnknownKindReadsAsText() {
-        val message = assertIs<ChatProtocol.Frame.Message>(
-            ChatProtocol.parse("""{"identifier":"x","message":{"message":"Shared a poll","user_id":"u-1","kind":"poll"}}"""),
-        ).message
+        val message = line(""""message":"Shared a poll","userId":"u-1","kind":"POLL"""")
         assertEquals(ChatKind.TEXT, message.kind)
         assertEquals("Shared a poll", message.body)
     }
 
     @Test
-    fun readsTheRosterAndPresence() {
-        assertEquals(
-            ChatProtocol.Frame.Roster(setOf("u-1", "u-2")),
-            ChatProtocol.parse("""{"identifier":"x","message":{"type":"roster","online":["U-1","u-2"]}}"""),
-        )
-        assertEquals(
-            ChatProtocol.Frame.PresenceChanged("u-3", online = true),
-            ChatProtocol.parse("""{"identifier":"x","message":{"type":"presence","user_id":"U-3","presence":"online"}}"""),
-        )
-        assertEquals(
-            ChatProtocol.Frame.PresenceChanged("u-3", online = false),
-            ChatProtocol.parse("""{"identifier":"x","message":{"type":"presence","user_id":"u-3","presence":"offline"}}"""),
-        )
-        assertNull(ChatProtocol.parse("""{"identifier":"x","message":{"type":"presence","presence":"online"}}"""))
+    fun aLineFromSomeoneANotificationReachesIsReachable() {
+        fun reachable(presence: String?) = assertIs<ChatProtocol.Frame.Message>(
+            ChatProtocol.parse(posted(""""message":"hi","userId":"u-1"""", presence)).single(),
+        ).message.reachable
+
+        assertTrue(reachable("PUSH"))
+        assertFalse(reachable("ONLINE"))
+        assertFalse(reachable(null))
     }
 
     @Test
-    fun readsWhoIsInTheRoomAndTheViewersFriends() {
-        val frame = ChatProtocol.parse(
-            """{"identifier":"x","message":{"type":"roster","online":["U-1","u-2"],
-              "people":[{"user_id":"U-1","name":"Aurora Bell","avatar_url":"https://a/1.jpg","friend":true},
-                        {"user_id":"u-2","name":"Jo P.","avatar_url":null},
-                        {"name":"No Id"}, "junk"],
-              "friends":[{"user_id":"U-1","name":"Aurora Bell"},{"user_id":"f-9","name":"Sam Chatter"},{"name":"x"}]}}""",
+    fun joiningSaysWhoIsHereWhatWasSaidAndWhatsPinned() {
+        val frames = ChatProtocol.parse(
+            result(
+                """{"__typename":"ChatJoined","outOfRange":true,
+                  "roster":{
+                    "people":[{"userId":"U-1","name":"Aurora Bell","avatarUrl":"https://a/1.jpg","friend":true},
+                              {"userId":"u-2","name":"Jo P.","avatarUrl":null,"friend":false},
+                              {"name":"No Id"}, "junk"],
+                    "friends":[{"userId":"U-1","name":"Aurora Bell"},{"userId":"f-9","name":"Sam Chatter"},{"name":"x"}]},
+                  "history":[
+                    {"senderPresence":"PUSH","message":{"id":"m-1","message":"first","userId":"u-1"}},
+                    {"senderPresence":null,"message":{"message":"no sender"}},
+                    {"senderPresence":"ONLINE","message":{"id":"m-2","message":"second","userId":"u-2","role":"STAFF"}}],
+                  "pinnedMessage":{"senderPresence":null,"message":{"id":"m-0","message":"Announcement: Doors","userId":"u-3",
+                    "kind":"ANNOUNCEMENT","title":"Doors","pinned":true}}}""",
+            ),
         )
+        assertEquals(ChatProtocol.Frame.Connected, frames[0])
+        assertEquals(ChatProtocol.Frame.Range(outOfRange = true), frames[1])
         assertEquals(
             ChatProtocol.Frame.Roster(
                 setOf("u-1", "u-2"),
@@ -409,65 +451,95 @@ class ChatProtocolTest {
                 ),
                 friends = listOf(Friend("u-1", "Aurora Bell"), Friend("f-9", "Sam Chatter")),
             ),
-            frame,
+            frames[2],
         )
-        // A newcomer comes with their name and photo; leaving carries neither.
-        assertEquals(
-            ChatProtocol.Frame.PresenceChanged("u-3", online = true, name = "Kiko M.", avatarUrl = "https://a/3.jpg"),
-            ChatProtocol.parse("""{"identifier":"x","message":{"type":"presence","user_id":"u-3","presence":"online","name":"Kiko M.","avatar_url":"https://a/3.jpg"}}"""),
+        val history = assertIs<ChatProtocol.Frame.History>(frames[3])
+        assertEquals(listOf("first", "second"), history.messages.map { it.body })
+        assertTrue(history.messages.first().reachable)
+        assertFalse(history.messages.last().reachable)
+        assertEquals(ChatRole.STAFF, history.messages.last().role)
+        assertEquals("Doors", history.pinned?.title)
+        assertEquals(4, frames.size)
+    }
+
+    @Test
+    fun joiningAnEmptyRoomOrAMalformedRosterStillJoins() {
+        val frames = ChatProtocol.parse(
+            result("""{"__typename":"ChatJoined","outOfRange":false,"roster":{"people":"nope","friends":7},"history":[],"pinnedMessage":null}"""),
         )
-        // Malformed extras don't cost the roster.
         assertEquals(
-            ChatProtocol.Frame.Roster(setOf("u-1")),
-            ChatProtocol.parse("""{"identifier":"x","message":{"type":"roster","online":["u-1"],"people":"nope","friends":7}}"""),
+            listOf(
+                ChatProtocol.Frame.Connected,
+                ChatProtocol.Frame.Range(false),
+                ChatProtocol.Frame.Roster(emptySet()),
+                ChatProtocol.Frame.History(emptyList(), null),
+            ),
+            frames,
         )
     }
 
     @Test
-    fun readsHistoryPinsAndPushPresence() {
-        val history = ChatProtocol.parse(
-            """{"identifier":"x","message":{"type":"history","messages":[
-                {"id":"m-1","message":"first","user_id":"u-1","presence":"push"},
-                {"message":"no sender"},
-                {"id":"m-2","message":"second","user_id":"u-2","role":"staff"}],
-              "pinned":{"id":"m-0","message":"Announcement: Doors","user_id":"u-3","kind":"announcement","title":"Doors","pinned":true}}}""",
-        ) as ChatProtocol.Frame.History
-        assertEquals(listOf("first", "second"), history.messages.map { it.body })
-        assertEquals(true, history.messages.first().reachable)
-        assertEquals(ChatRole.STAFF, history.messages.last().role)
-        assertEquals("Doors", history.pinned?.title)
+    fun readsPresence() {
+        // A newcomer comes with their name and photo; leaving carries neither.
+        assertEquals(
+            listOf(ChatProtocol.Frame.PresenceChanged("u-3", online = true, name = "Kiko M.", avatarUrl = "https://a/3.jpg")),
+            ChatProtocol.parse(
+                result("""{"__typename":"ChatPresenceChanged","userId":"U-3","presence":"ONLINE","name":"Kiko M.","avatarUrl":"https://a/3.jpg"}"""),
+            ),
+        )
+        assertEquals(
+            listOf(ChatProtocol.Frame.PresenceChanged("u-3", online = false)),
+            ChatProtocol.parse(
+                result("""{"__typename":"ChatPresenceChanged","userId":"u-3","presence":"OFFLINE","name":"Kiko M.","avatarUrl":null}"""),
+            ),
+        )
+        assertEquals(
+            listOf(ChatProtocol.Frame.PresenceChanged("u-3", online = false, reachable = true)),
+            ChatProtocol.parse(result("""{"__typename":"ChatPresenceChanged","userId":"u-3","presence":"PUSH"}""")),
+        )
+        assertEquals(emptyList(), ChatProtocol.parse(result("""{"__typename":"ChatPresenceChanged","presence":"ONLINE"}""")))
+    }
 
-        val pin = ChatProtocol.parse(
-            """{"identifier":"x","message":{"type":"pin","id":"m-0","pinned":true,
-              "announcement":{"id":"m-0","message":"Announcement: Doors","user_id":"u-3","kind":"announcement","title":"Doors","pinned":true}}}""",
-        ) as ChatProtocol.Frame.Pin
+    @Test
+    fun readsEditsPinsRemovalsAndClearing() {
+        val updated = assertIs<ChatProtocol.Frame.Message>(
+            ChatProtocol.parse(
+                result("""{"__typename":"ChatMessageUpdated","message":{"id":"m-0","message":"Special: Two for one","userId":"u-3","kind":"SPECIAL","title":"Two for one"}}"""),
+            ).single(),
+        ).message
+        assertEquals("m-0", updated.id)
+        assertEquals("Two for one", updated.title)
+
+        val pin = assertIs<ChatProtocol.Frame.Pin>(
+            ChatProtocol.parse(
+                result(
+                    """{"__typename":"ChatPinChanged","messageId":"m-0","pinned":true,
+                      "announcement":{"id":"m-0","message":"Announcement: Doors","userId":"u-3","kind":"ANNOUNCEMENT","title":"Doors","pinned":true}}""",
+                ),
+            ).single(),
+        )
         assertEquals("m-0", pin.id)
         assertEquals("Doors", pin.announcement?.title)
         assertEquals(
-            ChatProtocol.Frame.Pin("m-0", null),
-            ChatProtocol.parse("""{"identifier":"x","message":{"type":"pin","id":"m-0","pinned":false}}"""),
+            listOf(ChatProtocol.Frame.Pin("m-0", null)),
+            ChatProtocol.parse(result("""{"__typename":"ChatPinChanged","messageId":"m-0","pinned":false,"announcement":null}""")),
         )
 
         assertEquals(
-            ChatProtocol.Frame.Removed("m-1"),
-            ChatProtocol.parse("""{"identifier":"x","message":{"type":"removed","id":"m-1"}}"""),
+            listOf(ChatProtocol.Frame.Removed("m-1")),
+            ChatProtocol.parse(result("""{"__typename":"ChatMessageRemoved","messageId":"m-1"}""")),
         )
+        assertEquals(emptyList(), ChatProtocol.parse(result("""{"__typename":"ChatMessageRemoved"}""")))
         assertEquals(
-            ChatProtocol.Frame.Cleared,
-            ChatProtocol.parse("""{"identifier":"x","message":{"type":"cleared","cleared_at":"2026-10-09T04:00:00.123Z"}}"""),
-        )
-        assertEquals(null, ChatProtocol.parse("""{"identifier":"x","message":{"type":"removed"}}"""))
-
-        assertEquals(
-            ChatProtocol.Frame.PresenceChanged("u-3", online = false, reachable = true),
-            ChatProtocol.parse("""{"identifier":"x","message":{"type":"presence","user_id":"u-3","presence":"push"}}"""),
+            listOf(ChatProtocol.Frame.Cleared),
+            ChatProtocol.parse(result("""{"__typename":"ChatRoomCleared","clearedAt":"2026-10-09T04:00:00.123Z"}""")),
         )
     }
 
     @Test
-    fun sendsOnlyTheText() {
-        val frame = HotMessApi.json.parseToJsonElement(ChatProtocol.message(venue, "hi")).jsonObject
-        assertEquals("""{"message":"hi"}""", frame["data"]!!.jsonPrimitive.content)
+    fun sendsOnlyTheTextWithTheRoom() {
+        assertEquals("""{"venueId":"$venue","message":"hi"}""", ChatProtocol.sendInput(ChatRoom.venue(venue.uppercase()), "hi").toString())
+        assertTrue(ChatProtocol.SEND_MESSAGE.contains("sendMyChatMessage(input: \$input)"))
     }
 
     @Test
@@ -579,6 +651,26 @@ class HotMessApiTest {
             transport,
         )
         return HotMessApi(client) to bodies
+    }
+
+    @Test
+    fun sendsAChatLineWithTheMutation() = runTest {
+        val (api, bodies) = api(
+            "SendMyChatMessage" to """{"data":{"sendMyChatMessage":{"message":{"id":"m-9","message":"hi","userId":"u-1","name":"Aurora B.","kind":"TEXT","sentAt":"2026-10-10T04:02:00Z"}}}}""",
+        )
+        val line = api.sendChatMessage(ChatRoom.venue("V-1"), "hi")
+
+        assertEquals("m-9", line?.id)
+        assertEquals("hi", line?.body)
+        val body = HotMessApi.json.parseToJsonElement(bodies.single()).jsonObject
+        assertEquals("""{"input":{"venueId":"v-1","message":"hi"}}""", body["variables"].toString())
+    }
+
+    @Test
+    fun aRefusedChatLineSaysWhy() = runTest {
+        val (api, _) = api("SendMyChatMessage" to """{"data":{"sendMyChatMessage":null},"errors":[{"message":"You're not in that room"}]}""")
+        val error = assertFailsWith<ApiError.Other> { api.sendChatMessage(ChatRoom.locale("l-1"), "hi") }
+        assertEquals("You're not in that room", error.message)
     }
 
     @Test
