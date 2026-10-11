@@ -62,42 +62,47 @@ class CoverFormattingTest {
 }
 
 class CoverOfferTest {
-    private val venue = Venue(id = "v-1", name = "The Wildrose", coverCharge = tonight)
+    private val venue = Venue(id = "v-1", name = "The Wildrose", cover = VenueCoverFacet(charge = tonight))
 
     @Test
     fun aPayableCoverCanBePaid() {
         assertEquals(CoverAction.PAY, CoverOffer.of(venue)?.action)
-        assertNull(CoverOffer.of(venue.copy(coverCharge = null)))
+        assertNull(CoverOffer.of(venue.copy(cover = null)))
     }
 
     @Test
     fun anotherCoverIsPaidAtTheDoor() {
-        assertEquals(CoverAction.PAY_AT_DOOR, CoverOffer.of(venue.copy(coverCharge = tonight.copy(payable = false)))?.action)
+        assertEquals(CoverAction.PAY_AT_DOOR, CoverOffer.of(venue.copy(cover = VenueCoverFacet(charge = tonight.copy(payable = false))))?.action)
     }
 
     @Test
     fun aPaidPassIsShownInstead() {
-        val offer = CoverOffer.of(venue.copy(viewerAdmission = paid))!!
+        val offer = CoverOffer.of(venue.copy(cover = VenueCoverFacet(charge = tonight, viewerAdmission = paid)))!!
         assertEquals(CoverAction.SHOW_PASS, offer.action)
         assertEquals(paid, offer.pass)
         val pending = paid.copy(status = AdmissionStatus.PENDING)
-        assertEquals(CoverAction.PAY, CoverOffer.of(venue.copy(viewerAdmission = pending))?.action)
+        assertEquals(CoverAction.PAY, CoverOffer.of(venue.copy(cover = VenueCoverFacet(charge = tonight, viewerAdmission = pending)))?.action)
     }
 
     @Test
     fun anEventsCoverCanBePaidOnlyTonight() {
-        val event = Event(id = "e-1", startAt = Instant.parse("2026-10-10T04:00:00Z"), venue = venue, coverCharge = tonight)
+        val event = Event(
+            id = "e-1",
+            startAt = Instant.parse("2026-10-10T04:00:00Z"),
+            venueFacet = EventVenueFacet(venue),
+            cover = EventCoverFacet(tonight),
+        )
         assertEquals(CoverAction.PAY, CoverOffer.of(event)?.action)
         assertTrue(CoverOffer.of(event)!!.tonight)
 
-        val nextWeek = event.copy(coverCharge = tonight.copy(night = "2026-10-16"))
+        val nextWeek = event.copy(cover = EventCoverFacet(tonight.copy(night = "2026-10-16")))
         assertEquals(CoverAction.PRICE_ONLY, CoverOffer.of(nextWeek)?.action)
         assertEquals("Cover $11.12 · from 9pm", Formatting.coverLine(nextWeek.coverCharge!!, CoverOffer.of(nextWeek)!!.tonight, Locale.US))
 
-        val withPass = event.copy(venue = venue.copy(viewerAdmission = paid))
+        val withPass = event.copy(venueFacet = EventVenueFacet(venue.copy(cover = VenueCoverFacet(charge = tonight, viewerAdmission = paid))))
         assertEquals(CoverAction.SHOW_PASS, CoverOffer.of(withPass)?.action)
-        assertEquals(CoverAction.PRICE_ONLY, CoverOffer.of(event.copy(venue = null))?.action)
-        assertNull(CoverOffer.of(event.copy(coverCharge = null)))
+        assertEquals(CoverAction.PRICE_ONLY, CoverOffer.of(event.copy(venueFacet = null))?.action)
+        assertNull(CoverOffer.of(event.copy(cover = null)))
     }
 }
 
@@ -235,15 +240,15 @@ class CoverApiTest {
     @Test
     fun theVenueAsksForTonightsCoverAndPass() = runTest {
         val (api, bodies) = api {
-            """{"data":{"venue":{"id":"v-1","name":"The Wildrose","chatOpen":false,"canWorkDoor":true,"events":[],
-               "coverCharge":{"amountCents":1000,"totalCents":1112,"feeCents":50,"currency":"usd","night":"2026-10-09",
+            """{"data":{"venue":{"id":"v-1","name":"The Wildrose","chatOpen":false,"events":{"upcoming":{"nodes":[]}},
+               "cover":{"canWorkDoor":true,"charge":{"amountCents":1000,"totalCents":1112,"feeCents":50,"currency":"usd","night":"2026-10-09",
                  "from":"21:00","payable":true,"event":null},
                "viewerAdmission":{"id":"a-1","status":"PAID","night":"2026-10-09","totalCents":1112,"isRefundable":true,
-                 "passSecret":"AAEC","venue":{"id":"v-1","name":"The Wildrose"}}}}}"""
+                 "passSecret":"AAEC","venue":{"id":"v-1","name":"The Wildrose"}}}}}}"""
         }
         val venue = api.venueOverview("v-1").venue
 
-        assertTrue(bodies.single().contains("viewerAdmission { id status"))
+        assertTrue(bodies.single().contains("cover { charge {") && bodies.single().contains("viewerAdmission { id status"))
         assertTrue(venue.canWorkDoor)
         assertEquals(1112, venue.coverCharge?.totalCents)
         assertEquals(CoverAction.SHOW_PASS, CoverOffer.of(venue)?.action)
@@ -253,13 +258,13 @@ class CoverApiTest {
     fun theEventAsksForItsCoverAndTheVenuesTonight() = runTest {
         val (api, bodies) = api {
             """{"data":{"event":{"id":"e-1","name":"Drag Bingo","startAt":"2026-10-10T04:00:00Z",
-               "coverCharge":{"amountCents":500,"totalCents":612,"night":"2026-10-09","payable":true},
-               "venue":{"id":"v-1","name":"The Wildrose","coverCharge":{"amountCents":500,"totalCents":612,
-                 "night":"2026-10-09","payable":true},"viewerAdmission":null}}}}"""
+               "cover":{"charge":{"amountCents":500,"totalCents":612,"night":"2026-10-09","payable":true}},
+               "venue":{"name":"The Wildrose","venue":{"id":"v-1","name":"The Wildrose","cover":{"charge":{"amountCents":500,
+                 "totalCents":612,"night":"2026-10-09","payable":true},"viewerAdmission":null}}}}}}"""
         }
         val event = api.event("e-1")
 
-        assertTrue(bodies.single().contains("venue { id coverCharge"))
+        assertTrue(bodies.single().contains("venue { venue { id cover { charge {"))
         assertEquals(CoverAction.PAY, CoverOffer.of(event)?.action)
     }
 

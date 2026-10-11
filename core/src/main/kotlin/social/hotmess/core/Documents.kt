@@ -16,14 +16,15 @@ object Documents {
     /** A venue's last few chat lines, oldest first; empty unless the viewer is at the venue or an admin. */
     const val RECENT_MESSAGES: String = "recentMessages(limit: 3) { $CHAT_LINE_FIELDS }"
 
-    /** Tonight's cover at a venue and the user's pass for it. */
+    /** Tonight's cover at a venue and the user's pass for it, in the venue's cover facet (null when the audience has no cover). */
     const val VENUE_COVER_FIELDS: String =
-        "coverCharge { ${Queries.COVER_CHARGE_FIELDS} } viewerAdmission { ${Queries.ADMISSION_FIELDS} }"
+        "cover { charge { ${Queries.COVER_CHARGE_FIELDS} } viewerAdmission { ${Queries.ADMISSION_FIELDS} } }"
 
-    const val PERSON_FIELDS: String = "id name facebookId isLiked pictureUrl coverUrl"
+    const val PERSON_FIELDS: String = "id name facebookId isLiked pictureUrl bannerUrl"
 
+    /** An event, with its venue under the event's venue facet (`venue { venue }`). */
     const val EVENT_FIELDS: String =
-        "id name startAt endAt facebookId coverPhotoUrl isFeatured viewerRsvp venue { $VENUE_FIELDS }"
+        "id name startAt endAt facebookId bannerUrl isFeatured viewerRsvp venue { venue { $VENUE_FIELDS } }"
 
     const val FRIEND_FIELDS: String = "id name facebookId"
 
@@ -33,7 +34,7 @@ object Documents {
     /** A Ping with its picks and who's in. Picks carry enough of the venue or event for a row. */
     const val PING_FIELDS: String =
         "id note createdAt expiresAt isMine joined reach user { $FRIEND_FIELDS } via { $FRIEND_FIELDS } " +
-            "targets { id venue { id name photoUrl } event { id name startAt venue { id name } } " +
+            "targets { id venue { id name photoUrl } event { id name startAt venue { venue { id name } } } " +
             "joins { id targetId user { $FRIEND_FIELDS } } } " +
             "joins { id targetId user { $FRIEND_FIELDS } }"
 
@@ -77,10 +78,10 @@ object Documents {
     val VENUE: String = """
         query Venue(${'$'}id: ID!) {
           venue(id: ${'$'}id) {
-            $VENUE_FIELDS chatOpen canWorkDoor
+            $VENUE_FIELDS chatOpen
             $RECENT_MESSAGES
-            $VENUE_COVER_FIELDS
-            events { $EVENT_FIELDS }
+            cover { charge { ${Queries.COVER_CHARGE_FIELDS} } viewerAdmission { ${Queries.ADMISSION_FIELDS} } canWorkDoor }
+            events { upcoming { nodes { $EVENT_FIELDS } } }
             socialLinks { id handle provider url }
             friends { $FRIEND_OUT_FIELDS }
             friendPings { $PING_FIELDS }
@@ -98,18 +99,18 @@ object Documents {
         query Person(${'$'}id: ID!) {
           person(id: ${'$'}id) {
             $PERSON_FIELDS
-            events { $EVENT_FIELDS }
+            events { upcoming { nodes { $EVENT_FIELDS } } }
             socialLinks { id handle provider url }
             members { id name pictureUrl }
             groups { id name pictureUrl }
-            tracks { id title provider providerUrl waveformUrl artworkUrl }
+            music { tracks { nodes { id title provider providerUrl waveformUrl artworkUrl } } }
           }
         }
     """.trimIndent()
 
     val LOCALE_EVENTS: String = """
         query LocaleEvents(${'$'}id: ID!) {
-          locale(id: ${'$'}id) { events { $EVENT_FIELDS } }
+          locale(id: ${'$'}id) { events { upcoming { nodes { $EVENT_FIELDS } } } }
         }
     """.trimIndent()
 
@@ -117,8 +118,8 @@ object Documents {
         query Event(${'$'}id: ID!) {
           event(id: ${'$'}id) {
             $EVENT_FIELDS
-            coverCharge { ${Queries.COVER_CHARGE_FIELDS} }
-            venue { id $VENUE_COVER_FIELDS }
+            cover { charge { ${Queries.COVER_CHARGE_FIELDS} } }
+            venue { venue { id $VENUE_COVER_FIELDS } }
             people { $PERSON_FIELDS }
             friendPings { $PING_FIELDS }
           }

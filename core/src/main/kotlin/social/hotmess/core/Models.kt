@@ -47,13 +47,18 @@ data class Venue(
     val recentMessages: List<ChatLine> = emptyList(),
     /** Where else to find it, like its Instagram; only the venue screen asks. */
     val socialLinks: List<SocialLink> = emptyList(),
-    /** Tonight's cover, or null when there's none; only the venue screen, the event screen and Now ask. */
-    val coverCharge: CoverCharge? = null,
-    /** The user's cover for tonight, paid or being paid; asked for alongside [coverCharge]. */
-    val viewerAdmission: Admission? = null,
-    /** Whether the user can scan passes at its door; only the venue screen asks. */
-    val canWorkDoor: Boolean = false,
+    /** Its cover facet; null when not asked for or the audience doesn't take cover. Read through [coverCharge] and friends. */
+    private val cover: VenueCoverFacet? = null,
 ) {
+    /** Tonight's cover, or null when there's none; only the venue screen, the event screen and Now ask. */
+    val coverCharge: CoverCharge? get() = cover?.charge
+
+    /** The user's cover for tonight, paid or being paid; asked for alongside [coverCharge]. */
+    val viewerAdmission: Admission? get() = cover?.viewerAdmission
+
+    /** Whether the user can scan passes at its door; only the venue screen asks. */
+    val canWorkDoor: Boolean get() = cover?.canWorkDoor == true
+
     val coordinate: Coordinate? get() = point?.let(Coordinate::fromWkt)
 
     /** What goes under the name in a list row. */
@@ -63,6 +68,43 @@ data class Venue(
 
     val shareUrl: String get() = "https://hotmess.social/venues/${id.lowercase()}"
 }
+
+/** A venue's cover facet (`Venue.cover`), as much of it as the app asks for. */
+@Serializable
+data class VenueCoverFacet(
+    val charge: CoverCharge? = null,
+    val viewerAdmission: Admission? = null,
+    val canWorkDoor: Boolean = false,
+)
+
+/** An event's cover facet (`Event.cover`). */
+@Serializable
+data class EventCoverFacet(val charge: CoverCharge? = null)
+
+/** An event's venue facet (`Event.venue`): its venue, if it has one yet. */
+@Serializable
+data class EventVenueFacet(val venue: Venue? = null)
+
+/**
+ * An events facet's upcoming events (`Venue.events`, `Locale.events`, `Person.events`): `upcoming` is a
+ * connection, asked for as `nodes` (every event, since no `first` is given).
+ */
+@Serializable
+data class UpcomingEvents(private val upcoming: Connection<Event>? = null) {
+    val events: List<Event> get() = upcoming?.nodes.orEmpty().filterNotNull()
+}
+
+/**
+ * A person's music facet (`Person.music`): their newest tracks, a connection asked for as `nodes`.
+ */
+@Serializable
+data class PersonMusic(private val tracks: Connection<Track>? = null) {
+    val trackList: List<Track> get() = tracks?.nodes.orEmpty().filterNotNull()
+}
+
+/** A Relay connection's `nodes`, which GraphQL types as nullable items. */
+@Serializable
+data class Connection<T>(val nodes: List<T?> = emptyList())
 
 /** The locale a venue belongs to, as much of it as the lists need. */
 @Serializable
@@ -83,7 +125,7 @@ data class Person(
     val role: String? = null,
     val isLiked: Boolean = false,
     @Serializable(with = BlankAsNullSerializer::class) val pictureUrl: String? = null,
-    @Serializable(with = BlankAsNullSerializer::class) val coverUrl: String? = null,
+    @Serializable(with = BlankAsNullSerializer::class) val bannerUrl: String? = null,
     val order: Int = 0,
 ) {
     val facebookUrl: String? get() = facebookId?.let { "https://facebook.com/$it" }
@@ -100,15 +142,21 @@ data class PersonDetail(
     val facebookId: String? = null,
     val isLiked: Boolean = false,
     @Serializable(with = BlankAsNullSerializer::class) val pictureUrl: String? = null,
-    @Serializable(with = BlankAsNullSerializer::class) val coverUrl: String? = null,
-    val events: List<Event> = emptyList(),
+    @Serializable(with = BlankAsNullSerializer::class) val bannerUrl: String? = null,
+    @SerialName("events") private val eventsFacet: UpcomingEvents? = null,
     val socialLinks: List<SocialLink> = emptyList(),
-    val tracks: List<Track> = emptyList(),
+    @SerialName("music") private val musicFacet: PersonMusic? = null,
     val members: List<Person> = emptyList(),
     val groups: List<Person> = emptyList(),
 ) {
+    /** Their upcoming events, from the events facet; empty when the audience has no events. */
+    val events: List<Event> get() = eventsFacet?.events.orEmpty()
+
+    /** Their newest tracks, from the music facet; empty when the audience has no music. */
+    val tracks: List<Track> get() = musicFacet?.trackList.orEmpty()
+
     val person: Person
-        get() = Person(id = id, name = name, facebookId = facebookId, isLiked = isLiked, pictureUrl = pictureUrl, coverUrl = coverUrl)
+        get() = Person(id = id, name = name, facebookId = facebookId, isLiked = isLiked, pictureUrl = pictureUrl, bannerUrl = bannerUrl)
 
     /** Where fans can tip them (Cash App, Venmo), each opening that app. */
     val tipLinks: List<SocialLink>
@@ -185,17 +233,24 @@ data class Event(
     @Serializable(with = InstantSerializer::class) val startAt: Instant,
     @Serializable(with = InstantSerializer::class) val endAt: Instant? = null,
     val facebookId: String? = null,
-    @Serializable(with = BlankAsNullSerializer::class) val coverPhotoUrl: String? = null,
+    @Serializable(with = BlankAsNullSerializer::class) val bannerUrl: String? = null,
     val isFeatured: Boolean = false,
     @SerialName("viewerRsvp") val rsvp: Rsvp = Rsvp.UNSURE,
-    val venue: Venue? = null,
+    /** Its venue facet; read the venue through [venue]. */
+    @SerialName("venue") private val venueFacet: EventVenueFacet? = null,
     /** Who's hosting or playing; only the event screen asks for it. */
     val people: List<Person> = emptyList(),
-    /** The cover at its venue that night; null when there's none or it sells tickets. Only the event screen asks. */
-    val coverCharge: CoverCharge? = null,
+    /** Its cover facet; read through [coverCharge]. Only the event screen asks. */
+    private val cover: EventCoverFacet? = null,
     /** Friends' active Pings that pick this event; only the event screen asks for it. */
     val friendPings: List<Ping> = emptyList(),
 ) {
+    /** Where it is; null when it has no venue yet ("To be announced"). */
+    val venue: Venue? get() = venueFacet?.venue
+
+    /** The cover at its venue that night; null when there's none or it sells tickets. Only the event screen asks. */
+    val coverCharge: CoverCharge? get() = cover?.charge
+
     val facebookUrl: String? get() = facebookId?.let { "https://facebook.com/events/$it" }
 
     val shareUrl: String get() = "https://hotmess.social/events/${id.lowercase()}"

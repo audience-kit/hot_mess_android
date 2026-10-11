@@ -201,7 +201,7 @@ fun EventScreen(id: String, navigator: Navigator) {
             HeroFeed(
                 listState,
                 hero = {
-                    HeroHeader(loaded.coverPhotoUrl, topInset, onTone = { heroTone = it }) {
+                    HeroHeader(loaded.bannerUrl, topInset, onTone = { heroTone = it }) {
                         Text(
                             "${Formatting.monthAbbreviation(loaded.startAt)} ${Formatting.dayOfMonth(loaded.startAt)} · ${Formatting.shortTime(loaded.startAt)}".uppercase(),
                             style = HotMessType.caption,
