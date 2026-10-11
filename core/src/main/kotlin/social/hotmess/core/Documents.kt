@@ -7,6 +7,9 @@ import com.audiencekit.Queries
  * the models in Models.kt; ask for a field there before using it here.
  */
 object Documents {
+    /** How many of the locale's upcoming events Now lists away from a venue. */
+    const val LOCALE_EVENT_LIMIT: Int = 5
+
     /** A venue, with its address, phone and Facebook Page under its profile facet. */
     const val VENUE_FIELDS: String =
         "id name description distance point photoUrl heroUrl profile { address phone facebook { facebookId isLiked } }"
@@ -46,17 +49,21 @@ object Documents {
     val REPORT_LOCATION: String = """
         mutation ReportLocation(${'$'}position: CoordinatesInput!) {
           reportLocation(input: { position: ${'$'}position }) {
-            now {
-              title imageUrl
-              venue { $VENUE_FIELDS $RECENT_MESSAGES $VENUE_COVER_FIELDS }
-              venues { $VENUE_FIELDS }
-              locale { id name chatOpen $RECENT_MESSAGES }
-              events { $EVENT_FIELDS }
-              friends { $FRIEND_OUT_FIELDS }
-              friendVenues { venue { $VENUE_FIELDS } friendCount friends { $FRIEND_OUT_FIELDS } }
-              myPing { $PING_FIELDS }
-              friendPings { $PING_FIELDS }
+            venue {
+              $VENUE_FIELDS $RECENT_MESSAGES $VENUE_COVER_FIELDS
+              events { upcoming { nodes { $EVENT_FIELDS } } }
+              friends { list { nodes { $FRIEND_OUT_FIELDS } } }
             }
+            nearbyVenues { $VENUE_FIELDS }
+            locale {
+              id name heroUrl chatOpen $RECENT_MESSAGES
+              events { upcoming(first: $LOCALE_EVENT_LIMIT) { nodes { $EVENT_FIELDS } } }
+              friends {
+                list { nodes { $FRIEND_OUT_FIELDS } }
+                venues { nodes { venue { $VENUE_FIELDS } friendCount friends { $FRIEND_OUT_FIELDS } } }
+              }
+            }
+            audience { ping { myPing { $PING_FIELDS } friendPings { $PING_FIELDS } } }
           }
         }
     """.trimIndent()
@@ -88,7 +95,7 @@ object Documents {
             cover { charge { ${Queries.COVER_CHARGE_FIELDS} } viewerAdmission { ${Queries.ADMISSION_FIELDS} } canWorkDoor }
             events { upcoming { nodes { $EVENT_FIELDS } } }
             $PROFILE_SOCIAL_LINKS
-            friends { $FRIEND_OUT_FIELDS }
+            friends { list { nodes { $FRIEND_OUT_FIELDS } } }
             friendPings { $PING_FIELDS }
           }
         }
