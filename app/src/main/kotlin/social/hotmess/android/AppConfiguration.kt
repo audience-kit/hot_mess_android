@@ -42,7 +42,4 @@ data class AppConfiguration(
             "842337999153841" -> "development"
             else -> facebookAppId
         }
-
-    /** The API serves every user's avatar from the same path. */
-    fun avatarUrl(userId: String): String = "${baseUrl.trimEnd('/')}/users/${userId.uppercase()}/picture"
 }

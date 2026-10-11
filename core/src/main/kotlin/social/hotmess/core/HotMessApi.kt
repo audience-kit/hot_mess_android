@@ -271,11 +271,12 @@ class HotMessApi(val client: AudienceKitClient) {
         return json.decodeFromString(BugReportResponse.serializer(), bytes.toString(Charsets.UTF_8))
     }
 
+    /** The signed-in user, with the photo the API has for them (the old `/users/<id>/picture` is gone). */
     suspend fun me(): User? {
-        val me = call { client.me() } ?: return null
+        val me = query(Documents.ME, MeResponse.serializer()).me ?: return null
         val id = RecordId.normalize(me.id) ?: return null
         val name = me.name ?: listOfNotNull(me.firstName, me.lastName).joinToString(" ")
-        return User(id = id, name = name)
+        return User(id = id, name = name, avatarUrl = me.photo?.cdnUrl)
     }
 
     // endregion
@@ -390,6 +391,20 @@ private data class ManifestRequest(val device: DeviceDescription)
 @Serializable
 private data class ReportLocationResponse(val reportLocation: Payload) {
     @Serializable data class Payload(val now: Now)
+}
+
+@Serializable
+private data class MeResponse(val me: Me? = null) {
+    @Serializable
+    data class Me(
+        val id: String,
+        val name: String? = null,
+        val firstName: String? = null,
+        val lastName: String? = null,
+        val photo: Photo? = null,
+    )
+
+    @Serializable data class Photo(val cdnUrl: String? = null)
 }
 
 @Serializable

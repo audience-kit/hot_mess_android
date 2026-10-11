@@ -292,11 +292,11 @@ private fun SmallTalk(venue: Venue, friends: List<Friend>, navigator: Navigator)
     val user by graph.session.user.collectAsStateWithLifecycle()
     val participants = buildList {
         add(ChatPeekParticipant("venue-${venue.id}", venue.name, venue.photoUrl, isPlace = true))
-        add(ChatPeekParticipant("viewer", "You", user?.id?.let(graph.configuration::avatarUrl)))
+        add(ChatPeekParticipant("viewer", "You", user?.avatarUrl))
         friends.filterNot { it.id.equals(user?.id, ignoreCase = true) }
             .distinctBy { it.id.lowercase() }.forEach { friend ->
                 add(ChatPeekParticipant(
-                    friend.id, friend.name, graph.configuration.avatarUrl(friend.id), presenceOf(friend.presence),
+                    friend.id, friend.name, friend.avatarUrl, presenceOf(friend.presence),
                 ))
             }
     }
@@ -326,7 +326,7 @@ private fun LocaleSmallTalk(locale: NowLocale, navigator: Navigator) {
 /**
  * A venue's recent chat lines as ChatPeek draws them: the viewer's own on the right, friends by their
  * full names, a post as the venue with its rounded-square photo, rich messages in words (their
- * summary), specials gone once they've ended, and the sender's picture when the line has none.
+ * summary), and specials gone once they've ended.
  */
 @Composable
 internal fun rememberPeekMessages(lines: List<ChatLine>): List<ChatThreadMessage> {
@@ -340,8 +340,7 @@ internal fun rememberPeekMessages(lines: List<ChatLine>): List<ChatThreadMessage
                 id = line.id,
                 senderId = line.userId.ifEmpty { line.id }.lowercase(),
                 senderName = if (line.postedAsVenue) line.name else graph.api.friends.displayName(line.userId, line.name),
-                avatarUrl = line.avatarUrl
-                    ?: line.userId.takeIf { it.isNotEmpty() && !line.postedAsVenue }?.let(graph.configuration::avatarUrl),
+                avatarUrl = line.avatarUrl,
                 text = line.message,
                 sentAt = line.sentAt,
                 own = viewerId != null && line.userId.equals(viewerId, ignoreCase = true),
@@ -361,7 +360,6 @@ internal fun peekPresence(lines: List<ChatLine>): Map<String, Presence> =
 /** Friends who are at the venue too, by their full names; tapping one opens Messenger. Now and the venue screen show it. */
 @Composable
 internal fun FriendsHere(friends: List<Friend>) {
-    val configuration = LocalAppGraph.current.configuration
     val context = LocalContext.current
     DetailSection("Friends here") {
         if (friends.isEmpty()) {
@@ -381,7 +379,7 @@ internal fun FriendsHere(friends: List<Friend>) {
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
-                        Avatar(configuration.avatarUrl(friend.id), friend.name, size = Sizes.avatarLg, presence = presenceOf(friend.presence))
+                        Avatar(friend.avatarUrl, friend.name, size = Sizes.avatarLg, presence = presenceOf(friend.presence))
                         // Friends see each other's full names; two lines fit most, and longer ones
                         // truncate at the end.
                         Text(
