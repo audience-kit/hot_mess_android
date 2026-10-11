@@ -6,14 +6,18 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.browser.customtabs.CustomTabsIntent
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.Modifier
 import androidx.core.net.toUri
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.receiveAsFlow
 import social.hotmess.android.ui.HotMessApp
 import social.hotmess.android.ui.LocalAppGraph
+import social.hotmess.android.ui.components.NotificationBanner
 import social.hotmess.android.ui.theme.HotMessTheme
 import social.hotmess.core.AppRoute
 import social.hotmess.core.DeepLink
@@ -34,7 +38,11 @@ class MainActivity : ComponentActivity() {
             val branding by graph.brand.branding.collectAsStateWithLifecycle()
             HotMessTheme(branding = branding?.theme) {
                 CompositionLocalProvider(LocalAppGraph provides graph) {
-                    HotMessApp(links = linkFlow, onSignIn = ::signIn)
+                    Box(Modifier.fillMaxSize()) {
+                        HotMessApp(links = linkFlow, onSignIn = ::signIn)
+                        // A notification that came over the cable while the app is open; a tap opens it as a push's would.
+                        NotificationBanner(graph.notifications) { notification -> openPush(notification.data) }
+                    }
                 }
             }
         }
@@ -70,16 +78,21 @@ class MainActivity : ComponentActivity() {
         // A tapped Ping push: Firebase's own notification or ours both carry its data as extras.
         val extras = intent?.extras
         if (intent != null && extras != null) {
-            val push = PingPush.parse(listOf(PingPush.KIND, PingPush.PING_ID).associateWith { extras.getString(it) })
-            if (push != null) {
+            if (openPush(listOf(PingPush.KIND, PingPush.PING_ID).associateWith { extras.getString(it) })) {
                 intent.removeExtra(PingPush.KIND)
-                graph.pingUpdated(push.pingId)
-                links.trySend(AppRoute.NowPing(push.pingId))
                 return
             }
         }
         val url = intent?.takeIf { it.action == Intent.ACTION_VIEW }?.dataString ?: return
         if (graph.session.handleRedirect(url)) return
         DeepLink.route(url)?.let { links.trySend(it) }
+    }
+
+    /** Opens a push by its data (`kind`, `ping_id`): a Ping goes to Now, which reloads. False for anything else. */
+    private fun openPush(data: Map<String, String?>): Boolean {
+        val push = PingPush.parse(data) ?: return false
+        graph.pingUpdated(push.pingId)
+        links.trySend(AppRoute.NowPing(push.pingId))
+        return true
     }
 }

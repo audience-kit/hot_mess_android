@@ -16,6 +16,7 @@ import kotlinx.coroutines.launch
 import org.maplibre.android.MapLibre
 import social.hotmess.android.location.LocationProvider
 import social.hotmess.android.payments.SquareCardEntry
+import social.hotmess.android.push.InAppNotifications
 import social.hotmess.android.push.PushRegistrar
 import social.hotmess.android.session.AuthState
 import social.hotmess.android.session.BrandStore
@@ -43,12 +44,36 @@ class AppGraph(context: Context, val configuration: AppConfiguration = AppConfig
     /** Square's card entry, for Square venues' cover; MainActivity passes it card entry's result. */
     val squareCardEntry = SquareCardEntry()
 
+    /** Your notifications over the cable while the app is in front, shown in the app. */
+    val notifications = InAppNotifications(
+        scope = scope,
+        baseUrl = configuration.baseUrl,
+        token = { session.sessionToken },
+        audienceId = { api.client.audienceId() },
+        onShown = { notification -> notification.ping?.let { pingUpdated(it.pingId) } },
+    )
+
+    /** Whether the app is on screen, from the process lifecycle. */
+    @Volatile var isForeground: Boolean = false
+        private set
+
+    fun setForeground(foreground: Boolean) {
+        isForeground = foreground
+        notifications.setForeground(foreground)
+        if (foreground && session.isSignedIn) notifications.start() else notifications.stop()
+    }
+
     init {
         scope.launch {
             session.state.collect {
-                if (it == AuthState.SignedOut) {
-                    passes.clear()
-                    api.friends.clear()
+                when (it) {
+                    AuthState.SignedOut -> {
+                        passes.clear()
+                        api.friends.clear()
+                        notifications.clear()
+                    }
+                    AuthState.SignedIn -> if (isForeground) notifications.start()
+                    else -> Unit
                 }
             }
         }
@@ -81,10 +106,13 @@ class HotMessApplication : Application() {
         ProcessLifecycleOwner.get().lifecycle.addObserver(object : DefaultLifecycleObserver {
             override fun onStart(owner: LifecycleOwner) {
                 if (graph.session.isSignedIn) graph.location.start()
+                // Your notifications come over the cable while the app is in front (and signed in).
+                graph.setForeground(true)
             }
 
             override fun onStop(owner: LifecycleOwner) {
                 graph.location.stop()
+                graph.setForeground(false)
             }
         })
     }
