@@ -14,14 +14,20 @@ import com.audiencekit.RSVPState
 import com.audiencekit.ScanResult
 import com.audiencekit.graphQLVariables
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonObject
+import kotlin.coroutines.ContinuationInterceptor
+import kotlin.coroutines.EmptyCoroutineContext
 
 /**
  * The typed surface of the Hot Mess API, all of it on the AudienceKit SDK.
@@ -38,17 +44,34 @@ class HotMessApi(val client: AudienceKitClient) {
 
     // region Home
 
+    /** Location reports in flight, by position, so the same report asked for twice at once is sent once. */
+    private val reports = mutableMapOf<Coordinates, Deferred<Now>>()
+
+    /** Runs shared requests, so one caller going away (a screen recomposing) doesn't cancel the others'. */
+    private val shared = CoroutineScope(SupervisorJob())
+
     /**
      * Records where the device is and returns what's happening there. With no position there's
-     * nothing to look up, so the screen gets an empty "Now".
+     * nothing to look up, so the screen gets an empty "Now". Location tracking and the Now screen both
+     * ask when the position changes; asking for a position that's already in flight joins that request.
      */
     suspend fun now(near: Coordinates?): Now {
         near ?: return Now()
-        return query(
-            Documents.REPORT_LOCATION,
-            ReportLocationResponse.serializer(),
-            mapOf("position" to near.toGraphQLValue()),
-        ).reportLocation.now.also(friends::record)
+        // On the first caller's dispatcher, but not its job.
+        val dispatcher = currentCoroutineContext()[ContinuationInterceptor] ?: EmptyCoroutineContext
+        val report = synchronized(reports) {
+            reports[near] ?: shared.async(dispatcher) {
+                query(
+                    Documents.REPORT_LOCATION,
+                    ReportLocationResponse.serializer(),
+                    mapOf("position" to near.toGraphQLValue()),
+                ).reportLocation.now
+            }.also { request ->
+                reports[near] = request
+                request.invokeOnCompletion { synchronized(reports) { if (reports[near] === request) reports.remove(near) } }
+            }
+        }
+        return report.await().also(friends::record)
     }
 
     /**
@@ -271,11 +294,12 @@ class HotMessApi(val client: AudienceKitClient) {
         return json.decodeFromString(BugReportResponse.serializer(), bytes.toString(Charsets.UTF_8))
     }
 
+    /** The signed-in user, with the photo the API has for them (the old `/users/<id>/picture` is gone). */
     suspend fun me(): User? {
-        val me = call { client.me() } ?: return null
+        val me = query(Documents.ME, MeResponse.serializer()).me ?: return null
         val id = RecordId.normalize(me.id) ?: return null
         val name = me.name ?: listOfNotNull(me.firstName, me.lastName).joinToString(" ")
-        return User(id = id, name = name)
+        return User(id = id, name = name, avatarUrl = me.photo?.cdnUrl)
     }
 
     // endregion
@@ -390,6 +414,20 @@ private data class ManifestRequest(val device: DeviceDescription)
 @Serializable
 private data class ReportLocationResponse(val reportLocation: Payload) {
     @Serializable data class Payload(val now: Now)
+}
+
+@Serializable
+private data class MeResponse(val me: Me? = null) {
+    @Serializable
+    data class Me(
+        val id: String,
+        val name: String? = null,
+        val firstName: String? = null,
+        val lastName: String? = null,
+        val photo: Photo? = null,
+    )
+
+    @Serializable data class Photo(val cdnUrl: String? = null)
 }
 
 @Serializable

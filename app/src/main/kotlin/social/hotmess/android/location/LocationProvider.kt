@@ -9,12 +9,16 @@ import android.location.LocationListener
 import android.location.LocationManager
 import android.os.Build
 import android.os.Looper
+import android.os.SystemClock
 import android.util.Log
 import androidx.core.content.ContextCompat
 import com.audiencekit.Coordinates
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -24,12 +28,17 @@ import social.hotmess.android.session.SessionStore
 import social.hotmess.core.AppLocale
 import social.hotmess.core.HotMessApi
 import social.hotmess.core.PositionTracker
+import social.hotmess.core.ReportThrottle
+import social.hotmess.core.metersTo
 
 enum class LocationAccess { NOT_REQUESTED, ALLOWED, DENIED }
 
 /**
  * Where the device is, which of the audience's locales that is, and which venue beacon is nearest.
- * Reports each new position to the API (`reportLocation`), as the iOS app does.
+ * Reports new positions to the API (`reportLocation`), as the iOS app does, at most once a minute
+ * unless the device has moved 50 metres ([ReportThrottle]); [coordinates] changes only when a report
+ * goes out, so the screens that follow it don't send their own bursts. The locale is looked up again
+ * only after moving 50 metres, with one lookup in flight at a time.
  */
 class LocationProvider(
     private val context: Context,
@@ -52,6 +61,14 @@ class LocationProvider(
     val simulatedVenue: StateFlow<String?> = _simulatedVenue.asStateFlow()
 
     private val tracker = PositionTracker(configuration.isTestBuild)
+    private val throttle = ReportThrottle()
+
+    /** A report waiting for the throttle; it sends whatever is latest when it fires. */
+    private var pendingReport: Job? = null
+
+    /** The ClosestLocale lookup in flight, which other callers join, and where the last one was. */
+    private var localeLookup: Deferred<Unit>? = null
+    private var localeLookedUpNear: Coordinates? = null
 
     private val manager = context.getSystemService(LocationManager::class.java)
     private val beacons = configuration.beaconUuid?.let { BeaconScanner(context, it, ::onBeacon) }
@@ -70,6 +87,7 @@ class LocationProvider(
         if (!isMonitoring) return
         manager?.removeUpdates(listener)
         beacons?.stop()
+        pendingReport?.cancel()
         isMonitoring = false
     }
 
@@ -79,10 +97,25 @@ class LocationProvider(
         start()
     }
 
-    /** Asks the API which locale the current position belongs to. */
+    /**
+     * Asks the API which locale the current position belongs to, unless it already has for a position
+     * within 50 metres. A lookup already in flight is joined rather than sent again, and carries on
+     * when a screen that asked goes away.
+     */
     suspend fun refreshLocale() {
+        val position = _coordinates.value ?: return
+        val near = localeLookedUpNear
+        if (near != null && near.metersTo(position) < ReportThrottle.MIN_DISTANCE_METERS) return
+        val lookup = localeLookup?.takeIf { it.isActive }
+            ?: scope.async { lookUpLocale(position) }.also { localeLookup = it }
+        lookup.await()
+    }
+
+    private suspend fun lookUpLocale(position: Coordinates) {
         try {
-            val resolved = api.closestLocale(_coordinates.value) ?: return
+            val resolved = api.closestLocale(position)
+            localeLookedUpNear = position
+            resolved ?: return
             if (resolved.id == _locale.value?.id) return
             _locale.value = resolved
             persist(resolved)
@@ -100,22 +133,17 @@ class LocationProvider(
      */
     fun simulate(latitude: Double, longitude: Double, venueName: String): Job? {
         if (!tracker.simulate(latitude, longitude, venueName)) return null
-        publish()
-        return scope.launch {
-            refreshLocale()
-            reportPosition()
-        }
+        return reportNow()
     }
 
     /** Goes back to the device's real position. The returned job finishes once it's reported. */
     fun stopSimulating(): Job? {
         if (!tracker.stopSimulating()) return null
-        publish()
-        if (tracker.current == null) return null
-        return scope.launch {
-            refreshLocale()
-            reportPosition()
+        if (tracker.current == null) {
+            publish()
+            return null
         }
+        return reportNow()
     }
 
     private fun publish() {
@@ -151,24 +179,62 @@ class LocationProvider(
 
     private fun update(location: Location) {
         if (!tracker.deviceFix(location.latitude, location.longitude)) return
-        publish()
-        scope.launch {
-            refreshLocale()
-            reportPosition()
-        }
+        reportWhenDue()
     }
 
     private fun onBeacon(major: Int, minor: Int) {
         if (!tracker.beacon(major, minor)) return
-        publish()
-        scope.launch { reportPosition() }
+        reportWhenDue()
     }
 
-    /** Reports the latest position again, so the API knows the device is still where it was. */
-    suspend fun reportAgain() = reportPosition()
+    /**
+     * Reports the latest position once the throttle allows: now, when it's the first or has moved 50
+     * metres or a minute has passed; otherwise when the minute is up, with whatever is latest by then.
+     */
+    private fun reportWhenDue() {
+        if (pendingReport?.isActive == true) return
+        val position = tracker.current ?: return
+        val now = SystemClock.elapsedRealtime()
+        if (throttle.isDue(position, now)) {
+            send()
+            return
+        }
+        pendingReport = scope.launch {
+            delay(throttle.waitMs(now))
+            send()
+        }
+    }
 
-    private suspend fun reportPosition() {
-        val position = _coordinates.value ?: return
+    /** Reports the latest position straight away, for a deliberate change (pretending, or stopping). */
+    private fun reportNow(): Job? {
+        pendingReport?.cancel()
+        return send()
+    }
+
+    /** Publishes the latest position and reports it, looking up its locale when it's moved far enough. */
+    private fun send(): Job? {
+        publish()
+        val position = tracker.current ?: return null
+        throttle.sent(position, SystemClock.elapsedRealtime())
+        return scope.launch {
+            refreshLocale()
+            reportPosition(position)
+        }
+    }
+
+    /**
+     * Reports the latest position again, so the API knows the device is still where it was (chat
+     * checks for a recent one). Joins a report of the same position already in flight.
+     */
+    suspend fun reportAgain() {
+        pendingReport?.cancel()
+        publish()
+        val position = tracker.current ?: return
+        throttle.sent(position, SystemClock.elapsedRealtime())
+        reportPosition(position)
+    }
+
+    private suspend fun reportPosition(position: Coordinates) {
         try {
             api.reportLocation(position)
         } catch (e: CancellationException) {

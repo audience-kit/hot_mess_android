@@ -116,7 +116,7 @@ fun PassScreen(id: String, navigator: Navigator) {
                     PassFace(
                         pass,
                         holderName = pass.userName ?: user?.firstName ?: "",
-                        holderPhoto = pass.userPhotoUrl ?: user?.id?.let(graph.configuration::avatarUrl),
+                        holderPhoto = pass.userPhotoUrl ?: user?.avatarUrl,
                     )
                 }
                 if (pass.status == AdmissionStatus.PENDING) {

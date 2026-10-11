@@ -211,6 +211,11 @@ data class Friend(
     val name: String = "",
     val facebookId: String? = null,
     val presence: Presence? = null,
+    /**
+     * Their profile photo. The API's Friend type has no `avatarUrl` yet, so [Documents.FRIEND_FIELDS]
+     * doesn't ask for it and friends show their initials until it does.
+     */
+    val avatarUrl: String? = null,
 ) {
     val firstName: String get() = name.firstNameForDisplay()
 
@@ -419,8 +424,8 @@ data class VersionInfo(
     @SerialName("minimum_version") val minimumVersion: String? = null,
 )
 
-/** The signed-in user, as the app shows them. */
-data class User(val id: String, val name: String) {
+/** The signed-in user, as the app shows them, with their profile photo when they have one. */
+data class User(val id: String, val name: String, val avatarUrl: String? = null) {
     val firstName: String get() = name.firstNameForDisplay()
     val initials: String get() = name.initialsForDisplay()
 }

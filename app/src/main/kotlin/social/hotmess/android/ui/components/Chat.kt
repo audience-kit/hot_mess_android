@@ -832,6 +832,15 @@ private fun peekEntries(messages: List<ChatThreadMessage>): List<ThreadEntry.Bub
         ThreadEntry.BubbleEntry(message, first, last)
     }
 
+data class ChatPeekParticipant(
+    val id: String,
+    val name: String,
+    val avatarUrl: String?,
+    val presence: Presence? = null,
+    val isPlace: Boolean = false,
+)
+
+
 /**
  * A read-only glimpse of a chat room (design system ChatPeek): a `surface-sunken` panel with
  * `radius-photo` corners holding [title], "N here now" when [online] is known, the last [limit]
@@ -840,6 +849,7 @@ private fun peekEntries(messages: List<ChatThreadMessage>): List<ThreadEntry.Bub
  * "Open the chat at [room], N recent messages" instead of each bubble. It holds no connection;
  * callers refresh [messages] when their screen appears.
  */
+
 @Composable
 fun ChatPeek(
     messages: List<ChatThreadMessage>,
@@ -850,6 +860,7 @@ fun ChatPeek(
     online: Int? = null,
     presence: Map<String, Presence> = emptyMap(),
     limit: Int = 3,
+    participants: List<ChatPeekParticipant> = emptyList(),
 ) {
     val entries = remember(messages, limit) { peekEntries(messages.takeLast(limit)) }
     val count = entries.size
@@ -865,7 +876,13 @@ fun ChatPeek(
             .clip(Radius.photo)
             .background(panel)
             .clearAndSetSemantics {
-                contentDescription = description
+                contentDescription = description + participants.joinToString(prefix = if (participants.isEmpty()) "" else "; ", separator = "; ") {
+                    it.name + when (it.presence) {
+                        Presence.ONLINE -> ", in chat"
+                        Presence.PUSH -> ", reachable by notification"
+                        else -> ""
+                    }
+                }
                 role = Role.Button
                 onClick { onOpen(); true }
             }
@@ -890,6 +907,20 @@ fun ChatPeek(
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                     PresenceDot(Presence.ONLINE, ring = panel)
                     Text("$online here now", style = HotMessType.bodySmall, color = tokens.inkMuted, maxLines = 1)
+                }
+            }
+        }
+        if (participants.isNotEmpty()) {
+            LazyRow(
+                horizontalArrangement = Arrangement.spacedBy(Space.s2),
+                contentPadding = PaddingValues(vertical = Space.s1),
+            ) {
+                items(participants, key = { it.id }) { participant ->
+                    Avatar(
+                        participant.avatarUrl, participant.name, size = 32.dp,
+                        presence = participant.presence, presenceRing = panel,
+                        shape = if (participant.isPlace) RoundedCornerShape(8.dp) else CircleShape,
+                    )
                 }
             }
         }

@@ -10,8 +10,10 @@ import android.bluetooth.le.ScanSettings
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
+import android.os.SystemClock
 import android.util.Log
 import androidx.core.content.ContextCompat
+import social.hotmess.core.NearestBeacon
 import java.nio.ByteBuffer
 import java.util.UUID
 
@@ -26,12 +28,15 @@ class BeaconScanner(
 ) {
     private val proximityUuid = runCatching { UUID.fromString(uuid) }.getOrNull()
     private var scanning = false
+    private val nearest = NearestBeacon()
 
     private val callback = object : ScanCallback() {
         override fun onScanResult(callbackType: Int, result: ScanResult) {
             val data = result.scanRecord?.getManufacturerSpecificData(APPLE) ?: return
-            val beacon = parse(data) ?: return
-            onNearest(beacon.first, beacon.second)
+            val (major, minor) = parse(data) ?: return
+            // Every beacon in range is heard; only a change of the nearest is passed on.
+            val changed = nearest.heard(major, minor, result.rssi, SystemClock.elapsedRealtime()) ?: return
+            onNearest(changed.first, changed.second)
         }
 
         override fun onScanFailed(errorCode: Int) {

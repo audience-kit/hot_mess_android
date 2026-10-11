@@ -5,6 +5,7 @@ import com.audiencekit.AudienceKitConfiguration
 import com.audiencekit.Coordinates
 import com.audiencekit.HttpTransport
 import com.audiencekit.InMemoryTokenStore
+import kotlinx.coroutines.async
 import kotlinx.coroutines.test.runTest
 import java.time.Instant
 import java.time.ZoneId
@@ -578,6 +579,53 @@ class HotMessApiTest {
         assertTrue(now.isNearVenues)
         assertEquals(1, now.events.size)
         assertTrue(bodies.single().contains("\"latitude\":47.61"))
+    }
+
+    @Test
+    fun reportsOfTheSamePositionAtOnceShareOneRequest() = runTest {
+        val gate = kotlinx.coroutines.CompletableDeferred<Unit>()
+        var requests = 0
+        val transport = HttpTransport {
+            requests++
+            gate.await()
+            com.audiencekit.HttpResponse(200, """{"data":{"reportLocation":{"now":{"title":"Nyne"}}}}""".toByteArray())
+        }
+        val api = HotMessApi(
+            AudienceKitClient(
+                AudienceKitConfiguration(baseUrl = "https://api.example", audienceId = "aud-1"),
+                InMemoryTokenStore("token"),
+                transport,
+            ),
+        )
+        val position = Coordinates(47.66, -117.41)
+        val tracking = async { api.now(position) }
+        val screen = async { api.now(position) }
+        val leaving = async { api.now(position) }
+        testScheduler.runCurrent()
+        leaving.cancel()
+        testScheduler.runCurrent()
+        gate.complete(Unit)
+
+        assertEquals("Nyne", tracking.await().title)
+        assertEquals("Nyne", screen.await().title)
+        assertEquals(1, requests, "one request, which a caller leaving doesn't cancel")
+
+        api.now(position)
+        assertEquals(2, requests, "a later report is sent again")
+    }
+
+    @Test
+    fun meHasTheirPhoto() = runTest {
+        val (api, bodies) = api(
+            "query Me" to """{"data":{"me":{"id":"5b3c8a72-4e19-4d06-b2f5-8c7a1e0d9b22","name":"Billie Jean",
+                "photo":{"cdnUrl":"https://cdn.example/billie.jpg"}}}}""",
+        )
+        val me = api.me()!!
+
+        assertEquals("Billie Jean", me.name)
+        assertEquals("https://cdn.example/billie.jpg", me.avatarUrl)
+        assertTrue(bodies.single().contains("photo { cdnUrl }"))
+        assertFalse(bodies.single().contains("/picture"))
     }
 
     @Test

@@ -59,7 +59,6 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
-import social.hotmess.android.ui.LocalAppGraph
 import social.hotmess.android.ui.theme.HotMessType
 import social.hotmess.android.ui.theme.Opacity
 import social.hotmess.android.ui.theme.PhotoColors
@@ -253,12 +252,11 @@ private fun Modifier.photoRing(width: Dp = 2.dp) = border(width, Color.White.cop
 /** Overlapping friend photos (26, overlapping by 7), for the corner of a card. Hidden from screen readers; cards describe them. */
 @Composable
 fun FriendFaces(friends: List<Friend>, modifier: Modifier = Modifier, limit: Int = 4) {
-    val configuration = LocalAppGraph.current.configuration
     val shown = friends.take(limit)
     Box(modifier.clearAndSetSemantics { }) {
         shown.forEachIndexed { index, friend ->
             Avatar(
-                configuration.avatarUrl(friend.id),
+                friend.avatarUrl,
                 friend.name,
                 size = Sizes.avatarXs,
                 modifier = Modifier.padding(start = (Sizes.avatarXs - 7.dp) * index).photoRing(),

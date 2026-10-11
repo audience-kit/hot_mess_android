@@ -55,6 +55,13 @@ object Documents {
         }
     """.trimIndent()
 
+    /** The signed-in user, with their profile photo (the SDK's Me doesn't ask for it). */
+    val ME: String = """
+        query Me {
+          me { id name firstName lastName photo { cdnUrl } }
+        }
+    """.trimIndent()
+
     val CLOSEST_LOCALE: String = """
         query ClosestLocale(${'$'}near: CoordinatesInput!) {
           closestLocale(near: ${'$'}near) { id name label }
