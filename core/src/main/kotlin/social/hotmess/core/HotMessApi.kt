@@ -197,6 +197,21 @@ class HotMessApi(val client: AudienceKitClient) {
 
     // endregion
 
+    // region Chat
+
+    /**
+     * Says [body] in [room] as the signed-in user (`sendMyChatMessage`), returning the line as the room
+     * sees it, or null if the response didn't carry one. The room also delivers it to everyone following,
+     * the sender included. Errors written for people ("You're not at the venue") come through as they are.
+     */
+    suspend fun sendChatMessage(room: ChatRoom, body: String): VenueMessage? {
+        val data = mutate(ChatProtocol.SEND_MESSAGE, JsonObject.serializer(), mapOf("input" to ChatProtocol.sendInput(room, body)))
+        val payload = data["sendMyChatMessage"] as? JsonObject
+        return ChatProtocol.message(payload?.get("message"))
+    }
+
+    // endregion
+
     // region Ping
 
     /** The signed-in user's active Ping, without reporting the position. */

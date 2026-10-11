@@ -3,10 +3,10 @@ package social.hotmess.core
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
-import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
@@ -22,8 +22,8 @@ import java.time.Instant
 import java.util.UUID
 
 /**
- * One line in a venue's or locale's chat room, as its frame describes it. Older servers send only
- * [body], [userId] and [avatarUrl]; everything else is optional and defaults to a plain text line.
+ * One line in a venue's or locale's chat room, as its GraphQL `ChatMessage` describes it. Only [body]
+ * and [userId] are needed; everything else is optional and defaults to a plain text line.
  *
  * [body] is the line in words, which for a rich message is its summary ("Shared an event: Sunset
  * Social"); [caption] is what the sender wrote: an announcement's or special's body, or an event's or
@@ -115,12 +115,15 @@ data class SharedEvent(val id: String, val name: String? = null, val startAt: In
 
 /**
  * A chat room: a venue's, for people at the venue, or a locale's, for people out in the locale who
- * aren't at a venue. Both speak the same frames, so one connection and one screen serve either.
+ * aren't at a venue. Both deliver the same events, so one connection and one screen serve either.
+ *
+ * [field] is the room's GraphQL subscription field and [argument] the id it takes, which is also how
+ * `sendMyChatMessage` names the room.
  */
 data class ChatRoom(val kind: Kind, val id: String) {
-    enum class Kind(val channel: String, val key: String) {
-        VENUE("RealtimeChannel", "venue_id"),
-        LOCALE("LocaleChannel", "locale_id"),
+    enum class Kind(val field: String, val argument: String) {
+        VENUE("venueChat", "venueId"),
+        LOCALE("localeChat", "localeId"),
     }
 
     companion object {
@@ -130,57 +133,93 @@ data class ChatRoom(val kind: Kind, val id: String) {
 }
 
 /**
- * The Action Cable protocol behind a chat room (see [ChatRoom]): the `RealtimeChannel` subscription for a
- * venue, chat lines in and out, and the server's own frames. Kept apart from the socket so it can be
- * tested.
+ * A chat room (see [ChatRoom]) over GraphQL subscriptions on Action Cable: the `GraphQLChannel`
+ * subscription, the `venueChat`/`localeChat` operation run on it, and the `ChatRoomEvent`s it delivers.
+ * Kept apart from the socket so it can be tested.
  *
- * A venue's room is only open to people at the venue, and a locale's to people out in it away from its
- * venues: the server rejects the subscription otherwise, and sends `{"type":"left"}` when someone's
- * presence lapses. It adds the sender to each line itself.
- * Admins can join from anywhere: everyone is told `{"type":"range","out_of_range":…}` on joining,
- * and admins again whenever that changes.
+ * Each operation is its own channel subscription, named by the audience and an id of the client's
+ * choosing. Once Action Cable confirms it, the client performs `execute` with the GraphQL document;
+ * every result then arrives as `{"result":{"data":…,"errors":…},"more":<bool>}`, the first being
+ * `ChatJoined` (who is here, the recent lines, the pinned announcement and whether an admin is out of
+ * range). `more: false` ends the operation. An operation the server refuses (not at the venue, banned)
+ * comes back with errors and no data.
  *
- * Presence: on joining, `{"type":"roster","online":[<user id>, …]}` lists everyone in the room now, the
- * joiner included; then `{"type":"presence","user_id":…,"presence":"online"|"offline"}` as people come
- * and go. Newer servers add to the roster `people` (everyone in the room, with `name`, `avatar_url` and
- * whether they're the joiner's `friend`) and `friends` (all the joiner's friends, by full name), and to
- * an online presence frame the newcomer's `name` and `avatar_url`. Every one of those is optional.
- *
- * Newer servers also send, on joining, `{"type":"history","messages":[<line>, …],"pinned":<line>|null}`
- * (the room's recent lines, oldest first, and the announcement pinned under its title however old);
- * `{"type":"pin","id":…,"pinned":true,"announcement":<line>}` or `{"type":"pin","id":…,"pinned":false}`
- * as announcements are pinned and unpinned; and `"presence":"push"`, on a presence frame or a line, for a
- * friend outside the room whom a notification reaches.
- *
- * When an admin removes a line the room hears `{"type":"removed","id":…}`, and when they clear the room
- * `{"type":"cleared","cleared_at":…}`: every line so far is gone.
+ * Saying something is the `sendMyChatMessage` mutation (see [SEND_MESSAGE]); the room delivers the line
+ * to everyone following it, the sender included.
  */
 object ChatProtocol {
     // Lenient, so an id sent as a number still reads as a string rather than dropping the line.
     private val json = Json {
         ignoreUnknownKeys = true
         isLenient = true
+        coerceInputValues = true
     }
 
+    /** A chat line's fields, as [message] reads them. */
+    const val MESSAGE_FIELDS: String =
+        "id message body name avatarUrl sentAt userId role kind title photoUrl event { id name startAt } endsAt pinned " +
+            "postedAsVenue postedAsPerson person { id }"
+
+    /**
+     * The room's subscription document, for `$id`. ChatJoined's `pinned` is aliased: it's a line there and
+     * a flag on ChatPinChanged, and fields of one name must have one shape.
+     */
+    fun document(room: ChatRoom): String = """
+        subscription ChatRoom(${'$'}id: ID!) {
+          ${room.kind.field}(${room.kind.argument}: ${'$'}id) {
+            __typename
+            ... on ChatJoined {
+              outOfRange
+              roster { people { userId name avatarUrl friend } friends { userId name } }
+              history { senderPresence message { $MESSAGE_FIELDS } }
+              pinnedMessage { senderPresence message { $MESSAGE_FIELDS } }
+            }
+            ... on ChatMessagePosted { senderPresence message { $MESSAGE_FIELDS } }
+            ... on ChatMessageUpdated { message { $MESSAGE_FIELDS } }
+            ... on ChatMessageRemoved { messageId }
+            ... on ChatPinChanged { messageId pinned announcement { $MESSAGE_FIELDS } }
+            ... on ChatRoomCleared { clearedAt }
+            ... on ChatPresenceChanged { userId presence name avatarUrl }
+            ... on ChatRangeChanged { outOfRange }
+            ... on ChatLeft { reason }
+          }
+        }
+    """.trimIndent()
+
+    /** Says something in a room as yourself; `$input` takes `venueId` or `localeId`, and `message`. */
+    const val SEND_MESSAGE: String =
+        "mutation SendMyChatMessage(\$input: ChatMessageSendOwnInput!) { sendMyChatMessage(input: \$input) { message { $MESSAGE_FIELDS } } }"
+
+    /** The mutation's input for saying [body] in [room]. */
+    fun sendInput(room: ChatRoom, body: String): JsonObject = JsonObject(
+        mapOf(room.kind.argument to JsonPrimitive(room.id.lowercase()), "message" to JsonPrimitive(body)),
+    )
+
     sealed interface Frame {
-        /** The server accepted the connection or the subscription. */
+        /** Action Cable confirmed the channel subscription: time to run the operation. */
+        data object Subscribed : Frame
+
+        /** In the room: the first event (ChatJoined) arrived. */
         data object Connected : Frame
         data class Message(val message: VenueMessage) : Frame
         data object Disconnected : Frame
 
-        /** The server won't let this person in: they haven't reported a position in the room's place lately. */
+        /**
+         * The server won't let this person in: the channel was rejected (another audience, banned) or the
+         * operation came back with errors and no data (not at the room's place lately).
+         */
         data object Rejected : Frame
 
-        /** They were in the room, but they've left its place. */
+        /** They were in the room, but they've left its place, or were banned or removed. */
         data object Left : Frame
+
+        /** The server ended the operation (`more: false`); reconnecting starts it over. */
+        data object Ended : Frame
 
         /** Whether they're outside the room's place. Only admins get in from outside. */
         data class Range(val outOfRange: Boolean) : Frame
 
-        /**
-         * Everyone in the room now, by lowercase user id, sent on joining; with [people] (who they are)
-         * and [friends] (all the joiner's friends, full names) from newer servers.
-         */
+        /** Everyone in the room now, by lowercase user id, with who they are, and all the joiner's friends. */
         data class Roster(
             val online: Set<String>,
             val people: List<RoomPerson> = emptyList(),
@@ -189,7 +228,7 @@ object ChatProtocol {
 
         /**
          * Someone (by lowercase user id) came into the room or left it; a newcomer with their [name] and
-         * [avatarUrl] when sent. Someone who left but whom a notification reaches is [reachable].
+         * [avatarUrl]. Someone who left but whom a notification reaches is [reachable].
          */
         data class PresenceChanged(
             val userId: String,
@@ -212,105 +251,144 @@ object ChatProtocol {
         data object Cleared : Frame
     }
 
-    /** Action Cable names a subscription by a JSON *string*, not an object. */
-    fun identifier(room: ChatRoom): String =
-        JsonObject(mapOf("channel" to JsonPrimitive(room.kind.channel), room.kind.key to JsonPrimitive(room.id.lowercase()))).toString()
+    /**
+     * Action Cable names a subscription by a JSON *string*, not an object: the GraphQL channel, the
+     * audience, and [channelId], which keeps one operation's identifier apart from another's.
+     */
+    fun identifier(audienceId: String, channelId: String): String = JsonObject(
+        mapOf(
+            "channel" to JsonPrimitive("GraphQLChannel"),
+            "audience_id" to JsonPrimitive(audienceId.lowercase()),
+            "channelId" to JsonPrimitive(channelId),
+        ),
+    ).toString()
 
-    fun subscribe(room: ChatRoom): String =
-        json.encodeToString(OutgoingFrame.serializer(), OutgoingFrame("subscribe", identifier(room), null))
+    /** A fresh id for [identifier]. */
+    fun newChannelId(): String = UUID.randomUUID().toString().replace("-", "").take(12)
 
-    fun message(room: ChatRoom, body: String): String {
-        val line = json.encodeToString(OutgoingMessage.serializer(), OutgoingMessage(message = body))
-        return json.encodeToString(OutgoingFrame.serializer(), OutgoingFrame("message", identifier(room), line))
+    fun subscribe(identifier: String): String =
+        json.encodeToString(OutgoingFrame.serializer(), OutgoingFrame("subscribe", identifier, null))
+
+    /** Runs the room's subscription on the channel [identifier] names. */
+    fun execute(identifier: String, room: ChatRoom): String {
+        val data = JsonObject(
+            mapOf(
+                "action" to JsonPrimitive("execute"),
+                "query" to JsonPrimitive(document(room)),
+                "variables" to JsonObject(mapOf("id" to JsonPrimitive(room.id.lowercase()))),
+            ),
+        ).toString()
+        return json.encodeToString(OutgoingFrame.serializer(), OutgoingFrame("message", identifier, data))
     }
 
-    /** A venue's room, by the venue's id. */
-    fun subscribe(venueId: String): String = subscribe(ChatRoom.venue(venueId))
-
-    fun message(venueId: String, body: String): String = message(ChatRoom.venue(venueId), body)
-
-    /** Reads one frame from the server, or null for pings and anything unrecognized. */
-    fun parse(text: String): Frame? {
-        val frame = runCatching { json.parseToJsonElement(text).jsonObject }.getOrNull() ?: return null
+    /**
+     * Reads one frame from the server: what it says, in order, or nothing for pings and anything
+     * unrecognized. ChatJoined is several things at once, and a result with `more: false` also ends.
+     */
+    fun parse(text: String): List<Frame> {
+        val frame = runCatching { json.parseToJsonElement(text).jsonObject }.getOrNull() ?: return emptyList()
         return when ((frame["type"] as? JsonPrimitive)?.contentOrNull) {
-            "welcome", "confirm_subscription" -> Frame.Connected
-            "disconnect" -> Frame.Disconnected
-            "reject_subscription" -> Frame.Rejected
-            null -> {
-                // A frame with no type and a message object is a chat line. Action Cable reuses
-                // `message` for its ping counter, so anything else there is ignored.
-                val message = frame["message"] as? JsonObject ?: return null
-                when ((message["type"] as? JsonPrimitive)?.contentOrNull) {
-                    "left" -> return Frame.Left
-                    "range" -> return Frame.Range((message["out_of_range"] as? JsonPrimitive)?.booleanOrNull ?: false)
-                    "roster" -> return roster(message)
-                    "presence" -> return presence(message)
-                    "history" -> return history(message)
-                    "pin" -> return pin(message)
-                    "removed" -> return message.string("id")?.let(Frame::Removed)
-                    "cleared" -> return Frame.Cleared
-                }
-                val payload = runCatching { json.decodeFromJsonElement(IncomingMessage.serializer(), message) }.getOrNull()
-                    ?: return null
-                Frame.Message(payload.toMessage())
-            }
-            else -> null
+            "confirm_subscription" -> listOf(Frame.Subscribed)
+            "disconnect" -> listOf(Frame.Disconnected)
+            "reject_subscription" -> listOf(Frame.Rejected)
+            // Action Cable reuses `message` for its ping counter, so only an object there is a result.
+            null -> (frame["message"] as? JsonObject)?.let(::result).orEmpty()
+            else -> emptyList()
         }
     }
 
-    private fun roster(message: JsonObject): Frame? {
-        val online = message["online"] as? JsonArray ?: return null
+    /** `{"result":{"data":…,"errors":…},"more":…}`. */
+    private fun result(message: JsonObject): List<Frame> {
+        val result = message["result"] as? JsonObject
+        val more = (message["more"] as? JsonPrimitive)?.booleanOrNull ?: true
+        val data = result?.get("data") as? JsonObject
+        val errors = (result?.get("errors") as? JsonArray).orEmpty()
+        val event = data?.values?.firstOrNull() as? JsonObject
+        val frames = when {
+            event != null -> event(event)
+            // Refused: not in the room, banned, or the room isn't there.
+            errors.isNotEmpty() -> return listOf(Frame.Rejected)
+            else -> emptyList()
+        }
+        return if (more) frames else frames + Frame.Ended
+    }
+
+    /** One ChatRoomEvent, by its `__typename`. An unknown event is skipped. */
+    private fun event(event: JsonObject): List<Frame> = when (event.string("__typename")) {
+        "ChatJoined" -> joined(event)
+        "ChatMessagePosted" -> listOfNotNull(posted(event)?.let(Frame::Message))
+        "ChatMessageUpdated" -> listOfNotNull(message(event["message"])?.let(Frame::Message))
+        "ChatMessageRemoved" -> listOfNotNull(event.string("messageId")?.let(Frame::Removed))
+        "ChatPinChanged" -> listOfNotNull(pin(event))
+        "ChatRoomCleared" -> listOf(Frame.Cleared)
+        "ChatPresenceChanged" -> listOfNotNull(presence(event))
+        "ChatRangeChanged" -> listOf(Frame.Range(event.boolean("outOfRange")))
+        "ChatLeft" -> listOf(Frame.Left)
+        else -> emptyList()
+    }
+
+    private fun joined(event: JsonObject): List<Frame> {
+        val roster = event["roster"] as? JsonObject
         // Anything malformed in `people` or `friends` is skipped, never the whole roster.
-        val people = (message["people"] as? JsonArray).orEmpty().mapNotNull { entry ->
+        val people = (roster?.get("people") as? JsonArray).orEmpty().mapNotNull { entry ->
             val person = entry as? JsonObject ?: return@mapNotNull null
-            val id = person.string("user_id") ?: return@mapNotNull null
+            val id = person.string("userId") ?: return@mapNotNull null
             RoomPerson(
                 userId = id.lowercase(),
                 name = person.string("name"),
-                avatarUrl = person.string("avatar_url"),
-                friend = (person["friend"] as? JsonPrimitive)?.booleanOrNull ?: false,
+                avatarUrl = person.string("avatarUrl"),
+                friend = person.boolean("friend"),
             )
         }
-        val friends = (message["friends"] as? JsonArray).orEmpty().mapNotNull { entry ->
+        val friends = (roster?.get("friends") as? JsonArray).orEmpty().mapNotNull { entry ->
             val friend = entry as? JsonObject ?: return@mapNotNull null
-            val id = friend.string("user_id") ?: return@mapNotNull null
+            val id = friend.string("userId") ?: return@mapNotNull null
             Friend(id.lowercase(), friend.string("name").orEmpty())
         }
-        return Frame.Roster(online.mapNotNull { (it as? JsonPrimitive)?.contentOrNull?.lowercase() }.toSet(), people, friends)
+        // A malformed line drops only itself.
+        val history = (event["history"] as? JsonArray).orEmpty().mapNotNull { posted(it as? JsonObject) }
+        return listOf(
+            Frame.Connected,
+            Frame.Range(event.boolean("outOfRange")),
+            Frame.Roster(people.map { it.userId }.toSet(), people, friends),
+            Frame.History(history, posted((event["pinnedMessage"] ?: event["pinned"]) as? JsonObject)),
+        )
     }
 
-    private fun line(element: kotlinx.serialization.json.JsonElement?): VenueMessage? {
+    /** A ChatMessagePosted: its line, reachable when the sender isn't here but a notification reaches them. */
+    private fun posted(event: JsonObject?): VenueMessage? {
+        val line = message(event?.get("message")) ?: return null
+        return line.copy(reachable = event?.string("senderPresence").equals("PUSH", ignoreCase = true))
+    }
+
+    private fun pin(event: JsonObject): Frame? {
+        val id = event.string("messageId") ?: return null
+        return Frame.Pin(id, if (event.boolean("pinned")) message(event["announcement"]) else null)
+    }
+
+    private fun presence(event: JsonObject): Frame? {
+        val userId = event.string("userId") ?: return null
+        val presence = event.string("presence") ?: return null
+        val online = presence.equals("ONLINE", ignoreCase = true)
+        return Frame.PresenceChanged(
+            userId.lowercase(),
+            online,
+            name = if (online) event.string("name") else null,
+            avatarUrl = if (online) event.string("avatarUrl") else null,
+            reachable = presence.equals("PUSH", ignoreCase = true),
+        )
+    }
+
+    /** A ChatMessage, as [MESSAGE_FIELDS] asks for it, or null when it's malformed. */
+    fun message(element: JsonElement?): VenueMessage? {
         val message = element as? JsonObject ?: return null
         return runCatching { json.decodeFromJsonElement(IncomingMessage.serializer(), message) }.getOrNull()?.toMessage()
     }
 
-    /** A malformed line drops only itself. */
-    private fun history(message: JsonObject): Frame = Frame.History(
-        (message["messages"] as? JsonArray).orEmpty().mapNotNull(::line),
-        line(message["pinned"]),
-    )
-
-    private fun pin(message: JsonObject): Frame? {
-        val id = message.string("id") ?: return null
-        val pinned = (message["pinned"] as? JsonPrimitive)?.booleanOrNull ?: false
-        return Frame.Pin(id, if (pinned) line(message["announcement"]) else null)
-    }
-
-    private fun presence(message: JsonObject): Frame? {
-        val userId = message.string("user_id") ?: return null
-        val presence = message.string("presence") ?: return null
-        val online = presence.equals("online", ignoreCase = true)
-        return Frame.PresenceChanged(
-            userId.lowercase(),
-            online,
-            name = if (online) message.string("name") else null,
-            avatarUrl = if (online) message.string("avatar_url") else null,
-            reachable = presence.equals("push", ignoreCase = true),
-        )
-    }
-
     /** A string field, or null when it's missing, not a string-like value, or blank. */
     private fun JsonObject.string(key: String): String? = (this[key] as? JsonPrimitive)?.contentOrNull.blankToNull()
+
+    private fun JsonObject.boolean(key: String): Boolean = (this[key] as? JsonPrimitive)?.booleanOrNull ?: false
 
     /** The websocket endpoint, derived from the HTTP base URL: `wss://<host>/connection`. */
     fun realtimeUrl(baseUrl: String): String? {
@@ -323,29 +401,25 @@ object ChatProtocol {
     @Serializable
     private data class OutgoingFrame(val command: String, val identifier: String, val data: String?)
 
-    @Serializable
-    private data class OutgoingMessage(val message: String)
-
-    /** A chat line's frame. Only `message` and `user_id` are always there; the rest came later. */
+    /** A ChatMessage. `message` (the line in words) and `userId` are required; the rest default to a plain line. */
     @Serializable
     private data class IncomingMessage(
         val message: String,
-        @SerialName("user_id") val userId: String,
-        @SerialName("avatar_url") val avatarUrl: String? = null,
+        val userId: String,
+        val avatarUrl: String? = null,
         val id: String? = null,
         val name: String? = null,
-        @SerialName("sent_at") val sentAt: String? = null,
+        val sentAt: String? = null,
         val role: String? = null,
         val kind: String? = null,
         val title: String? = null,
         val body: String? = null,
-        @SerialName("photo_url") val photoUrl: String? = null,
+        val photoUrl: String? = null,
         val event: IncomingEvent? = null,
-        @SerialName("ends_at") val endsAt: String? = null,
+        val endsAt: String? = null,
         val pinned: Boolean? = null,
-        val presence: String? = null,
-        @SerialName("posted_as_person") val postedAsPerson: Boolean? = null,
-        @SerialName("person_id") val personId: String? = null,
+        val postedAsPerson: Boolean? = null,
+        val person: IncomingPerson? = null,
     ) {
         fun toMessage(): VenueMessage {
             val base = VenueMessage(body = message, userId = userId, avatarUrl = avatarUrl.blankToNull())
@@ -361,27 +435,29 @@ object ChatProtocol {
                 event = event?.id.blankToNull()?.let { SharedEvent(it, event?.name.blankToNull(), event?.startAt?.let(InstantSerializer::parse)) },
                 endsAt = endsAt?.let(InstantSerializer::parse),
                 pinned = pinned ?: false,
-                reachable = presence.equals("push", ignoreCase = true),
-                personId = if (postedAsPerson == true) personId.blankToNull()?.lowercase() else null,
+                personId = if (postedAsPerson == true) person?.id.blankToNull()?.lowercase() else null,
             )
         }
     }
 
     @Serializable
-    private data class IncomingEvent(
-        val id: String? = null,
-        val name: String? = null,
-        @SerialName("start_at") val startAt: String? = null,
-    )
+    private data class IncomingEvent(val id: String? = null, val name: String? = null, val startAt: String? = null)
+
+    @Serializable
+    private data class IncomingPerson(val id: String? = null)
 
     private fun String?.blankToNull(): String? = this?.takeIf { it.isNotBlank() }
 }
 
-/** A live connection to a chat room, a venue's or a locale's. */
+/**
+ * A live connection to a chat room, a venue's or a locale's, in [audienceId]: one `GraphQLChannel`
+ * subscription running the room's subscription. Saying something is [HotMessApi.sendChatMessage].
+ */
 class VenueChatConnection(
     private val room: ChatRoom,
     private val url: String,
     private val token: String?,
+    private val audienceId: String,
     private val client: OkHttpClient = OkHttpClient(),
 ) {
     sealed interface Event {
@@ -392,7 +468,7 @@ class VenueChatConnection(
         data object Left : Event
         data class Range(val outOfRange: Boolean) : Event
 
-        /** Everyone in the room now, by lowercase user id, and who they are and the viewer's friends when sent. */
+        /** Everyone in the room now, by lowercase user id, and who they are and the viewer's friends. */
         data class Roster(
             val online: Set<String>,
             val people: List<RoomPerson> = emptyList(),
@@ -413,35 +489,42 @@ class VenueChatConnection(
         data object Cleared : Event
     }
 
-    @Volatile private var socket: WebSocket? = null
-
     /** Connects when collected and closes the socket when the collector goes away. */
     fun events(): Flow<Event> = callbackFlow {
+        val identifier = ChatProtocol.identifier(audienceId, ChatProtocol.newChannelId())
         val request = Request.Builder().url(url).apply {
             token?.let { header("Authorization", "JWT $it") }
         }.build()
 
         val listener = object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
-                webSocket.send(ChatProtocol.subscribe(room))
+                webSocket.send(ChatProtocol.subscribe(identifier))
             }
 
             override fun onMessage(webSocket: WebSocket, text: String) {
-                when (val frame = ChatProtocol.parse(text)) {
-                    ChatProtocol.Frame.Connected -> trySend(Event.Connected)
-                    ChatProtocol.Frame.Disconnected -> trySend(Event.Disconnected(null))
-                    ChatProtocol.Frame.Rejected -> trySend(Event.Rejected)
-                    ChatProtocol.Frame.Left -> trySend(Event.Left)
-                    is ChatProtocol.Frame.Message -> trySend(Event.Received(frame.message))
-                    is ChatProtocol.Frame.Range -> trySend(Event.Range(frame.outOfRange))
-                    is ChatProtocol.Frame.Roster -> trySend(Event.Roster(frame.online, frame.people, frame.friends))
-                    is ChatProtocol.Frame.PresenceChanged ->
-                        trySend(Event.PresenceChanged(frame.userId, frame.online, frame.name, frame.avatarUrl, frame.reachable))
-                    is ChatProtocol.Frame.History -> trySend(Event.History(frame.messages, frame.pinned))
-                    is ChatProtocol.Frame.Pin -> trySend(Event.Pin(frame.id, frame.announcement))
-                    is ChatProtocol.Frame.Removed -> trySend(Event.Removed(frame.id))
-                    ChatProtocol.Frame.Cleared -> trySend(Event.Cleared)
-                    null -> Unit
+                for (frame in ChatProtocol.parse(text)) {
+                    when (frame) {
+                        ChatProtocol.Frame.Subscribed -> webSocket.send(ChatProtocol.execute(identifier, room))
+                        ChatProtocol.Frame.Connected -> trySend(Event.Connected)
+                        ChatProtocol.Frame.Disconnected -> trySend(Event.Disconnected(null))
+                        ChatProtocol.Frame.Rejected -> trySend(Event.Rejected)
+                        ChatProtocol.Frame.Left -> trySend(Event.Left)
+                        ChatProtocol.Frame.Ended -> {
+                            // The server ended the room's operation; the caller reconnects to start it over.
+                            trySend(Event.Disconnected(null))
+                            webSocket.close(1000, null)
+                            channel.close()
+                        }
+                        is ChatProtocol.Frame.Message -> trySend(Event.Received(frame.message))
+                        is ChatProtocol.Frame.Range -> trySend(Event.Range(frame.outOfRange))
+                        is ChatProtocol.Frame.Roster -> trySend(Event.Roster(frame.online, frame.people, frame.friends))
+                        is ChatProtocol.Frame.PresenceChanged ->
+                            trySend(Event.PresenceChanged(frame.userId, frame.online, frame.name, frame.avatarUrl, frame.reachable))
+                        is ChatProtocol.Frame.History -> trySend(Event.History(frame.messages, frame.pinned))
+                        is ChatProtocol.Frame.Pin -> trySend(Event.Pin(frame.id, frame.announcement))
+                        is ChatProtocol.Frame.Removed -> trySend(Event.Removed(frame.id))
+                        ChatProtocol.Frame.Cleared -> trySend(Event.Cleared)
+                    }
                 }
             }
 
@@ -456,13 +539,7 @@ class VenueChatConnection(
             }
         }
 
-        socket = client.newWebSocket(request, listener)
-        awaitClose {
-            socket?.close(1001, null)
-            socket = null
-        }
+        val socket = client.newWebSocket(request, listener)
+        awaitClose { socket.close(1001, null) }
     }
-
-    /** Sends a line. The server echoes it back, so the caller doesn't add it locally. */
-    fun send(body: String): Boolean = socket?.send(ChatProtocol.message(room, body)) ?: false
 }
