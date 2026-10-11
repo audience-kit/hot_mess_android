@@ -303,7 +303,7 @@ fun VenueCard(
 @Composable
 fun EventCard(event: Event, onClick: () -> Unit, modifier: Modifier = Modifier) {
     PhotoCard(
-        url = event.coverPhotoUrl,
+        url = event.bannerUrl,
         onClick = onClick,
         modifier = modifier,
         minHeight = if (event.isFeatured) Sizes.photoCardFeatured else Sizes.photoCard,
