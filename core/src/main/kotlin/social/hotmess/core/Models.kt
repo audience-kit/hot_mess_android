@@ -250,8 +250,13 @@ data class ChatLine(
     @Serializable(with = InstantSerializer::class) val endsAt: Instant? = null,
     /** Posted as the venue: [name] and [avatarUrl] are the venue's. */
     val postedAsVenue: Boolean = false,
+    /** Posted by talent as their listing (role HOST): [name] and [avatarUrl] are the person's. */
+    val postedAsPerson: Boolean = false,
 ) {
     val role: ChatRole? get() = ChatRole.parse(roleName)
+
+    /** Posted as the venue or as a person: a listing, so no presence and no friend's name for the sender. */
+    val isFromListing: Boolean get() = postedAsVenue || postedAsPerson
     val kind: ChatKind get() = ChatKind.parse(kindName)
 
     /** Whether the room still shows it: a special stops at its end time. */

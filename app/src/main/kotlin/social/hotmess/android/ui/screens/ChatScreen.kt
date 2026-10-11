@@ -164,9 +164,9 @@ class VenueChatModel(private val graph: AppGraph, private val room: ChatRoom) : 
 
     /** Adds a line. A line the room sends again (by its id) replaces the first copy. */
     private fun receive(line: VenueMessage) {
-        if (line.reachable && !line.isPostedAsVenue) _reachable.value = _reachable.value + line.userId.lowercase()
+        if (line.reachable && !line.isFromListing) _reachable.value = _reachable.value + line.userId.lowercase()
         // An older server's roster has no names: a line someone sends names them in "Here now".
-        if (!line.isPostedAsVenue) _people.value = _people.value.described(line.userId, line.name, line.avatarUrl)
+        if (!line.isFromListing) _people.value = _people.value.described(line.userId, line.name, line.avatarUrl)
         val current = _messages.value
         val index = current.indexOfFirst { it.id == line.id }
         _messages.value = if (index >= 0) current.toMutableList().also { it[index] = line } else current + line
@@ -180,7 +180,7 @@ class VenueChatModel(private val graph: AppGraph, private val room: ChatRoom) : 
         val lines = messages
         val older = pinned?.takeIf { p -> lines.none { it.id == p.id } }
         _messages.value = listOfNotNull(older) + lines
-        _reachable.value = lines.filter { it.reachable && !it.isPostedAsVenue }.map { it.userId.lowercase() }.toSet()
+        _reachable.value = lines.filter { it.reachable && !it.isFromListing }.map { it.userId.lowercase() }.toSet()
     }
 
     /** An announcement was pinned (replacing whichever was) or unpinned. */
@@ -293,12 +293,13 @@ fun VenueChatScreen(room: ChatRoom, venueName: String, navigator: Navigator) {
 
 /**
  * A room's line as ChatThread draws it. A friend shows by their full name (the room sends everyone
- * "First L."), a post as the venue by the venue's name and photo, and a rich message as its card.
+ * "First L."), a post as the venue or as a listing by its own name and photo, and a rich message as its card.
  */
 private fun VenueMessage.threadMessage(viewerId: String?, friends: FriendDirectory) = ChatThreadMessage(
     id = id,
-    senderId = userId.lowercase(),
-    senderName = if (isPostedAsVenue) name else friends.displayName(userId, name),
+    // A post as a listing groups apart from the poster's own lines, and takes no presence of theirs.
+    senderId = personId?.let { "person:$it" } ?: userId.lowercase(),
+    senderName = if (isFromListing) name else friends.displayName(userId, name),
     avatarUrl = avatarUrl,
     text = body,
     sentAt = sentAt,

@@ -293,6 +293,20 @@ class ChatProtocolTest {
     }
 
     @Test
+    fun aPostAsAPersonIsTheirListingNotTheSender() {
+        val message = assertIs<ChatProtocol.Frame.Message>(
+            ChatProtocol.parse(
+                """{"identifier":"x","message":{"message":"Doors at 9","user_id":"u-1","role":"host",
+                  "name":"Miss Texas","posted_as_person":true,"person_id":"P-1"}}""",
+            ),
+        ).message
+        assertEquals("p-1", message.personId)
+        assertTrue(message.isFromListing)
+        assertFalse(message.isPostedAsVenue)
+        assertEquals(ChatRole.HOST, message.role)
+    }
+
+    @Test
     fun readsAnAnnouncement() {
         val message = assertIs<ChatProtocol.Frame.Message>(
             ChatProtocol.parse(

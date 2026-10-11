@@ -11,7 +11,7 @@ object Documents {
         "id name address description phone distance point facebookId photoUrl heroUrl isLiked"
 
     /** A chat line as a preview shows it: rich messages in words (`message`), with the sender's role and presence. */
-    const val CHAT_LINE_FIELDS: String = "id message name userId avatarUrl sentAt presence role kind endsAt postedAsVenue"
+    const val CHAT_LINE_FIELDS: String = "id message name userId avatarUrl sentAt presence role kind endsAt postedAsVenue postedAsPerson"
 
     /** A venue's last few chat lines, oldest first; empty unless the viewer is at the venue or an admin. */
     const val RECENT_MESSAGES: String = "recentMessages(limit: 3) { $CHAT_LINE_FIELDS }"
