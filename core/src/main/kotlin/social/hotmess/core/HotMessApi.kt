@@ -312,7 +312,7 @@ class HotMessApi(val client: AudienceKitClient) {
 
     /** The signed-in user, with the photo the API has for them (the old `/users/<id>/picture` is gone). */
     suspend fun me(): User? {
-        val me = query(Documents.ME, MeResponse.serializer()).me ?: return null
+        val me = query(Documents.ME, MeResponse.serializer()).me?.self ?: return null
         val id = RecordId.normalize(me.id) ?: return null
         val name = me.name ?: listOfNotNull(me.firstName, me.lastName).joinToString(" ")
         return User(id = id, name = name, avatarUrl = me.photo?.cdnUrl)
@@ -456,8 +456,12 @@ private data class LocationReport(
         val friends: FriendsMixin? = null,
     )
 
+    /** The audience the report is in, read for the viewer's pings: `audience { me { ping } }`. */
     @Serializable
-    data class AudienceNode(val ping: PingFeed? = null)
+    data class AudienceNode(val me: MeNode? = null)
+
+    @Serializable
+    data class MeNode(val ping: PingFeed? = null)
 
     @Serializable
     data class PingFeed(val myPing: Ping? = null, val friendPings: List<Ping> = emptyList())
@@ -465,7 +469,7 @@ private data class LocationReport(
     fun now(json: Json): Now {
         val node = venue
         val nowLocale = locale?.let { NowLocale(it.id, it.name, it.chat?.open == true, it.chat?.lines.orEmpty()) }
-        val ping = audience?.ping
+        val ping = audience?.me?.ping
         if (node != null) {
             val place = json.decodeFromJsonElement(Venue.serializer(), node)
             val mixins = json.decodeFromJsonElement(VenueMixins.serializer(), node)
@@ -495,8 +499,12 @@ private data class LocationReport(
     }
 }
 
+/** `me { self }`: the viewer's state, and their own profile in it. */
 @Serializable
-private data class MeResponse(val me: Me? = null) {
+private data class MeResponse(val me: UserState? = null) {
+    @Serializable
+    data class UserState(val self: Me? = null)
+
     @Serializable
     data class Me(
         val id: String,
@@ -599,18 +607,22 @@ private data class EventResponse(val events: Events? = null) {
 }
 
 @Serializable
-private data class MyPingResponse(val ping: AudiencePings? = null) {
-    /** `ping { myPing }` on the root, the audience. */
-    val myPing: Ping? get() = ping?.myPing
+private data class MyPingResponse(val me: ViewerPings? = null) {
+    /** `me { ping { myPing } }`: the viewer's own Ping is theirs, under `me`. */
+    val myPing: Ping? get() = me?.ping?.myPing
 }
 
 @Serializable
-private data class FriendPingsResponse(val ping: AudiencePings? = null) {
-    /** `ping { friendPings }` on the root, the audience; a missing ping mixin reads as none. */
-    val friendPings: List<Ping> get() = ping?.friendPings.orEmpty()
+private data class FriendPingsResponse(val me: ViewerPings? = null) {
+    /** `me { ping { friendPings } }`; signed out or a missing ping mixin reads as none. */
+    val friendPings: List<Ping> get() = me?.ping?.friendPings.orEmpty()
 }
 
-/** The audience's ping mixin: the user's own Ping and friends' active ones. */
+/** `me { ping }`: the viewer's ping mixin. */
+@Serializable
+private data class ViewerPings(val ping: AudiencePings? = null)
+
+/** The viewer's ping mixin: the user's own Ping and friends' active ones. */
 @Serializable
 private data class AudiencePings(val myPing: Ping? = null, val friendPings: List<Ping> = emptyList())
 

@@ -727,8 +727,8 @@ class HotMessApiTest {
     @Test
     fun meHasTheirPhoto() = runTest {
         val (api, bodies) = api(
-            "query Me" to """{"data":{"me":{"id":"5b3c8a72-4e19-4d06-b2f5-8c7a1e0d9b22","name":"Billie Jean",
-                "photo":{"cdnUrl":"https://cdn.example/billie.jpg"}}}}""",
+            "query Me" to """{"data":{"me":{"self":{"id":"5b3c8a72-4e19-4d06-b2f5-8c7a1e0d9b22","name":"Billie Jean",
+                "photo":{"cdnUrl":"https://cdn.example/billie.jpg"}}}}}""",
         )
         val me = api.me()!!
 

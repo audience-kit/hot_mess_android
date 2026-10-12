@@ -248,7 +248,7 @@ class PingApiTest {
     fun nowCarriesYourPingAndYourFriends() = runTest {
         val (api, bodies) = api(
             "ReportLocation" to """{"data":{"reportLocation":{"nearbyVenues":[],"locale":{"id":"l1","name":"Capitol Hill"},
-                "audience":{"ping":{"myPing":${PingFixtures.MY_PING},"friendPings":[${PingFixtures.FRIEND_PING}]}}}}}""",
+                "audience":{"me":{"ping":{"myPing":${PingFixtures.MY_PING},"friendPings":[${PingFixtures.FRIEND_PING}]}}}}}}""",
         )
         val now = api.now(Coordinates(47.61, -122.32))
 
@@ -262,8 +262,8 @@ class PingApiTest {
     @Test
     fun withoutAPositionNowStillHasPings() = runTest {
         val (api, bodies) = api(
-            "query MyPing" to """{"data":{"ping":{"myPing":${PingFixtures.MY_PING}}}}""",
-            "query FriendPings" to """{"data":{"ping":{"friendPings":[${PingFixtures.FRIEND_PING}]}}}""",
+            "query MyPing" to """{"data":{"me":{"ping":{"myPing":${PingFixtures.MY_PING}}}}}""",
+            "query FriendPings" to """{"data":{"me":{"ping":{"friendPings":[${PingFixtures.FRIEND_PING}]}}}}""",
         )
         val now = api.nowOrPings(null)
         assertEquals("p-mine", now.myPing?.id)
@@ -273,7 +273,7 @@ class PingApiTest {
 
     @Test
     fun nowWithoutPingsDecodes() = runTest {
-        val (api, _) = api("ReportLocation" to """{"data":{"reportLocation":{"audience":{"ping":null}}}}""")
+        val (api, _) = api("ReportLocation" to """{"data":{"reportLocation":{"audience":{"me":{"ping":null}}}}}""")
         val now = api.now(Coordinates(1.0, 2.0))
         assertNull(now.myPing)
         assertTrue(now.friendPings.isEmpty())
@@ -334,8 +334,8 @@ class PingApiTest {
     @Test
     fun queriesPingsWithoutReportingLocation() = runTest {
         val (api, _) = api(
-            "query MyPing" to """{"data":{"ping":{"myPing":null}}}""",
-            "query FriendPings" to """{"data":{"ping":{"friendPings":[${PingFixtures.FRIEND_PING}]}}}""",
+            "query MyPing" to """{"data":{"me":{"ping":{"myPing":null}}}}""",
+            "query FriendPings" to """{"data":{"me":{"ping":{"friendPings":[${PingFixtures.FRIEND_PING}]}}}}""",
         )
         assertNull(api.myPing())
         assertEquals(1, api.friendPings().size)

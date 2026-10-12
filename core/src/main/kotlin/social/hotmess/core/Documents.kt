@@ -66,7 +66,7 @@ object Documents {
                 venues { nodes { venue { $VENUE_FIELDS } friendCount friends { $FRIEND_OUT_FIELDS } } }
               }
             }
-            audience { ping { myPing { $PING_FIELDS } friendPings { $PING_FIELDS } } }
+            audience { me { ping { myPing { $PING_FIELDS } friendPings { $PING_FIELDS } } } }
           }
         }
     """.trimIndent()
@@ -74,7 +74,7 @@ object Documents {
     /** The signed-in user, with their profile photo (the SDK's Me doesn't ask for it). */
     val ME: String = """
         query Me {
-          me { id name firstName lastName photo { cdnUrl } }
+          me { self { id name firstName lastName photo { cdnUrl } } }
         }
     """.trimIndent()
 
@@ -149,13 +149,13 @@ object Documents {
 
     val MY_PING: String = """
         query MyPing {
-          ping { myPing { $PING_FIELDS } }
+          me { ping { myPing { $PING_FIELDS } } }
         }
     """.trimIndent()
 
     val FRIEND_PINGS: String = """
         query FriendPings {
-          ping { friendPings { $PING_FIELDS } }
+          me { ping { friendPings { $PING_FIELDS } } }
         }
     """.trimIndent()
 
