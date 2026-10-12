@@ -202,9 +202,17 @@ class PingLogicTest {
     }
 
     @Test
-    fun readsPingPushes() {
-        assertEquals(PingPush(PingPush.Kind.PING, "p-1"), PingPush.parse(mapOf("kind" to "ping", "ping_id" to "p-1")))
-        assertEquals(PingPush(PingPush.Kind.PING_JOIN, null), PingPush.parse(mapOf("kind" to "ping_join", "ping_id" to "")))
+    fun readsPingPushesByTheirUrl() {
+        val id = "0f4e8c2a-7b1d-4c3e-9a5f-2d6b8e1c4a7f"
+        val url = "https://hotmess.social/pings/$id"
+        assertEquals(PingPush(id, "ping"), PingPush.parse(mapOf("url" to url, "kind" to "ping", "ping_id" to id)))
+        assertEquals(PingPush(id, "ping_join"), PingPush.parse(mapOf("url" to url, "kind" to "ping_join", "ping_id" to id)))
+        assertEquals(PingPush(id, "ping"), PingPush.parse(mapOf("url" to "hotmess://pings/$id", "kind" to "ping")), "either scheme")
+        assertNull(PingPush.parse(mapOf("url" to "https://hotmess.social/venues/$id", "kind" to "ping", "ping_id" to id)), "the url decides, not kind")
+        assertNull(PingPush.parse(mapOf("url" to "https://example.com/elsewhere", "kind" to "ping")))
+        // Before `url` was sent, `ping_id` named the Ping; `kind` alone never did.
+        assertEquals(PingPush("p-1", "ping"), PingPush.parse(mapOf("kind" to "ping", "ping_id" to "p-1")))
+        assertNull(PingPush.parse(mapOf("kind" to "ping_join", "ping_id" to "")))
         assertNull(PingPush.parse(mapOf("kind" to "chat")))
         assertNull(PingPush.parse(emptyMap()))
         assertEquals(AppTab.NOW, AppRoute.NowPing("p-1").tab)
@@ -343,16 +351,17 @@ class PingApiTest {
 
     @Test
     fun pingErrorsAreShownAsWritten() = runTest {
-        val (api, _) = api("JoinPing" to """{"data":null,"errors":[{"message":"That ping has ended"}]}""")
-        val error = assertFailsWith<ApiError.Other> { api.joinPing("p-1", null) }
+        val (api, _) = api("JoinPing" to """{"data":null,"errors":[{"message":"That ping has ended","extensions":{"code":"CONFLICT"}}]}""")
+        val error = assertFailsWith<ApiError.Rejected> { api.joinPing("p-1", null) }
         assertEquals("That ping has ended", error.message)
+        assertEquals("CONFLICT", error.code)
     }
 
     @Test
-    fun schemaErrorsAreNotShown() {
-        assertNull(HotMessApi.userFacingMessage(listOf("Field 'sendPing' doesn't exist on type 'Mutation'")))
-        assertNull(HotMessApi.userFacingMessage(emptyList()))
-        assertEquals("Pick places in your city", HotMessApi.userFacingMessage(listOf("Pick places in your city")))
+    fun errorsWithoutACodeAreNotShown() = runTest {
+        val (api, _) = api("JoinPing" to """{"data":null,"errors":[{"message":"Field 'joinPing' doesn't exist on type 'Mutation'"}]}""")
+        val error = assertFailsWith<ApiError.Other> { api.joinPing("p-1", null) }
+        assertEquals(ApiError.GENERIC_MESSAGE, error.message)
     }
 
     @Test

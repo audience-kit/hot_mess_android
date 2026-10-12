@@ -10,6 +10,7 @@ import com.audiencekit.CoverPurchase
 import com.audiencekit.HttpResponse
 import com.audiencekit.HttpTransport
 import com.audiencekit.InMemoryTokenStore
+import com.audiencekit.Money
 import com.audiencekit.ScanOutcome
 import kotlinx.coroutines.test.runTest
 import java.time.Instant
@@ -21,12 +22,12 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-private val tonight = CoverCharge(amountCents = 1000, totalCents = 1112, feeCents = 50, night = "2026-10-09", from = "21:00", payable = true)
+private val tonight = CoverCharge(amount = Money(1000), total = Money(1112), fee = Money(50), night = "2026-10-09", from = "21:00", payable = true)
 private val paid = Admission(
     id = "7b4e0c6a-1d2f-4e8a-9c3b-5f6a7b8c9d0e",
     status = AdmissionStatus.PAID,
     night = "2026-10-09",
-    totalCents = 1112,
+    total = Money(1112),
     passSecret = "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=",
 )
 
@@ -241,16 +242,16 @@ class CoverApiTest {
     fun theVenueAsksForTonightsCoverAndPass() = runTest {
         val (api, bodies) = api {
             """{"data":{"venues":{"venue":{"id":"v-1","name":"The Wildrose","chat":{"open":false},"events":{"upcoming":{"nodes":[]}},
-               "tickets":{"cover":{"canWorkDoor":true,"charge":{"amountCents":1000,"totalCents":1112,"feeCents":50,"currency":"usd","night":"2026-10-09",
-                 "from":"21:00","payable":true,"event":null},
-               "viewerAdmission":{"id":"a-1","status":"PAID","night":"2026-10-09","totalCents":1112,"isRefundable":true,
+               "tickets":{"cover":{"canWorkDoor":true,"charge":{"amount":{"cents":1000,"currency":"usd"},"total":{"cents":1112,"currency":"usd"},
+                 "fee":{"cents":50,"currency":"usd"},"night":"2026-10-09","from":"21:00","payable":true,"event":null},
+               "viewerAdmission":{"id":"a-1","status":"PAID","night":"2026-10-09","total":{"cents":1112,"currency":"usd"},"isRefundable":true,
                  "passSecret":"AAEC","venue":{"id":"v-1","name":"The Wildrose"}}}}}}}}"""
         }
         val venue = api.venueOverview("v-1").venue
 
         assertTrue(bodies.single().contains("tickets { cover { charge {") && bodies.single().contains("viewerAdmission { id status"))
         assertTrue(venue.canWorkDoor)
-        assertEquals(1112, venue.coverCharge?.totalCents)
+        assertEquals(Money(1112, "usd"), venue.coverCharge?.total)
         assertEquals(CoverAction.SHOW_PASS, CoverOffer.of(venue)?.action)
     }
 
@@ -258,9 +259,9 @@ class CoverApiTest {
     fun theEventAsksForItsCoverAndTheVenuesTonight() = runTest {
         val (api, bodies) = api {
             """{"data":{"events":{"event":{"id":"e-1","name":"Drag Bingo","startAt":"2026-10-10T04:00:00Z",
-               "tickets":{"cover":{"charge":{"amountCents":500,"totalCents":612,"night":"2026-10-09","payable":true}}},
-               "venue":{"name":"The Wildrose","venue":{"id":"v-1","name":"The Wildrose","tickets":{"cover":{"charge":{"amountCents":500,
-                 "totalCents":612,"night":"2026-10-09","payable":true},"viewerAdmission":null}}}}}}}}"""
+               "tickets":{"cover":{"charge":{"amount":{"cents":500,"currency":"usd"},"total":{"cents":612,"currency":"usd"},"night":"2026-10-09","payable":true}}},
+               "venue":{"name":"The Wildrose","venue":{"id":"v-1","name":"The Wildrose","tickets":{"cover":{"charge":{"amount":{"cents":500,"currency":"usd"},
+                 "total":{"cents":612,"currency":"usd"},"night":"2026-10-09","payable":true},"viewerAdmission":null}}}}}}}}"""
         }
         val event = api.event("e-1")
 
@@ -271,7 +272,7 @@ class CoverApiTest {
     @Test
     fun aSquareVenueSaysHowToPay() = runTest {
         val (api, _) = api {
-            """{"data":{"buyCover":{"admission":{"id":"a-1","status":"PENDING","night":"2026-10-09","totalCents":1112},
+            """{"data":{"buyCover":{"admission":{"id":"a-1","status":"PENDING","night":"2026-10-09","total":{"cents":1112,"currency":"usd"}},
                "provider":"SQUARE","paymentIntentClientSecret":null,"publishableKey":null,"stripeAccountId":null,
                "squareApplicationId":"sq0idp-1","squareLocationId":"L1"}}}"""
         }
@@ -281,7 +282,7 @@ class CoverApiTest {
     @Test
     fun aSquareNonceIsSentWithPayCover() = runTest {
         val (api, bodies) = api {
-            """{"data":{"payCover":{"admission":{"id":"a-1","status":"PAID","night":"2026-10-09","totalCents":1112,
+            """{"data":{"payCover":{"admission":{"id":"a-1","status":"PAID","night":"2026-10-09","total":{"cents":1112,"currency":"usd"},
                "passSecret":"AAEC"}}}}"""
         }
         val admission = api.payCover("a-1", "cnon:card-nonce-ok")
@@ -294,9 +295,9 @@ class CoverApiTest {
 
     @Test
     fun coverErrorsAreShownAsTheApiWroteThem() = runTest {
-        val (api, _) = api { """{"data":null,"errors":[{"message":"The Wildrose doesn't take cover in the app yet"}]}""" }
+        val (api, _) = api { """{"data":null,"errors":[{"message":"The Wildrose doesn't take cover in the app yet","extensions":{"code":"INVALID"}}]}""" }
 
-        val error = assertFailsWith<ApiError.Other> { api.buyCover("v-1") }
+        val error = assertFailsWith<ApiError.Rejected> { api.buyCover("v-1") }
         assertEquals("The Wildrose doesn't take cover in the app yet", error.message)
     }
 }

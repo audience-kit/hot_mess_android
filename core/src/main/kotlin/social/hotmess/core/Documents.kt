@@ -7,12 +7,22 @@ import com.audiencekit.Queries
  * the models in Models.kt; ask for a field there before using it here.
  */
 object Documents {
-    /** How many of the locale's upcoming events Now lists away from a venue. */
-    const val LOCALE_EVENT_LIMIT: Int = 5
+    /**
+     * How many of the locale's upcoming events Now lists away from a venue. A string, so the document that
+     * interpolates it stays a constant the schema check can validate.
+     */
+    const val LOCALE_EVENT_FIRST: String = "5"
 
-    /** A venue, with its address, phone and Facebook Page under its profile mixin. */
+    /** [LOCALE_EVENT_FIRST] as a number, for trimming the list. */
+    val LOCALE_EVENT_LIMIT: Int = LOCALE_EVENT_FIRST.toInt()
+
+    /**
+     * A venue, with its address, phone and Facebook Page under its profile mixin. `bannerUrl` is its wide image
+     * (its first banner, else its own photo, else its Page's cover) and `photoUrl` its own photo; both null when
+     * there's none.
+     */
     const val VENUE_FIELDS: String =
-        "id name description distance point photoUrl heroUrl profile { address phone facebook { facebookId isLiked } }"
+        "id name description distance point photoUrl bannerUrl profile { address phone facebook { facebookId isLiked } }"
 
     /** A chat line as a preview shows it: rich messages in words (`message`), with the sender's role and presence. */
     const val CHAT_LINE_FIELDS: String = "id message name userId avatarUrl sentAt presence role kind endsAt postedAsVenue postedAsPerson"
@@ -28,16 +38,19 @@ object Documents {
         "tickets { cover { charge { ${Queries.COVER_CHARGE_FIELDS} } viewerAdmission { ${Queries.ADMISSION_FIELDS} } } }"
 
     /** A person, with their Facebook Page under their profile mixin. */
-    const val PERSON_FIELDS: String = "id name pictureUrl bannerUrl profile { facebook { facebookId isLiked } }"
+    const val PERSON_FIELDS: String = "id name avatarUrl bannerUrl profile { facebook { facebookId isLiked } }"
 
     /** A venue's or person's social links, a connection in the profile mixin (merged with the fields' own `profile`). */
     const val PROFILE_SOCIAL_LINKS: String = "profile { socialLinks { nodes { id handle provider url } } }"
 
-    /** An event, with its venue under the event's venue mixin (`venue { venue }`). */
+    /**
+     * An event, with the signed-in user's answer under its rsvp mixin (`rsvp { mine }`) and its venue under the
+     * event's venue mixin (`venue { venue }`).
+     */
     const val EVENT_FIELDS: String =
-        "id name startAt endAt facebookId bannerUrl isFeatured viewerRsvp venue { venue { $VENUE_FIELDS } }"
+        "id name startAt endAt facebookId bannerUrl isFeatured rsvp { mine } venue { venue { $VENUE_FIELDS } }"
 
-    const val FRIEND_FIELDS: String = "id name facebookId"
+    const val FRIEND_FIELDS: String = "id name facebookId avatarUrl"
 
     /** Friends out now, with whether they can be reached (in chat, or by push). */
     const val FRIEND_OUT_FIELDS: String = "$FRIEND_FIELDS presence"
@@ -59,8 +72,8 @@ object Documents {
             }
             nearbyVenues { $VENUE_FIELDS }
             locale {
-              id name heroUrl chat { open $RECENT_MESSAGES }
-              events { upcoming(first: $LOCALE_EVENT_LIMIT) { nodes { $EVENT_FIELDS } } }
+              id name bannerUrl chat { open $RECENT_MESSAGES }
+              events { upcoming(first: $LOCALE_EVENT_FIRST) { nodes { $EVENT_FIELDS } } }
               friends {
                 list { nodes { $FRIEND_OUT_FIELDS } }
                 venues { nodes { venue { $VENUE_FIELDS } friendCount friends { $FRIEND_OUT_FIELDS } } }
@@ -71,10 +84,10 @@ object Documents {
         }
     """.trimIndent()
 
-    /** The signed-in user, with their profile photo (the SDK's Me doesn't ask for it). */
+    /** The signed-in user, with their picture (the SDK's Me doesn't ask for it). */
     val ME: String = """
         query Me {
-          me { self { id name firstName lastName photo { cdnUrl } } }
+          me { self { id name firstName lastName avatarUrl } }
         }
     """.trimIndent()
 
@@ -119,8 +132,8 @@ object Documents {
               $PERSON_FIELDS
               events { upcoming { nodes { $EVENT_FIELDS } } }
               $PROFILE_SOCIAL_LINKS
-              members { id name pictureUrl }
-              groups { id name pictureUrl }
+              members { id name avatarUrl }
+              groups { id name avatarUrl }
               music { tracks { nodes { id title provider providerUrl waveformUrl artworkUrl } } }
             }
           }

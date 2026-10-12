@@ -3,6 +3,7 @@ package social.hotmess.core
 import com.audiencekit.AudienceKitClient
 import com.audiencekit.AudienceKitConfiguration
 import com.audiencekit.Coordinates
+import com.audiencekit.GraphQLError
 import com.audiencekit.HttpTransport
 import com.audiencekit.InMemoryTokenStore
 import kotlinx.coroutines.async
@@ -32,7 +33,7 @@ class ModelDecodingTest {
         assertEquals(Rsvp.MAYBE, event.rsvp)
         assertEquals("The Wildrose", event.venue?.name)
         assertEquals(47.6145, event.venue?.coordinate?.latitude)
-        assertNull(event.bannerUrl, "an empty URL is no URL")
+        assertNull(event.bannerUrl, "no banner is null")
         assertEquals("https://facebook.com/events/1234", event.facebookUrl)
     }
 
@@ -65,8 +66,8 @@ class ModelDecodingTest {
         val troupe = json.decodeFromString(PersonDetail.serializer(), Fixtures.TROUPE)
 
         assertEquals(listOf("Anita Cocktail", "Ella Vator"), troupe.members.map { it.name })
-        assertEquals("https://img/anita", troupe.members.first().pictureUrl)
-        assertNull(troupe.members.last().pictureUrl, "an empty URL is no URL")
+        assertEquals("https://img/anita", troupe.members.first().avatarUrl)
+        assertNull(troupe.members.last().avatarUrl, "no picture is null")
         assertEquals("p-2", troupe.groups.single().id)
         assertEquals("House of Glitter", troupe.groups.single().name)
     }
@@ -177,6 +178,7 @@ class DeepLinkTest {
         assertEquals(AppRoute.VenueDetail(id), DeepLink.route("hotmess://venues/$id"))
         assertEquals(AppRoute.EventDetail(id), DeepLink.route("https://hotmess.social/events/${id.uppercase()}"))
         assertEquals(AppRoute.PersonDetail(id), DeepLink.route("https://hotmess.social/people/$id"))
+        assertEquals(AppRoute.NowPing(id), DeepLink.route("https://hotmess.social/pings/$id"), "a push's url")
         assertEquals(AppTab.EVENTS, AppRoute.EventDetail(id).tab)
     }
 
@@ -676,9 +678,12 @@ class HotMessApiTest {
 
     @Test
     fun aRefusedChatLineSaysWhy() = runTest {
-        val (api, _) = api("SendMyChatMessage" to """{"data":{"sendMyChatMessage":null},"errors":[{"message":"You're not in that room"}]}""")
-        val error = assertFailsWith<ApiError.Other> { api.sendChatMessage(ChatRoom.locale("l-1"), "hi") }
+        val (api, _) = api(
+            "SendMyChatMessage" to """{"data":{"sendMyChatMessage":null},"errors":[{"message":"You're not in that room","extensions":{"code":"FORBIDDEN","reason":"not_allowed"}}]}""",
+        )
+        val error = assertFailsWith<ApiError.Rejected> { api.sendChatMessage(ChatRoom.locale("l-1"), "hi") }
         assertEquals("You're not in that room", error.message)
+        assertEquals("not_allowed", error.reason)
     }
 
     @Test
@@ -736,13 +741,13 @@ class HotMessApiTest {
     fun meHasTheirPhoto() = runTest {
         val (api, bodies) = api(
             "query Me" to """{"data":{"me":{"self":{"id":"5b3c8a72-4e19-4d06-b2f5-8c7a1e0d9b22","name":"Billie Jean",
-                "photo":{"cdnUrl":"https://cdn.example/billie.jpg"}}}}}""",
+                "avatarUrl":"https://cdn.example/billie.jpg"}}}}""",
         )
         val me = api.me()!!
 
         assertEquals("Billie Jean", me.name)
         assertEquals("https://cdn.example/billie.jpg", me.avatarUrl)
-        assertTrue(bodies.single().contains("photo { cdnUrl }"))
+        assertTrue(bodies.single().contains("avatarUrl"))
         assertFalse(bodies.single().contains("/picture"))
     }
 
@@ -750,9 +755,9 @@ class HotMessApiTest {
     fun nowAtAVenueHasItsRecentChatAndFriends() = runTest {
         val (api, _) = api(
             "ReportLocation" to """{"data":{"reportLocation":{"nearbyVenues":null,
-                "venue":{"id":"v1","name":"Nyne","heroUrl":"https://cdn.example/nyne.jpg","events":{"upcoming":{"nodes":[]}},
+                "venue":{"id":"v1","name":"Nyne","bannerUrl":"https://cdn.example/nyne.jpg","events":{"upcoming":{"nodes":[]}},
                   "chat":{"recentMessages":{"nodes":[{"id":"m1","message":"who's here?","name":"Sam",
-                  "userId":"u1","avatarUrl":"","sentAt":"2026-10-07T08:00:00Z"}]}},
+                  "userId":"u1","avatarUrl":null,"sentAt":"2026-10-07T08:00:00Z"}]}},
                   "friends":{"list":{"nodes":[{"id":"f1","name":"Alex Friend","facebookId":"4242"}]}}}}}}""",
         )
         val now = api.now(Coordinates(47.66, -117.41))
@@ -774,7 +779,7 @@ class HotMessApiTest {
         val (api, bodies) = api(
             "query Venue(" to """{"data":{"venues":{"venue":{"id":"v1","name":"Nyne","events":{"upcoming":{"nodes":[]}},
                 "chat":{"open":true,"recentMessages":{"nodes":[{"id":"m1","message":"who's here?","name":"Sam","userId":"u1",
-                  "avatarUrl":"","sentAt":"2026-10-07T08:00:00Z"}]}}}}}}""",
+                  "avatarUrl":null,"sentAt":"2026-10-07T08:00:00Z"}]}}}}}}""",
         )
         val overview = api.venueOverview("v1")
 
@@ -805,7 +810,7 @@ class HotMessApiTest {
     fun nowAwayFromVenuesHasTheLocaleChat() = runTest {
         val (api, bodies) = api(
             "ReportLocation" to """{"data":{"reportLocation":{"nearbyVenues":[],
-                "locale":{"id":"l1","name":"Seattle","heroUrl":"https://cdn.example/seattle.jpg","chat":{"open":true,
+                "locale":{"id":"l1","name":"Seattle","bannerUrl":"https://cdn.example/seattle.jpg","chat":{"open":true,
                   "recentMessages":{"nodes":[{"id":"m1",
                   "message":"anyone out?","name":"Ada","userId":"u1","sentAt":"2026-10-07T08:00:00Z"}]}}}}}}""",
         )
@@ -825,7 +830,7 @@ class HotMessApiTest {
         val (api, bodies) = api(
             "ReportLocation" to """{"data":{"reportLocation":{"nearbyVenues":null,
                 "venue":{"id":"v1","name":"Nyne","chat":{"recentMessages":{"nodes":[{"id":"m1","message":"Special: Two for one",
-                  "name":"Nyne","userId":"u1","avatarUrl":"","sentAt":"2026-10-07T08:00:00Z","presence":"OFFLINE",
+                  "name":"Nyne","userId":"u1","avatarUrl":null,"sentAt":"2026-10-07T08:00:00Z","presence":"OFFLINE",
                   "role":"VENUE","kind":"SPECIAL","endsAt":"2026-10-07T09:00:00Z","postedAsVenue":true},
                   {"id":"m2","message":"hi","name":"Alex Friend","userId":"f1","presence":"ONLINE","kind":"TEXT"}]}},
                   "friends":{"list":{"nodes":[{"id":"f1","name":"Alex Friend","facebookId":"4242","presence":"PUSH"}]}}}}}}""",
@@ -850,7 +855,7 @@ class HotMessApiTest {
         val (api, bodies) = api(
             "query Venue(" to """{"data":{"venues":{"venue":{"id":"v-1","name":"The Wildrose","chat":{"open":true},"events":{"upcoming":{"nodes":[${Fixtures.EVENT}]}},
                 "profile":{"socialLinks":{"nodes":[{"id":"s-1","handle":"thewildrosebar","provider":"instagram","url":"https://instagram.com/thewildrosebar"},
-                  null,{"id":"s-2","handle":"wildrose","provider":"facebook","url":""}]}}}}}}""",
+                  null,{"id":"s-2","handle":"wildrose","provider":"facebook","url":null}]}}}}}}""",
         )
         val overview = api.venueOverview("v-1")
 
@@ -860,7 +865,7 @@ class HotMessApiTest {
         val links = overview.venue.socialLinks
         assertEquals(listOf(SocialLink.Network.INSTAGRAM, SocialLink.Network.FACEBOOK), links.map { it.network })
         assertEquals("https://instagram.com/thewildrosebar", links.first().url)
-        assertNull(links.last().url, "an empty URL is no URL")
+        assertNull(links.last().url, "no URL is null")
     }
 
     @Test
@@ -871,7 +876,7 @@ class HotMessApiTest {
         )
         val overview = api.venueOverview("v1")
 
-        assertTrue(bodies.single().contains("friends { list { nodes { id name facebookId presence } } }"))
+        assertTrue(bodies.single().contains("friends { list { nodes { id name facebookId avatarUrl presence } } }"))
         val friend = overview.friends.single()
         assertEquals("Alex Friend", friend.name)
         assertEquals("https://m.me/4242", friend.messengerUrl)
@@ -923,27 +928,92 @@ class HotMessApiTest {
     }
 
     @Test
-    fun manifestWithoutAnAndroidEntryMeansNoMinimum() {
-        assertNull(HotMessApi.parseManifest("""{"client":{"mobile":{"apple":{"minimum_build":1000}}}}"""))
-        assertEquals(
-            12,
-            HotMessApi.parseManifest("""{"client":{"mobile":{"android":{"minimum_build":12,"minimum_version":"1.2"}}}}""")?.minimumBuild,
+    fun statusWithoutAnAndroidEntryMeansNoMinimum() {
+        assertNull(HotMessApi.parseStatus("""{"api":{"version":"2026-10-11"},"clients":{"ios":{"minimumVersion":"1.0.15"}}}"""))
+        assertNull(HotMessApi.parseStatus("not json"))
+        val android = HotMessApi.parseStatus(
+            """{"api":{"version":"2026-10-11","sdk":{"android":{"minimumVersion":"0.1.0"}}},
+               "clients":{"android":{"minimumVersion":"1.2","latestVersion":"1.3.1","storeUrl":"https://play.google.com/store/apps/details?id=social.hotmess.android"}}}""",
         )
+        assertEquals(VersionInfo("1.2", "1.3.1", "https://play.google.com/store/apps/details?id=social.hotmess.android"), android)
+    }
+
+    @Test
+    fun theStatusIsReadWithoutASession() = runTest {
+        val (api, _) = api("/v1/status" to """{"api":{"version":"2026-10-11"},"clients":{"android":{"minimumVersion":"2.0","latestVersion":"2.0","storeUrl":null}}}""")
+        assertEquals("2.0", api.clientVersions()?.minimumVersion)
+    }
+
+    @Test
+    fun errorsAreClassifiedByCodeNotWording() = runTest {
+        val (api, _) = api("query People" to """{"data":null,"errors":[{"message":"Pick places in your city","extensions":{"code":"NOT_FOUND"}}]}""")
+        assertFailsWith<ApiError.NotFound> { api.people() }
+    }
+}
+
+class VersionInfoTest {
+    @Test
+    fun comparesVersionsPartByPart() {
+        val minimum = VersionInfo(minimumVersion = "1.0.15")
+        assertTrue(minimum.supports("1.0.15"))
+        assertTrue(minimum.supports("1.1"))
+        assertTrue(minimum.supports("2.0-staging"), "a build type's suffix doesn't count")
+        assertFalse(minimum.supports("1.0.9"))
+        assertFalse(minimum.supports("0.9.99"))
+        assertTrue(VersionInfo(minimumVersion = "1.2").supports("1.2.0"))
+        assertTrue(VersionInfo().supports("0.1"), "no minimum supports everything")
+        assertTrue(minimum.supports("dev"), "an unreadable version isn't refused")
+        assertTrue(VersionInfo(minimumVersion = "soon").supports("1.0"))
+    }
+}
+
+class ApiErrorTest {
+    private fun error(message: String, extensions: String? = null): GraphQLError {
+        val extra = if (extensions == null) "" else ""","extensions":$extensions"""
+        return HotMessApi.json.decodeFromString(GraphQLError.serializer(), """{"message":"$message"$extra}""")
+    }
+
+    @Test
+    fun classifiesGraphQLErrorsByCode() {
+        assertEquals(ApiError.Unauthorized, ApiError.fromGraphQL(listOf(error("Sign in", """{"code":"UNAUTHENTICATED"}"""))))
+        assertEquals(ApiError.NotFound, ApiError.fromGraphQL(listOf(error("Nope", """{"code":"NOT_FOUND"}"""))))
+        assertEquals(ApiError.Server(500), ApiError.fromGraphQL(listOf(error("Stripe failed", """{"code":"INTERNAL"}"""))))
+        assertEquals(ApiError.Unavailable, ApiError.fromGraphQL(listOf(error("Stripe is down", """{"code":"UNAVAILABLE"}"""))))
+        assertTrue(ApiError.Unavailable.isRetryable)
+
+        val invalid = ApiError.fromGraphQL(listOf(error("Name can't be blank", """{"code":"INVALID","fields":{"name":["can't be blank"]}}""")))
+        assertEquals(ApiError.Rejected("INVALID", "Name can't be blank", mapOf("name" to listOf("can't be blank"))), invalid)
+        assertFalse(invalid.isRetryable)
+
+        val forbidden = ApiError.fromGraphQL(listOf(error("Banned", """{"code":"FORBIDDEN","reason":"banned"}""")))
+        assertEquals("banned", (forbidden as ApiError.Rejected).reason)
+        assertTrue(ApiError.fromGraphQL(listOf(error("Slow down", """{"code":"RATE_LIMITED"}"""))).isRetryable)
+    }
+
+    @Test
+    fun anErrorWithoutACodeIsNotForPeople() {
+        // graphql-ruby's own errors carry its codes or none; their wording never reaches the screen.
+        assertEquals(ApiError.Other(ApiError.GENERIC_MESSAGE), ApiError.fromGraphQL(listOf(error("Field 'x' doesn't exist on type 'Query'"))))
+        assertEquals(ApiError.Other(ApiError.GENERIC_MESSAGE), ApiError.fromGraphQL(listOf(error("That ping has ended"))))
+        assertEquals(ApiError.Other(ApiError.GENERIC_MESSAGE), ApiError.fromGraphQL(listOf(error("Bad variable", """{"code":"undefinedField"}"""))))
+        assertNull(HotMessApi.userFacingMessage(listOf(error("Field 'sendPing' doesn't exist on type 'Mutation'"))))
+        assertNull(HotMessApi.userFacingMessage(emptyList()))
+        assertEquals("Pick places in your city", HotMessApi.userFacingMessage(listOf(error("Pick places in your city", """{"code":"INVALID"}"""))))
     }
 }
 
 private object Fixtures {
     const val VENUE = """{"id":"v-1","name":"The Wildrose","distance":120.5,"point":"POINT (-122.3194 47.6145)",
-        "photoUrl":"https://img/v","heroUrl":null,"profile":{"address":"1021 E Pike St","phone":null,"facebook":{"facebookId":"55","isLiked":true}}}"""
+        "photoUrl":"https://img/v","bannerUrl":null,"profile":{"address":"1021 E Pike St","phone":null,"facebook":{"facebookId":"55","isLiked":true}}}"""
 
     const val EVENT = """{"id":"e-1","name":"Drag Brunch","startAt":"2026-10-10T04:00:00Z","endAt":null,
-        "facebookId":"1234","bannerUrl":"","isFeatured":false,"viewerRsvp":"MAYBE","venue":{"name":"The Wildrose","venue":$VENUE}}"""
+        "facebookId":"1234","bannerUrl":null,"isFeatured":false,"rsvp":{"mine":"MAYBE"},"venue":{"name":"The Wildrose","venue":$VENUE}}"""
 
-    const val PERSON = """{"id":"p-1","name":"DJ Glitter","pictureUrl":"https://img/p","bannerUrl":null,"events":{"upcoming":{"nodes":[$EVENT]}},
+    const val PERSON = """{"id":"p-1","name":"DJ Glitter","avatarUrl":"https://img/p","bannerUrl":null,"events":{"upcoming":{"nodes":[$EVENT]}},
         "profile":{"facebook":{"facebookId":"99","isLiked":false},"socialLinks":{"nodes":[{"id":"s-1","handle":"glitter","provider":"Instagram","url":"https://instagram.com/glitter"}]}},
         "music":{"tracks":{"nodes":[{"id":"t-1","title":"Late Night","provider":"soundcloud","providerUrl":null,"waveformUrl":null,"artworkUrl":null},null]}}}"""
 
-    const val TROUPE = """{"id":"p-3","name":"The Glitterettes","pictureUrl":null,"bannerUrl":null,"events":{"upcoming":{"nodes":[]}},"profile":{"socialLinks":{"nodes":[]}},"music":{"tracks":{"nodes":[]}},
-        "members":[{"id":"p-4","name":"Anita Cocktail","pictureUrl":"https://img/anita"},{"id":"p-5","name":"Ella Vator","pictureUrl":""}],
-        "groups":[{"id":"p-2","name":"House of Glitter","pictureUrl":null}]}"""
+    const val TROUPE = """{"id":"p-3","name":"The Glitterettes","avatarUrl":null,"bannerUrl":null,"events":{"upcoming":{"nodes":[]}},"profile":{"socialLinks":{"nodes":[]}},"music":{"tracks":{"nodes":[]}},
+        "members":[{"id":"p-4","name":"Anita Cocktail","avatarUrl":"https://img/anita"},{"id":"p-5","name":"Ella Vator","avatarUrl":null}],
+        "groups":[{"id":"p-2","name":"House of Glitter","avatarUrl":null}]}"""
 }

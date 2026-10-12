@@ -196,8 +196,8 @@ class CoverCheckout(
                 PaymentSheet.GooglePayConfiguration.Environment.Test
             },
             countryCode = "US",
-            currencyCode = admission.currency.uppercase(Locale.ROOT),
-            amount = admission.totalCents.toLong(),
+            currencyCode = admission.total.currency.uppercase(Locale.ROOT),
+            amount = admission.total.cents.toLong(),
             label = "Cover at $venueName",
         )
         return PaymentSheet.Configuration.Builder(venueName)

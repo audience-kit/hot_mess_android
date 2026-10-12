@@ -135,7 +135,7 @@ fun LoginScreen(onSignIn: () -> Unit) {
     }
 }
 
-/** When the API no longer serves this build. */
+/** When the API no longer serves this build (`GET /v1/status` says a newer minimum than this version). */
 @Composable
 fun UpdateRequiredScreen(versionInfo: VersionInfo?) {
     val context = androidx.compose.ui.platform.LocalContext.current
@@ -144,6 +144,8 @@ fun UpdateRequiredScreen(versionInfo: VersionInfo?) {
         title = "Time to update",
         text = versionInfo?.minimumVersion?.let { "Update Hot Mess to version $it or later to keep going." }
             ?: "Update Hot Mess to keep going.",
-        action = "Open Google Play" to { context.openUrl("market://details?id=${context.packageName}") },
+        action = "Open Google Play" to {
+            context.openUrl(versionInfo?.storeUrl ?: "market://details?id=${context.packageName}")
+        },
     )
 }

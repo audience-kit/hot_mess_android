@@ -115,8 +115,8 @@ fun PassScreen(id: String, navigator: Navigator) {
                 item {
                     PassFace(
                         pass,
-                        holderName = pass.userName ?: user?.firstName ?: "",
-                        holderPhoto = pass.userPhotoUrl ?: user?.avatarUrl,
+                        holderName = pass.profile?.name ?: user?.firstName ?: "",
+                        holderPhoto = pass.profile?.avatarUrl ?: user?.avatarUrl,
                     )
                 }
                 if (pass.status == AdmissionStatus.PENDING) {
@@ -141,7 +141,7 @@ fun PassScreen(id: String, navigator: Navigator) {
                                     CircularProgressIndicator(color = tokens.accent, modifier = Modifier.size(24.dp))
                                 }
                             } else {
-                                DangerRow("Refund ${Formatting.money(pass.totalCents, pass.currency)}") { confirmRefund = true }
+                                DangerRow("Refund ${Formatting.money(pass.total)}") { confirmRefund = true }
                             }
                             EmptyRow("You can get your money back until you're scanned in.")
                         }
@@ -156,7 +156,7 @@ fun PassScreen(id: String, navigator: Navigator) {
     }
 
     if (confirmRefund && pass != null) {
-        val amount = Formatting.money(pass.totalCents, pass.currency)
+        val amount = Formatting.money(pass.total)
         AlertDialog(
             onDismissRequest = { confirmRefund = false },
             title = { Text("Refund your cover?") },
@@ -207,7 +207,7 @@ private fun PassFace(pass: Admission, holderName: String, holderPhoto: String?) 
                 Column {
                     Text(holderName.firstNameForDisplay(), style = HotMessType.heading, color = tokens.ink)
                     Text(
-                        "${pass.statusText} · ${Formatting.money(pass.totalCents, pass.currency)}",
+                        "${pass.statusText} · ${Formatting.money(pass.total)}",
                         style = HotMessType.bodySmall,
                         color = if (live) tokens.success else tokens.inkMuted,
                     )
@@ -281,6 +281,6 @@ private fun PassRow(pass: Admission, onClick: () -> Unit) {
                 overflow = TextOverflow.Ellipsis,
             )
         }
-        Text(Formatting.money(pass.totalCents, pass.currency), style = HotMessType.bodySmall, color = tokens.inkMuted)
+        Text(Formatting.money(pass.total), style = HotMessType.bodySmall, color = tokens.inkMuted)
     }
 }

@@ -77,12 +77,11 @@ class SessionStore(
         }
     }
 
-    /** At launch: checks the minimum supported build, then restores the session. */
+    /** At launch: checks `GET /v1/status` for the oldest version still served, then restores the session. */
     suspend fun start() {
-        val device = DeviceDescription.current(context)
-        val minimum = runCatching { api.minimumVersion(device) }.getOrNull()
-        if (minimum != null && configuration.versionCode < minimum.minimumBuild) {
-            _requiredVersion.value = minimum
+        val versions = runCatching { api.clientVersions() }.getOrNull()
+        if (versions != null && !versions.supports(configuration.versionName)) {
+            _requiredVersion.value = versions
             _state.value = AuthState.SignedOut
             return
         }
@@ -157,7 +156,11 @@ class SessionStore(
         _state.value = AuthState.Failed(message)
     }
 
-    /** Exchanges the dialog's code for an AudienceKit session, with the app the dialog was for. */
+    /**
+     * Exchanges the dialog's code for an AudienceKit session, with the app the dialog was for. The token JSON
+     * (`userId`, `audienceId`, `role`, `endpoint`) says who signed in; the SDK keeps the token and the audience,
+     * and nothing here decodes the JWT. Their name and picture come from Me.
+     */
     private suspend fun exchange(code: String, dialog: FacebookLoginDialog) {
         _state.value = AuthState.SigningIn
         try {
@@ -167,24 +170,28 @@ class SessionStore(
                 device = DeviceDescription.current(context),
                 facebookAppId = dialog.appId,
             )
-            val id = social.hotmess.core.RecordId.normalize(result.user.id)
-            _user.value = id?.let { User(it, result.user.name.orEmpty()) }
-            // Sign-in doesn't say what their photo is; Me does (and their name, if sign-in had none).
+            val id = social.hotmess.core.RecordId.normalize(result.userId)
+            _user.value = id?.let { User(it, "") }
             _user.value = runCatching { api.me() }.getOrNull() ?: _user.value
             signedIn()
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
             Log.e("HotMess", "Sign-in failed: ${e.message}")
-            _state.value = AuthState.Failed(
-                when (e) {
-                    is com.audiencekit.AudienceKitException.SignInRejected ->
-                        "Facebook said no to this sign-in. Try again, or check that you're using the right Facebook account."
-                    is com.audiencekit.AudienceKitException.Network -> "You appear to be offline. Check your connection and try again."
-                    else -> "We couldn't sign you in. Try again in a moment."
-                },
-            )
+            _state.value = AuthState.Failed(signInFailureMessage(e))
         }
+    }
+
+    /**
+     * What to say when the exchange fails. A refused sign-in is a 400 INVALID whose message is Facebook's reason,
+     * shown as it is; a 401 is the API refusing the token outright; anything else is generic.
+     */
+    private fun signInFailureMessage(error: Exception): String = when (error) {
+        is com.audiencekit.AudienceKitException.SignInFailed ->
+            error.faultMessage?.takeIf { it.isNotBlank() } ?: REFUSED_MESSAGE
+        is com.audiencekit.AudienceKitException.SignInRejected -> REFUSED_MESSAGE
+        is com.audiencekit.AudienceKitException.Network -> "You appear to be offline. Check your connection and try again."
+        else -> "We couldn't sign you in. Try again in a moment."
     }
 
     private fun signedIn() {
@@ -233,6 +240,9 @@ class SessionStore(
 
     companion object {
         const val ENDED_MESSAGE = "Your session has ended. Please sign in again."
+
+        const val REFUSED_MESSAGE =
+            "Facebook said no to this sign-in. Try again, or check that you're using the right Facebook account."
 
         /** The app's own preferences (the remembered locale and the like). */
         const val PREFERENCES = "social.hotmess.preferences"

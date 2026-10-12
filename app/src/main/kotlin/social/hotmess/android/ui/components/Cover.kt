@@ -193,7 +193,7 @@ fun PassCard(pass: Admission, venueName: String, onOpen: () -> Unit) {
             Text("Your pass", style = HotMessType.caption, color = tokens.accentInk)
             Text(venueName, style = HotMessType.heading, color = tokens.ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(
-                "${Formatting.night(pass.night)} · ${Formatting.money(pass.totalCents, pass.currency)} paid",
+                "${Formatting.night(pass.night)} · ${Formatting.money(pass.total)} paid",
                 style = HotMessType.bodySmall,
                 color = tokens.inkMuted,
             )
