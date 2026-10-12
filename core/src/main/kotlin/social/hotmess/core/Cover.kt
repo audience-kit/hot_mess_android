@@ -3,15 +3,14 @@ package social.hotmess.core
 import com.audiencekit.Admission
 import com.audiencekit.AdmissionStatus
 import com.audiencekit.CoverCharge
-import com.audiencekit.CoverPass
 import com.audiencekit.CoverPurchase
-import com.audiencekit.ScanOutcome
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 
-// Digital cover charge: paying a venue's cover in the app, the pass the door scans, and Door mode.
+// Digital cover charge: paying a venue's cover in the app, and the pass the door scans. Working the door is staff
+// work, in the staff apps.
 
 /** What the cover row offers. */
 enum class CoverAction {
@@ -116,27 +115,6 @@ sealed interface CoverPayment {
     }
 }
 
-/** How the door shows a scan: go, careful, or stop. */
-enum class ScanTone { ADMIT, RE_ENTRY, REFUSE }
-
-val ScanOutcome.tone: ScanTone
-    get() = when (this) {
-        ScanOutcome.ADMIT -> ScanTone.ADMIT
-        ScanOutcome.RE_ENTRY -> ScanTone.RE_ENTRY
-        else -> ScanTone.REFUSE
-    }
-
-/** The door's big word for a scan. */
-val ScanOutcome.headline: String
-    get() = when (this) {
-        ScanOutcome.ADMIT -> "ADMIT"
-        ScanOutcome.RE_ENTRY -> "RE-ENTRY"
-        ScanOutcome.EXPIRED -> "OLD CODE"
-        ScanOutcome.NOT_PAID -> "NOT PAID"
-        ScanOutcome.WRONG_VENUE -> "WRONG PASS"
-        ScanOutcome.UNREADABLE, ScanOutcome.UNKNOWN -> "NOT A PASS"
-    }
-
 /** A pass's status in words. */
 val Admission.statusText: String
     get() = when (status) {
@@ -148,29 +126,6 @@ val Admission.statusText: String
         AdmissionStatus.DISPUTED -> "Disputed"
         AdmissionStatus.UNKNOWN -> "Unavailable"
     }
-
-/**
- * Keeps a camera that's still pointed at the same pass from scanning it again and again. A pass's code
- * changes every 30 seconds, so the same pass counts as the same code until [windowMillis] has passed
- * since it was last seen.
- */
-class ScanDebouncer(private val windowMillis: Long = 5_000) {
-    private val lastSeen = mutableMapOf<String, Long>()
-
-    /** Whether to check [code], read at [nowMillis]. */
-    fun accept(code: String, nowMillis: Long): Boolean {
-        val key = key(code)
-        val last = lastSeen[key]
-        lastSeen[key] = nowMillis
-        lastSeen.entries.removeAll { nowMillis - it.value > windowMillis * 4 }
-        return last == null || nowMillis - last > windowMillis
-    }
-
-    private fun key(code: String): String {
-        val trimmed = code.trim()
-        return if (CoverPass.isPassCode(trimmed)) trimmed.split(".")[1] else trimmed
-    }
-}
 
 /**
  * The user's passes, kept for the session, so a pass opened once still shows (and its code still

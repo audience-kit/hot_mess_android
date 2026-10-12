@@ -11,28 +11,13 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      # The app builds against the AudienceKit Kotlin SDK from source (a Gradle composite build).
-      # audience-kit is private, so this needs a read-only deploy key on it (AUDIENCE_KIT_SSH_KEY,
-      # preferred) or a token that can read it (AUDIENCE_KIT_TOKEN).
-      - name: Check for AudienceKit access
-        env:
-          AUDIENCE_KIT_SSH_KEY: ${{ secrets.AUDIENCE_KIT_SSH_KEY }}
-          AUDIENCE_KIT_TOKEN: ${{ secrets.AUDIENCE_KIT_TOKEN }}
-        run: |
-          if [ -z "$AUDIENCE_KIT_SSH_KEY" ] && [ -z "$AUDIENCE_KIT_TOKEN" ]; then
-            echo "::error::Add an AUDIENCE_KIT_SSH_KEY repository secret (the private half of a read-only deploy key on audience-kit/audience-kit), or an AUDIENCE_KIT_TOKEN that can read it."
-            exit 1
-          fi
+      # The app builds against the AudienceKit Android SDK from source (a Gradle composite build). It's public, so
+      # no key is needed.
       - uses: actions/checkout@v5
         with:
-          repository: audience-kit/audience-kit
-          # The branch of the API this app targets: the PRs land on `next` until it is promoted to main.
-          ref: next
-          # With a deploy key git uses SSH; otherwise the token.
-          ssh-key: ${{ secrets.AUDIENCE_KIT_SSH_KEY }}
-          token: ${{ secrets.AUDIENCE_KIT_TOKEN || github.token }}
-          path: audience-kit
-          sparse-checkout: sdk/kotlin
+          repository: audience-kit/audience-kit-sdk-android
+          ref: main
+          path: audience-kit-sdk-android
 
       - uses: actions/setup-java@v5
         with:
@@ -54,4 +39,4 @@ jobs:
           curl -fsSLO https://developer.audiencekit.com/graphql/schema.graphql
           npm install --silent --no-save --no-package-lock graphql@16
           node check.mjs --schema schema.graphql --endpoint consumer \
-            ../core/src/main ../app/src/main ../audience-kit/sdk/kotlin/audiencekit/src/main
+            ../core/src/main ../app/src/main ../audience-kit-sdk-android/audiencekit/src/main

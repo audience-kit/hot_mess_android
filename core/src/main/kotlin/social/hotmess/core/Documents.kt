@@ -109,7 +109,7 @@ object Documents {
             venue(id: ${'$'}id) {
               $VENUE_FIELDS
               chat { open $RECENT_MESSAGES }
-              tickets { cover { charge { ${Queries.COVER_CHARGE_FIELDS} } viewerAdmission { ${Queries.ADMISSION_FIELDS} } canWorkDoor } }
+              tickets { cover { charge { ${Queries.COVER_CHARGE_FIELDS} } viewerAdmission { ${Queries.ADMISSION_FIELDS} } } }
               events { upcoming { nodes { $EVENT_FIELDS } } }
               $PROFILE_SOCIAL_LINKS
               friends { list { nodes { $FRIEND_OUT_FIELDS } } }

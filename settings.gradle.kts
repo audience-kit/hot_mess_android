@@ -36,10 +36,11 @@ dependencyResolutionManagement {
 
 rootProject.name = "hot_mess_android"
 
-// The AudienceKit Kotlin SDK (audience-kit/audience-kit, sdk/kotlin) isn't published to a Maven
+// The AudienceKit Android SDK (audience-kit/audience-kit-sdk-android) isn't published to a Maven
 // repository yet, so it's built from a checkout as a composite build. Point at one with
-// `audiencekit.dir` in gradle.properties or local.properties, or AUDIENCEKIT_DIR; otherwise a clone
-// next to this one (../audience-kit) or inside it (audience-kit/, which CI uses) is picked up.
+// `audiencekit.dir` in gradle.properties or local.properties, or AUDIENCEKIT_DIR; otherwise the
+// AudienceKit monorepo's sdk/audience_kit/android (where this repository is apps/hot_mess/android),
+// a clone next to this one (../audience-kit-sdk-android) or inside it (which CI uses) is picked up.
 val localProperties = java.util.Properties().apply {
     file("local.properties").takeIf { it.exists() }?.inputStream()?.use(::load)
 }
@@ -47,12 +48,13 @@ val audienceKitSdk = listOfNotNull(
     providers.gradleProperty("audiencekit.dir").orNull,
     localProperties.getProperty("audiencekit.dir"),
     System.getenv("AUDIENCEKIT_DIR"),
-    "../audience-kit",
-    "audience-kit",
-).map { file(it).resolve("sdk/kotlin") }
+    "../../../sdk/audience_kit/android",
+    "../audience-kit-sdk-android",
+    "audience-kit-sdk-android",
+).map(::file)
     .firstOrNull { it.resolve("settings.gradle.kts").exists() }
     ?: error(
-        "The AudienceKit Kotlin SDK wasn't found. Clone audience-kit/audience-kit next to this " +
+        "The AudienceKit Android SDK wasn't found. Clone audience-kit/audience-kit-sdk-android next to this " +
             "repository, or set audiencekit.dir in local.properties.",
     )
 

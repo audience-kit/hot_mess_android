@@ -20,11 +20,11 @@ The app speaks the AudienceKit API as the SDK's `AudienceKitSDK.API_VERSION` nam
 `core/.../Documents.kt`, `VenueChat.kt` and `Notifications.kt` as string constants, so they can be checked against
 the schema before anything runs: CI fetches `check.mjs` and `schema.graphql` from developer.audiencekit.com and runs
 the check over `core/src/main`, `app/src/main` and the SDK's `Queries.kt` (whose fragments the documents
-interpolate). Locally, from an audience-kit checkout:
+interpolate). Locally, from an audience-kit checkout where this app is `apps/hot_mess/android`:
 
 ```sh
 node scripts/graphql-documents/check.mjs --schema api/schema.graphql --endpoint consumer \
-  ../hot_mess_android/core/src/main ../hot_mess_android/app/src/main sdk/kotlin/audiencekit/src/main
+  apps/hot_mess/android/core/src/main apps/hot_mess/android/app/src/main sdk/audience_kit/android/audiencekit/src/main
 ```
 
 Before sign-in the app reads `GET /v1/status` for the oldest version Google Play still serves
@@ -34,9 +34,10 @@ says (`userId`, `audienceId`, `role`, `endpoint`); nothing decodes the JWT. API 
 
 ## Setup
 
-1. Clone [audience-kit](https://github.com/audience-kit/audience-kit) next to this repository
-   (`../audience-kit`). The SDK in `sdk/kotlin` is included as a Gradle composite build. To keep it
-   somewhere else, set `audiencekit.dir` in `local.properties` or `AUDIENCEKIT_DIR`.
+1. Clone [audience-kit-sdk-android](https://github.com/audience-kit/audience-kit-sdk-android) next to
+   this repository (`../audience-kit-sdk-android`); it's included as a Gradle composite build. In the
+   AudienceKit monorepo, where this app is `apps/hot_mess/android`, its `sdk/audience_kit/android` is used.
+   To keep it somewhere else, set `audiencekit.dir` in `local.properties` or `AUDIENCEKIT_DIR`.
 2. Optionally, add Firebase's settings to `local.properties` for push (never commit them):
 
    ```properties
@@ -109,10 +110,9 @@ connected test run, it uninstalls the app when it finishes.
 
 ## CI
 
-`.github/workflows/build.yml` checks out audience-kit beside the app. audience-kit is private, so
-the repository has an `AUDIENCE_KIT_SSH_KEY` secret: the private half of a read-only deploy key on
-audience-kit/audience-kit ("hot_mess_android CI (read-only)"). An `AUDIENCE_KIT_TOKEN` with read
-access works too.
+`.github/workflows/build.yml` checks out the public audience-kit-sdk-android beside the app, so it needs
+no secrets. The `AUDIENCE_KIT_SSH_KEY` secret, and the read-only deploy key on audience-kit/audience-kit it
+belonged to, are no longer used.
 
 ## Credits
 

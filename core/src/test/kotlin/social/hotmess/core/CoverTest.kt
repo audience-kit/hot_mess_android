@@ -11,7 +11,6 @@ import com.audiencekit.HttpResponse
 import com.audiencekit.HttpTransport
 import com.audiencekit.InMemoryTokenStore
 import com.audiencekit.Money
-import com.audiencekit.ScanOutcome
 import kotlinx.coroutines.test.runTest
 import java.time.Instant
 import java.util.Locale
@@ -145,30 +144,7 @@ class CoverPaymentTest {
     }
 }
 
-class DoorTest {
-    @Test
-    fun outcomesHaveTones() {
-        assertEquals(ScanTone.ADMIT, ScanOutcome.ADMIT.tone)
-        assertEquals(ScanTone.RE_ENTRY, ScanOutcome.RE_ENTRY.tone)
-        listOf(ScanOutcome.EXPIRED, ScanOutcome.NOT_PAID, ScanOutcome.WRONG_VENUE, ScanOutcome.UNREADABLE, ScanOutcome.UNKNOWN)
-            .forEach { assertEquals(ScanTone.REFUSE, it.tone) }
-    }
-
-    @Test
-    fun theSamePassIsCheckedOnceAWhile() {
-        val debouncer = ScanDebouncer(windowMillis = 5_000)
-        val first = CoverPass.code(paid.id, paid.passSecret!!, 1_791_403_229)
-        val next = CoverPass.code(paid.id, paid.passSecret!!, 1_791_403_230)
-
-        assertTrue(debouncer.accept(first, 0))
-        assertFalse(debouncer.accept(first, 1_000))
-        assertFalse(debouncer.accept(next, 2_000), "the same pass after its code changed")
-        assertTrue(debouncer.accept("HMC1.someone-else.1.sig", 2_500))
-        assertTrue(debouncer.accept(next, 8_000))
-        assertTrue(debouncer.accept("https://example.com", 8_000))
-        assertFalse(debouncer.accept("https://example.com", 8_100))
-    }
-
+class PassStatusTest {
     @Test
     fun passStatusReads() {
         assertEquals("Paid", paid.statusText)
@@ -242,7 +218,7 @@ class CoverApiTest {
     fun theVenueAsksForTonightsCoverAndPass() = runTest {
         val (api, bodies) = api {
             """{"data":{"venues":{"venue":{"id":"v-1","name":"The Wildrose","chat":{"open":false},"events":{"upcoming":{"nodes":[]}},
-               "tickets":{"cover":{"canWorkDoor":true,"charge":{"amount":{"cents":1000,"currency":"usd"},"total":{"cents":1112,"currency":"usd"},
+               "tickets":{"cover":{"charge":{"amount":{"cents":1000,"currency":"usd"},"total":{"cents":1112,"currency":"usd"},
                  "fee":{"cents":50,"currency":"usd"},"night":"2026-10-09","from":"21:00","payable":true,"event":null},
                "viewerAdmission":{"id":"a-1","status":"PAID","night":"2026-10-09","total":{"cents":1112,"currency":"usd"},"isRefundable":true,
                  "passSecret":"AAEC","venue":{"id":"v-1","name":"The Wildrose"}}}}}}}}"""
@@ -250,7 +226,6 @@ class CoverApiTest {
         val venue = api.venueOverview("v-1").venue
 
         assertTrue(bodies.single().contains("tickets { cover { charge {") && bodies.single().contains("viewerAdmission { id status"))
-        assertTrue(venue.canWorkDoor)
         assertEquals(Money(1112, "usd"), venue.coverCharge?.total)
         assertEquals(CoverAction.SHOW_PASS, CoverOffer.of(venue)?.action)
     }
