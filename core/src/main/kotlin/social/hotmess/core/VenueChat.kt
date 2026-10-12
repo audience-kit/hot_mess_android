@@ -152,31 +152,38 @@ object ChatProtocol {
         "id message body name avatarUrl sentAt userId role kind title photoUrl event { id name startAt } endsAt pinned " +
             "postedAsVenue postedAsPerson person { id }"
 
-    /**
-     * The room's subscription document, for `$id`. ChatJoined's `pinned` is aliased: it's a line there and
-     * a flag on ChatPinChanged, and fields of one name must have one shape.
-     */
-    fun document(room: ChatRoom): String = """
-        subscription ChatRoom(${'$'}id: ID!) {
-          ${room.kind.field}(${room.kind.argument}: ${'$'}id) {
-            __typename
-            ... on ChatJoined {
-              outOfRange
-              roster { people { userId name avatarUrl friend } friends { userId name } }
-              history { senderPresence message { $MESSAGE_FIELDS } }
-              pinnedMessage { senderPresence message { $MESSAGE_FIELDS } }
-            }
-            ... on ChatMessagePosted { senderPresence message { $MESSAGE_FIELDS } }
-            ... on ChatMessageUpdated { message { $MESSAGE_FIELDS } }
-            ... on ChatMessageRemoved { messageId }
-            ... on ChatPinChanged { messageId pinned announcement { $MESSAGE_FIELDS } }
-            ... on ChatRoomCleared { clearedAt }
-            ... on ChatPresenceChanged { userId presence name avatarUrl }
-            ... on ChatRangeChanged { outOfRange }
-            ... on ChatLeft { reason }
-          }
+    /** The ChatRoomEvent selection every room's subscription reads, by `__typename`. */
+    const val ROOM_EVENT_FIELDS: String = """
+        __typename
+        ... on ChatJoined {
+          outOfRange
+          roster { people { userId name avatarUrl friend } friends { userId name } }
+          history { senderPresence message { $MESSAGE_FIELDS } }
+          pinnedMessage { senderPresence message { $MESSAGE_FIELDS } }
         }
-    """.trimIndent()
+        ... on ChatMessagePosted { senderPresence message { $MESSAGE_FIELDS } }
+        ... on ChatMessageUpdated { message { $MESSAGE_FIELDS } }
+        ... on ChatMessageRemoved { messageId }
+        ... on ChatPinChanged { messageId pinned announcement { $MESSAGE_FIELDS } }
+        ... on ChatRoomCleared { clearedAt }
+        ... on ChatPresenceChanged { userId presence name avatarUrl }
+        ... on ChatRangeChanged { outOfRange }
+        ... on ChatLeft { reason }
+    """
+
+    /** A venue's room, `venueChat(venueId: $id)`. One constant per room kind, so the schema check can read each. */
+    const val VENUE_ROOM_DOCUMENT: String =
+        "subscription ChatRoom(\$id: ID!) { venueChat(venueId: \$id) { $ROOM_EVENT_FIELDS } }"
+
+    /** A locale's room, `localeChat(localeId: $id)`. */
+    const val LOCALE_ROOM_DOCUMENT: String =
+        "subscription ChatRoom(\$id: ID!) { localeChat(localeId: \$id) { $ROOM_EVENT_FIELDS } }"
+
+    /** The room's subscription document, for `$id`. */
+    fun document(room: ChatRoom): String = when (room.kind) {
+        ChatRoom.Kind.VENUE -> VENUE_ROOM_DOCUMENT
+        ChatRoom.Kind.LOCALE -> LOCALE_ROOM_DOCUMENT
+    }
 
     /** Says something in a room as yourself; `$input` takes `venueId` or `localeId`, and `message`. */
     const val SEND_MESSAGE: String =

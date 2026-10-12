@@ -9,7 +9,6 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.descriptors.PrimitiveKind
 import kotlinx.serialization.descriptors.PrimitiveSerialDescriptor
-import kotlinx.serialization.descriptors.nullable
 import kotlinx.serialization.encoding.Decoder
 import kotlinx.serialization.encoding.Encoder
 import java.time.Instant
@@ -21,6 +20,8 @@ import java.util.UUID
 
 // The app's models, decoded straight from the audience's GraphQL. Every field the screens can do
 // without is optional, so a null from the API leaves a gap on screen instead of failing the payload.
+// Image fields (`bannerUrl`, `avatarUrl`, `photoUrl`) are the API's PhotoURL scalar: absolute, and null
+// when there's no image, never "".
 
 /** A venue: a bar, club or space the audience lists. */
 @Serializable
@@ -31,8 +32,10 @@ data class Venue(
     val description: String? = null,
     /** Metres from the position the venues were looked up near. */
     val distance: Double? = null,
-    @Serializable(with = BlankAsNullSerializer::class) val photoUrl: String? = null,
-    @Serializable(with = BlankAsNullSerializer::class) val heroUrl: String? = null,
+    /** Its own photo of the place; null when it has none (the API never sends an empty URL). */
+    val photoUrl: String? = null,
+    /** Its wide image: its first banner, else [photoUrl], else its Facebook Page's cover; null when it has none. */
+    val bannerUrl: String? = null,
     /** Where it is, as WKT: `POINT (<longitude> <latitude>)`. */
     val point: String? = null,
     val locale: LocaleSummary? = null,
@@ -102,6 +105,10 @@ data class EventTicketsMixin(val cover: EventCoverMixin? = null)
 /** An event's cover mixin (`Event.tickets.cover`). */
 @Serializable
 data class EventCoverMixin(val charge: CoverCharge? = null)
+
+/** An event's rsvp mixin (`Event.rsvp`): the signed-in user's own answer (`mine`). */
+@Serializable
+data class EventRsvpMixin(val mine: Rsvp = Rsvp.UNSURE)
 
 /** An event's venue mixin (`Event.venue`): its venue, if it has one yet. */
 @Serializable
@@ -182,8 +189,8 @@ data class Person(
     val id: String,
     val name: String = "",
     val role: String? = null,
-    @Serializable(with = BlankAsNullSerializer::class) val pictureUrl: String? = null,
-    @Serializable(with = BlankAsNullSerializer::class) val bannerUrl: String? = null,
+    val avatarUrl: String? = null,
+    val bannerUrl: String? = null,
     val order: Int = 0,
     /** Their profile mixin, for the Facebook Page. Read through [facebookId] and [isLiked]. */
     private val profile: ListingProfile? = null,
@@ -203,8 +210,8 @@ data class Person(
 data class PersonDetail(
     val id: String,
     val name: String = "",
-    @Serializable(with = BlankAsNullSerializer::class) val pictureUrl: String? = null,
-    @Serializable(with = BlankAsNullSerializer::class) val bannerUrl: String? = null,
+    val avatarUrl: String? = null,
+    val bannerUrl: String? = null,
     @SerialName("events") private val eventsMixin: UpcomingEvents? = null,
     /** Their profile mixin: links and Facebook Page. Read through [socialLinks], [facebookId] and [isLiked]. */
     private val profile: ListingProfile? = null,
@@ -226,7 +233,7 @@ data class PersonDetail(
     val isLiked: Boolean get() = profile?.facebook?.isLiked == true
 
     val person: Person
-        get() = Person(id = id, name = name, pictureUrl = pictureUrl, bannerUrl = bannerUrl, profile = profile)
+        get() = Person(id = id, name = name, avatarUrl = avatarUrl, bannerUrl = bannerUrl, profile = profile)
 
     /** Where fans can tip them (Cash App, Venmo), each opening that app. */
     val tipLinks: List<SocialLink>
@@ -242,7 +249,7 @@ data class SocialLink(
     val id: String,
     val handle: String = "",
     val provider: String = "",
-    @Serializable(with = BlankAsNullSerializer::class) val url: String? = null,
+    val url: String? = null,
 ) {
     /** The network, for picking a glyph: facebook, instagram, soundcloud, spotify, apple music, x, or null for anything else. */
     val network: Network?
@@ -280,9 +287,9 @@ data class Track(
     val id: String,
     val title: String = "",
     val provider: String? = null,
-    @Serializable(with = BlankAsNullSerializer::class) val providerUrl: String? = null,
-    @Serializable(with = BlankAsNullSerializer::class) val waveformUrl: String? = null,
-    @Serializable(with = BlankAsNullSerializer::class) val artworkUrl: String? = null,
+    val providerUrl: String? = null,
+    val waveformUrl: String? = null,
+    val artworkUrl: String? = null,
 )
 
 /** Whether the signed-in user is going. GraphQL sends the enum's names. */
@@ -303,9 +310,10 @@ data class Event(
     @Serializable(with = InstantSerializer::class) val startAt: Instant,
     @Serializable(with = InstantSerializer::class) val endAt: Instant? = null,
     val facebookId: String? = null,
-    @Serializable(with = BlankAsNullSerializer::class) val bannerUrl: String? = null,
+    val bannerUrl: String? = null,
     val isFeatured: Boolean = false,
-    @SerialName("viewerRsvp") val rsvp: Rsvp = Rsvp.UNSURE,
+    /** Its rsvp mixin (`rsvp { mine }`); read the signed-in user's answer through [rsvp]. */
+    @SerialName("rsvp") private val rsvpMixin: EventRsvpMixin? = null,
     /** Its venue mixin; read the venue through [venue]. */
     @SerialName("venue") private val venueMixin: EventVenueMixin? = null,
     /** Its people mixin; read through [people]. Only the event screen asks for it. */
@@ -315,6 +323,12 @@ data class Event(
     /** Its ping mixin; read through [friendPings]. Only the event screen asks for it. */
     @SerialName("ping") private val pingFeed: PingFeedMixin? = null,
 ) {
+    /** Whether the signed-in user is going, from the rsvp mixin; undecided when the event wasn't asked for it. */
+    val rsvp: Rsvp get() = rsvpMixin?.mine ?: Rsvp.UNSURE
+
+    /** With the signed-in user's answer set to [rsvp], as the picker shows it before the API answers. */
+    fun withRsvp(rsvp: Rsvp): Event = copy(rsvpMixin = EventRsvpMixin(mine = rsvp))
+
     /** Where it is; null when it has no venue yet ("To be announced"). */
     val venue: Venue? get() = venueMixin?.venue
 
@@ -346,10 +360,7 @@ data class Friend(
     val name: String = "",
     val facebookId: String? = null,
     val presence: Presence? = null,
-    /**
-     * Their profile photo. The API's Friend type has no `avatarUrl` yet, so [Documents.FRIEND_FIELDS]
-     * doesn't ask for it and friends show their initials until it does.
-     */
+    /** Their picture; null when they have none, and friends then show their initials. */
     val avatarUrl: String? = null,
 ) {
     val firstName: String get() = name.firstNameForDisplay()
@@ -386,7 +397,7 @@ data class ChatLine(
     /** The name the room showed for the sender: in full for friends, "First L." for anyone else, or the venue's. */
     val name: String? = null,
     val userId: String = "",
-    @Serializable(with = BlankAsNullSerializer::class) val avatarUrl: String? = null,
+    val avatarUrl: String? = null,
     @Serializable(with = InstantSerializer::class) val sentAt: Instant? = null,
     /** Whether the sender can be reached now; OFFLINE unless they're a friend (or the viewer is an admin). */
     val presence: Presence? = null,
@@ -528,7 +539,7 @@ data class PingJoin(val id: String, val user: Friend, val targetId: String? = nu
 @Serializable
 data class Now(
     val title: String = "",
-    @Serializable(with = BlankAsNullSerializer::class) val imageUrl: String? = null,
+    val imageUrl: String? = null,
     /** The venue the user is in, when they're in one. */
     val venue: Venue? = null,
     /** Venues nearby, nearest first; null when the user is in a venue. */
@@ -569,13 +580,41 @@ data class NowLocale(
     val recentMessages: List<ChatLine> = emptyList(),
 )
 
-/** The oldest build the API still serves, from `POST /`. */
+/**
+ * What `GET /v1/status` says about this app (`clients.android`): the oldest version still served, the
+ * newest one, and where to get it. Versions are dotted numbers (`1.0.15`), compared part by part.
+ */
 @Serializable
 data class VersionInfo(
-    @SerialName("minimum_build") val minimumBuild: Int = 0,
-    @SerialName("current_version") val currentVersion: String? = null,
-    @SerialName("minimum_version") val minimumVersion: String? = null,
-)
+    val minimumVersion: String? = null,
+    val latestVersion: String? = null,
+    val storeUrl: String? = null,
+) {
+    /** Whether a build whose version name is [version] is still served. Unknown or unparseable versions are. */
+    fun supports(version: String): Boolean {
+        val minimum = parse(minimumVersion ?: return true) ?: return true
+        val current = parse(version) ?: return true
+        return compare(current, minimum) >= 0
+    }
+
+    companion object {
+        /** The numeric parts of `1.2.3-staging`: `[1, 2, 3]`; null when it doesn't start with a number. */
+        fun parse(version: String): List<Int>? {
+            val numeric = version.trim().takeWhile { it.isDigit() || it == '.' }.trimEnd('.')
+            val parts = numeric.split('.').map { it.toIntOrNull() ?: return null }
+            return parts.takeIf { it.isNotEmpty() }
+        }
+
+        /** Compares part by part, a missing part counting as 0 (`1.2` equals `1.2.0`). */
+        fun compare(a: List<Int>, b: List<Int>): Int {
+            for (i in 0 until maxOf(a.size, b.size)) {
+                val difference = a.getOrElse(i) { 0 } - b.getOrElse(i) { 0 }
+                if (difference != 0) return difference
+            }
+            return 0
+        }
+    }
+}
 
 /** The signed-in user, as the app shows them, with their profile photo when they have one. */
 data class User(val id: String, val name: String, val avatarUrl: String? = null) {
@@ -643,21 +682,6 @@ object PingReachSerializer : KSerializer<PingReach> {
     }
 
     override fun serialize(encoder: Encoder, value: PingReach) = encoder.encodeString(value.name)
-}
-
-/** A URL field where the API sometimes sends an empty string for "none". */
-object BlankAsNullSerializer : KSerializer<String?> {
-    @OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
-    override val descriptor = PrimitiveSerialDescriptor("social.hotmess.BlankAsNull", PrimitiveKind.STRING).nullable
-
-    @OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
-    override fun deserialize(decoder: Decoder): String? =
-        if (decoder.decodeNotNullMark()) decoder.decodeString().takeIf { it.isNotBlank() } else decoder.decodeNull()
-
-    @OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
-    override fun serialize(encoder: Encoder, value: String?) {
-        if (value == null) encoder.encodeNull() else encoder.encodeString(value)
-    }
 }
 
 /** Up to two initials, for an avatar placeholder. */

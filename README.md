@@ -14,6 +14,24 @@ AudienceKit Kotlin SDK, styled with the AudienceKit design system's `hot_mess` p
   and paying cover with Stripe's payment sheet (`payments`).
 - `design/`: the script that draws the launcher icons (the iOS "misprint" mark: Production blue, staging green, debug purple; `python3 design/make_launcher_icons.py`, needs cairosvg and Pillow).
 
+## API contract
+
+The app speaks the AudienceKit API as the SDK's `AudienceKitSDK.API_VERSION` names it. Its GraphQL documents live in
+`core/.../Documents.kt`, `VenueChat.kt` and `Notifications.kt` as string constants, so they can be checked against
+the schema before anything runs: CI fetches `check.mjs` and `schema.graphql` from developer.audiencekit.com and runs
+the check over `core/src/main`, `app/src/main` and the SDK's `Queries.kt` (whose fragments the documents
+interpolate). Locally, from an audience-kit checkout:
+
+```sh
+node scripts/graphql-documents/check.mjs --schema api/schema.graphql --endpoint consumer \
+  ../hot_mess_android/core/src/main ../hot_mess_android/app/src/main sdk/kotlin/audiencekit/src/main
+```
+
+Before sign-in the app reads `GET /v1/status` for the oldest version Google Play still serves
+(`clients.android.minimumVersion`) and asks to update when this build is older. Sign-in keeps what the token JSON
+says (`userId`, `audienceId`, `role`, `endpoint`); nothing decodes the JWT. API errors are classified by their
+`extensions.code`, never their wording, and pushes are opened by the `url` they carry.
+
 ## Setup
 
 1. Clone [audience-kit](https://github.com/audience-kit/audience-kit) next to this repository

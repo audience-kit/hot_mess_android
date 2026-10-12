@@ -1,5 +1,6 @@
 package social.hotmess.core
 
+import com.audiencekit.AudienceKitSDK
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -60,11 +61,15 @@ fun interface CableSocketFactory {
     fun open(url: String, token: String?, listener: CableSocket.Listener): CableSocket
 }
 
-/** [CableSocketFactory] on OkHttp: `Authorization: JWT <token>`. */
+/**
+ * [CableSocketFactory] on OkHttp. The handshake is dressed like any API request: `Authorization: Bearer <token>`
+ * (the only scheme the API accepts) and the contract version in `X-AudienceKit-API-Version`.
+ */
 class OkHttpCableSocketFactory(private val client: OkHttpClient) : CableSocketFactory {
     override fun open(url: String, token: String?, listener: CableSocket.Listener): CableSocket {
         val request = Request.Builder().url(url).apply {
-            token?.let { header("Authorization", "JWT $it") }
+            header("X-AudienceKit-API-Version", AudienceKitSDK.API_VERSION)
+            token?.let { header("Authorization", "Bearer $it") }
         }.build()
         val socket = client.newWebSocket(
             request,

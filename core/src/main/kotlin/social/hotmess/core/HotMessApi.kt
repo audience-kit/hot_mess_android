@@ -6,9 +6,9 @@ import com.audiencekit.AudienceKitClient
 import com.audiencekit.AudienceKitException
 import com.audiencekit.Coordinates
 import com.audiencekit.CoverPurchase
-import com.audiencekit.DeviceDescription
 import com.audiencekit.DoorNight
 import com.audiencekit.DoorVenue
+import com.audiencekit.GraphQLError
 import com.audiencekit.RSVPState
 import com.audiencekit.ScanResult
 import com.audiencekit.graphQLVariables
@@ -25,15 +25,14 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.jsonObject
 import kotlin.coroutines.ContinuationInterceptor
 import kotlin.coroutines.EmptyCoroutineContext
 
 /**
  * The typed surface of the Hot Mess API, all of it on the AudienceKit SDK.
  *
- * Everything goes through the audience's GraphQL endpoint except the version manifest, which is
- * read before sign-in and isn't part of any audience. Failures surface as [ApiError].
+ * Everything goes through the audience's GraphQL endpoint except `GET /v1/status`, which is read before
+ * sign-in and isn't part of any audience. Failures surface as [ApiError].
  */
 class HotMessApi(val client: AudienceKitClient) {
     /** Friends seen in Now's reports, so chat can show them by their full names. */
@@ -268,11 +267,13 @@ class HotMessApi(val client: AudienceKitClient) {
 
     // region Session
 
-    /** The oldest Android build the API still serves, or null when it doesn't say. */
-    suspend fun minimumVersion(device: DeviceDescription): VersionInfo? {
-        val body = json.encodeToString(ManifestRequest.serializer(), ManifestRequest(device)).toByteArray()
-        val bytes = call { client.data(APIRequest(method = "POST", path = "/", body = body, authenticated = false)) }
-        return parseManifest(bytes.toString(Charsets.UTF_8))
+    /**
+     * What `GET /v1/status` says about the Android app: the oldest version still served, the latest, and the
+     * store link; null when it says nothing about Android. Read-only and open, so it works before sign-in.
+     */
+    suspend fun clientVersions(): VersionInfo? {
+        val bytes = call("GET /v1/status") { client.data(APIRequest(path = "/v1/status", authenticated = false)) }
+        return parseStatus(bytes.toString(Charsets.UTF_8))
     }
 
     /**
@@ -310,12 +311,12 @@ class HotMessApi(val client: AudienceKitClient) {
         return json.decodeFromString(BugReportResponse.serializer(), bytes.toString(Charsets.UTF_8))
     }
 
-    /** The signed-in user, with the photo the API has for them (the old `/users/<id>/picture` is gone). */
+    /** The signed-in user, with the picture the API has for them (`avatarUrl`, null when they have none). */
     suspend fun me(): User? {
         val me = query(Documents.ME, MeResponse.serializer()).me?.self ?: return null
         val id = RecordId.normalize(me.id) ?: return null
         val name = me.name ?: listOfNotNull(me.firstName, me.lastName).joinToString(" ")
-        return User(id = id, name = name, avatarUrl = me.photo?.cdnUrl)
+        return User(id = id, name = name, avatarUrl = me.avatarUrl)
     }
 
     // endregion
@@ -327,8 +328,8 @@ class HotMessApi(val client: AudienceKitClient) {
     ): T = call(operationName(document)) { client.graphQL(document, serializer, variables, json = json) }
 
     /**
-     * [call] for the cover mutations, whose errors are written for people ("The Wildrose doesn't take
-     * cover in the app yet"), so they're shown as they are.
+     * [call] for the cover mutations. An error the API wrote for people ("The Wildrose doesn't take cover in
+     * the app yet"; one with an `extensions.code`) is shown as it is; see [ApiError.fromGraphQL].
      */
     private suspend fun <T> mutate(block: suspend () -> T): T =
         try {
@@ -336,12 +337,12 @@ class HotMessApi(val client: AudienceKitClient) {
         } catch (e: CancellationException) {
             throw e
         } catch (e: AudienceKitException.GraphQL) {
-            throw ApiError.Other(e.errors.firstOrNull()?.message ?: "Something went wrong.")
+            throw rejection(e.errors) ?: failed(ApiError.from(e), "cover")
         } catch (e: AudienceKitException) {
             throw failed(ApiError.from(e), "cover")
         }
 
-    /** A mutation whose GraphQL errors are written for people ("That ping has ended"), so they're shown as they are. */
+    /** A mutation whose refusals ("That ping has ended", an INVALID or CONFLICT error) are shown as written. */
     private suspend fun <T> mutate(
         document: String,
         serializer: KSerializer<T>,
@@ -352,10 +353,13 @@ class HotMessApi(val client: AudienceKitClient) {
         } catch (e: CancellationException) {
             throw e
         } catch (e: AudienceKitException.GraphQL) {
-            throw userFacingMessage(e.errors.map { it.message })?.let { ApiError.Other(it) } ?: ApiError.from(e)
+            throw rejection(e.errors) ?: failed(ApiError.from(e), operationName(document))
         } catch (e: AudienceKitException) {
             throw failed(ApiError.from(e), operationName(document))
         }
+
+    /** The refusal in [errors] to show as written, or null when they aren't one (and are reported as a failure). */
+    private fun rejection(errors: List<GraphQLError>): ApiError.Rejected? = ApiError.fromGraphQL(errors) as? ApiError.Rejected
 
     private suspend fun <T> call(operation: String = "api", block: suspend () -> T): T =
         try {
@@ -380,22 +384,21 @@ class HotMessApi(val client: AudienceKitClient) {
         }
 
         /**
-         * The first error message when it's one written for people, or null for schema and validation
-         * errors ("Field 'x' doesn't exist on type 'Mutation'"), which get the generic message instead.
+         * The first error's message when the API wrote it for people: a refusal with an `extensions.code` of
+         * INVALID, CONFLICT, FORBIDDEN or RATE_LIMITED ("That ping has ended"). Null for anything else: an error
+         * graphql-ruby raised itself has no code ("Field 'x' doesn't exist on type 'Mutation'"), and an INTERNAL
+         * or UNAVAILABLE one isn't about the request. The code decides, never the message's wording.
          */
-        fun userFacingMessage(messages: List<String>): String? {
-            val message = messages.firstOrNull()?.trim()?.takeIf { it.isNotEmpty() } ?: return null
-            val technical = listOf("Field '", "doesn't exist", "Variable ", "Argument '", "Expected type", "Parse error", "undefined method")
-            return message.takeIf { text -> technical.none { text.contains(it) } }
+        fun userFacingMessage(errors: List<GraphQLError>): String? {
+            val error = errors.firstOrNull() ?: return null
+            val code = error.code ?: return null
+            if (code !in ApiError.REJECTION_CODES) return null
+            return error.message.trim().takeIf { it.isNotEmpty() }
         }
 
-        /** The manifest's `client.mobile.android`; the API only lists `apple` so far. */
-        fun parseManifest(text: String): VersionInfo? {
-            val root = runCatching { json.parseToJsonElement(text).jsonObject }.getOrNull() ?: return null
-            val android = ((root["client"] as? JsonObject)?.get("mobile") as? JsonObject)?.get("android") as? JsonObject
-                ?: return null
-            return runCatching { json.decodeFromJsonElement(VersionInfo.serializer(), android) }.getOrNull()
-        }
+        /** `clients.android` of `GET /v1/status`; null when the status says nothing about Android. */
+        fun parseStatus(text: String): VersionInfo? =
+            runCatching { json.decodeFromString(StatusResponse.serializer(), text) }.getOrNull()?.clients?.android
     }
 }
 
@@ -424,8 +427,11 @@ fun Venue.isIn(localeId: String?): Boolean {
     return locale?.id?.let(RecordId::normalize) == local
 }
 
+/** `GET /v1/status`: `clients.<platform>` is each app's versions; `api` (the contract version and SDK minimums) isn't read. */
 @Serializable
-private data class ManifestRequest(val device: DeviceDescription)
+private data class StatusResponse(val clients: Clients? = null) {
+    @Serializable data class Clients(val android: VersionInfo? = null)
+}
 
 @Serializable
 private data class ReportLocationResponse(val reportLocation: LocationReport)
@@ -450,7 +456,8 @@ private data class LocationReport(
     data class LocaleNode(
         val id: String,
         val name: String? = null,
-        @Serializable(with = BlankAsNullSerializer::class) val heroUrl: String? = null,
+        /** Its location's photo; null when there's none. */
+        val bannerUrl: String? = null,
         val chat: ChatMixin? = null,
         val events: UpcomingEvents? = null,
         val friends: FriendsMixin? = null,
@@ -475,7 +482,7 @@ private data class LocationReport(
             val mixins = json.decodeFromJsonElement(VenueMixins.serializer(), node)
             return Now(
                 title = place.name,
-                imageUrl = place.heroUrl,
+                imageUrl = place.bannerUrl ?: place.photoUrl,
                 venue = place,
                 venues = nearbyVenues,
                 events = mixins.events?.events.orEmpty(),
@@ -487,7 +494,7 @@ private data class LocationReport(
         }
         return Now(
             title = locale?.name?.let { "Happening Now in $it" } ?: "Happening Now",
-            imageUrl = locale?.heroUrl,
+            imageUrl = locale?.bannerUrl,
             venues = nearbyVenues,
             events = locale?.events?.events.orEmpty().take(Documents.LOCALE_EVENT_LIMIT),
             friends = locale?.friends?.list.orEmpty(),
@@ -511,10 +518,8 @@ private data class MeResponse(val me: UserState? = null) {
         val name: String? = null,
         val firstName: String? = null,
         val lastName: String? = null,
-        val photo: Photo? = null,
+        val avatarUrl: String? = null,
     )
-
-    @Serializable data class Photo(val cdnUrl: String? = null)
 }
 
 @Serializable
@@ -539,8 +544,8 @@ private data class VenueNode(
     val name: String = "",
     val description: String? = null,
     val distance: Double? = null,
-    @Serializable(with = BlankAsNullSerializer::class) val photoUrl: String? = null,
-    @Serializable(with = BlankAsNullSerializer::class) val heroUrl: String? = null,
+    val photoUrl: String? = null,
+    val bannerUrl: String? = null,
     val point: String? = null,
     val profile: ListingProfile? = null,
     val chat: ChatMixin? = null,
@@ -557,7 +562,7 @@ private data class VenueNode(
         description = description,
         distance = distance,
         photoUrl = photoUrl,
-        heroUrl = heroUrl,
+        bannerUrl = bannerUrl,
         point = point,
         profile = profile,
         chat = chat,

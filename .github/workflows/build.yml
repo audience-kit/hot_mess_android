@@ -26,7 +26,8 @@ jobs:
       - uses: actions/checkout@v5
         with:
           repository: audience-kit/audience-kit
-          ref: main
+          # The branch of the API this app targets: the PRs land on `next` until it is promoted to main.
+          ref: next
           # With a deploy key git uses SSH; otherwise the token.
           ssh-key: ${{ secrets.AUDIENCE_KIT_SSH_KEY }}
           token: ${{ secrets.AUDIENCE_KIT_TOKEN || github.token }}
@@ -40,3 +41,17 @@ jobs:
       - uses: gradle/actions/setup-gradle@v5
       - name: Build and run unit tests
         run: ./gradlew assembleDebug test
+
+      # The app's GraphQL documents (core/ and app/, with the SDK's fragments they interpolate) against the
+      # consumer schema. The dumps and the checker publish from audience-kit's main (see
+      # developer.audiencekit.com/api/validate-documents), so while this app tracks the API's `next` branch a field
+      # that isn't on main yet fails here: the step reports, but doesn't fail the build, until the API ships.
+      - name: GraphQL documents match the API schema
+        continue-on-error: true
+        run: |
+          mkdir -p .graphql-check && cd .graphql-check
+          curl -fsSLO https://developer.audiencekit.com/graphql/check.mjs
+          curl -fsSLO https://developer.audiencekit.com/graphql/schema.graphql
+          npm install --silent --no-save --no-package-lock graphql@16
+          node check.mjs --schema schema.graphql --endpoint consumer \
+            ../core/src/main ../app/src/main ../audience-kit/sdk/kotlin/audiencekit/src/main

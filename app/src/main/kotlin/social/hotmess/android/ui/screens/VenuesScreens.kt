@@ -245,7 +245,7 @@ fun VenueScreen(id: String, navigator: Navigator) {
             HeroFeed(
                 listState,
                 hero = {
-                    HeroHeader(loaded.heroUrl ?: loaded.photoUrl, topInset, onTone = { heroTone = it }) {
+                    HeroHeader(loaded.bannerUrl ?: loaded.photoUrl, topInset, onTone = { heroTone = it }) {
                         Text(
                             loaded.name,
                             style = HotMessType.title,

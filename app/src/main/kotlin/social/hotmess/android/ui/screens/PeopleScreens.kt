@@ -187,7 +187,7 @@ private fun Hero(detail: PersonDetail, topInset: Dp, onTone: (PhotoTone) -> Unit
     HeroHeader(detail.bannerUrl, topInset, onTone = onTone) {
         Row(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.Bottom) {
             Avatar(
-                detail.pictureUrl,
+                detail.avatarUrl,
                 detail.name,
                 size = 76.dp,
                 modifier = Modifier.border(3.dp, LocalContentColor.current, CircleShape),

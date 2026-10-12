@@ -343,7 +343,7 @@ fun PersonCard(
     friends: List<Friend> = emptyList(),
 ) {
     PhotoCard(
-        url = person.pictureUrl,
+        url = person.avatarUrl,
         onClick = onClick,
         modifier = modifier.semantics {
             if (friends.isNotEmpty()) stateDescription = withFriends(friends)
@@ -359,7 +359,7 @@ fun PersonCard(
             horizontalArrangement = Arrangement.spacedBy(14.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Avatar(person.pictureUrl, person.name, size = Sizes.avatarLg, modifier = Modifier.photoRing())
+            Avatar(person.avatarUrl, person.name, size = Sizes.avatarLg, modifier = Modifier.photoRing())
             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(person.name, style = PersonCardTitle, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 (detail ?: person.role)?.takeIf { it.isNotBlank() }?.let {

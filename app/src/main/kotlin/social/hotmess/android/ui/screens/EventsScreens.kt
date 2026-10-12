@@ -167,14 +167,14 @@ fun EventScreen(id: String, navigator: Navigator) {
     fun choose(rsvp: Rsvp) {
         val previous = state.valueOrNull?.rsvp ?: return
         if (rsvp == previous) return
-        loader.update { it.copy(rsvp = rsvp) }
+        loader.update { it.withRsvp(rsvp) }
         scope.launch {
             try {
                 graph.api.setRsvp(rsvp, id)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                loader.update { it.copy(rsvp = previous) }
+                loader.update { it.withRsvp(previous) }
                 rsvpError = ApiError.of(e).message ?: "Try again in a moment."
             }
         }

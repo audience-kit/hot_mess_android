@@ -1,6 +1,7 @@
 package social.hotmess.core
 
 import com.audiencekit.CoverCharge
+import com.audiencekit.Money
 import java.text.NumberFormat
 import java.time.Instant
 import java.time.LocalDate
@@ -76,7 +77,10 @@ object Formatting {
         return format.format(cents / 100.0)
     }
 
-    /** A cover's start, `21:00`, as "9pm", or "9:30pm" when it isn't on the hour; null when it isn't a time. */
+    /** [money] for a [Money]: "$11.12" for `Money(1112, "usd")`. */
+    fun money(amount: Money, locale: Locale = Locale.getDefault()): String = money(amount.cents, amount.currency, locale)
+
+    /** A cover's start, a TimeOfDay (`21:00`, local to the venue), as "9pm", or "9:30pm" when it isn't on the hour; null when it isn't a time. */
     fun clockTime(hhmm: String): String? {
         val time = try {
             LocalTime.parse(hhmm.trim())
@@ -90,7 +94,7 @@ object Formatting {
 
     /** "Cover $11.12 tonight · from 9pm"; another night's leaves out "tonight". */
     fun coverLine(charge: CoverCharge, tonight: Boolean, locale: Locale = Locale.getDefault()): String {
-        val price = "Cover ${money(charge.totalCents, charge.currency, locale)}${if (tonight) " tonight" else ""}"
+        val price = "Cover ${money(charge.total, locale)}${if (tonight) " tonight" else ""}"
         val from = charge.from?.let(::clockTime) ?: return price
         return "$price · from $from"
     }

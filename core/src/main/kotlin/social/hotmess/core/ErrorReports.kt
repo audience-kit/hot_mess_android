@@ -108,7 +108,8 @@ val ApiError.isReportable: Boolean
     get() = when (this) {
         is ApiError.Decoding -> true
         is ApiError.Server -> status >= 500
-        ApiError.Offline, ApiError.Unauthorized, ApiError.NotFound, is ApiError.Other -> false
+        // A refusal the API explained, or a service it relies on being down, isn't a bug in the app.
+        ApiError.Offline, ApiError.Unauthorized, ApiError.NotFound, ApiError.Unavailable, is ApiError.Rejected, is ApiError.Other -> false
     }
 
 val ApiError.reportDescription: String
@@ -116,6 +117,7 @@ val ApiError.reportDescription: String
         is ApiError.Decoding -> "decoding failed: $detail"
         is ApiError.Server -> "HTTP $status"
         is ApiError.Other -> detail
+        is ApiError.Rejected -> "$code: $detail"
         else -> this::class.simpleName ?: "error"
     }
 

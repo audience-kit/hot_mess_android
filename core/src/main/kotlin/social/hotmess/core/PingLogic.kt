@@ -116,28 +116,34 @@ object PingStrip {
     fun senders(pings: List<Ping>): List<Friend> = pings.filterNot { it.isMine }.map { it.user }.distinctBy { RecordId.normalize(it.id) ?: it.id }
 }
 
-/** A Ping push, read from the FCM message's data. */
-data class PingPush(val kind: Kind, val pingId: String?) {
-    enum class Kind {
-        /** To friends when a Ping is sent. */
-        PING,
-
-        /** To the sender when a friend joins. */
-        PING_JOIN,
-    }
-
+/**
+ * A Ping push, read from a notification's data: FCM's data map, or `PushNotification.data` over the cable.
+ * Every push carries `url`, the route the app opens (`https://hotmess.social/pings/<id>`); a Ping is one
+ * whose URL routes to Now. `kind` (`ping`, `ping_join`) is kept for analytics only and never branched on.
+ */
+data class PingPush(val pingId: String?, val kind: String? = null) {
     companion object {
+        const val URL = "url"
         const val KIND = "kind"
         const val PING_ID = "ping_id"
 
-        /** The push in [data], or null when it isn't one of Ping's. */
+        /** The keys a push's data is read from, in the order they're copied to an intent's extras. */
+        val KEYS: List<String> = listOf(URL, KIND, PING_ID)
+
+        /**
+         * The Ping push in [data], or null when its URL routes somewhere else. Without a URL at all (a push
+         * from before they were sent) the `ping_id` it carries still names the Ping.
+         */
         fun parse(data: Map<String, String?>): PingPush? {
-            val kind = when (data[KIND]) {
-                "ping" -> Kind.PING
-                "ping_join" -> Kind.PING_JOIN
-                else -> return null
+            val kind = data[KIND]?.takeIf { it.isNotBlank() }
+            val pingId = data[PING_ID]?.takeIf { it.isNotBlank() }
+            val url = data[URL]?.takeIf { it.isNotBlank() }
+            if (url != null) {
+                val route = DeepLink.route(url) as? AppRoute.NowPing ?: return null
+                return PingPush(route.pingId ?: pingId, kind)
             }
-            return PingPush(kind, data[PING_ID]?.takeIf { it.isNotBlank() })
+            if (pingId == null) return null
+            return PingPush(pingId, kind)
         }
     }
 }
