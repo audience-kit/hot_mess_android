@@ -100,6 +100,23 @@ object GraphQLCable {
         }
     }
 
+    /**
+     * Whether a frame is Action Cable refusing the connection itself (`reject_unauthorized_connection`:
+     * `{"type":"disconnect","reason":"unauthorized"}`). The token is no good any more, so the session has ended.
+     * A rejected *subscription* (another audience, a ban) isn't this.
+     */
+    fun isUnauthorizedDisconnect(text: String): Boolean {
+        val frame = runCatching { json.parseToJsonElement(text).jsonObject }.getOrNull() ?: return false
+        return (frame["type"] as? JsonPrimitive)?.contentOrNull == "disconnect" &&
+            (frame["reason"] as? JsonPrimitive)?.contentOrNull == "unauthorized"
+    }
+
+    /**
+     * Told the token of any socket the server refused as unauthorized, on the socket's thread. The app points it at
+     * its session, which ends the session the way an HTTP 401 does (when that token is still the stored one).
+     */
+    @Volatile var onUnauthorized: ((token: String) -> Unit)? = null
+
     /** The websocket endpoint, derived from the HTTP base URL: `wss://<host>/connection`. */
     fun realtimeUrl(baseUrl: String): String? {
         val uri = runCatching { URI(baseUrl) }.getOrNull() ?: return null
@@ -135,6 +152,7 @@ object GraphQLCable {
             }
 
             override fun onMessage(webSocket: WebSocket, text: String) {
+                if (token != null && isUnauthorizedDisconnect(text)) onUnauthorized?.invoke(token)
                 val envelope = parse(text) ?: return
                 if (envelope == Envelope.Subscribed) webSocket.send(execute(identifier))
                 if (!onFrame(envelope, emit)) {

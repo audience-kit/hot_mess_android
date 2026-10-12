@@ -60,6 +60,7 @@ fun LoginScreen(onSignIn: () -> Unit) {
     val graph = LocalAppGraph.current
     val state by graph.session.state.collectAsStateWithLifecycle()
     val branding by graph.brand.branding.collectAsStateWithLifecycle()
+    val endedNotice by graph.session.endedNotice.collectAsStateWithLifecycle()
     val signingIn = state == AuthState.SigningIn
 
     HotMessTheme(branding = branding?.theme, darkTheme = true) {
@@ -93,6 +94,10 @@ fun LoginScreen(onSignIn: () -> Unit) {
                         textAlign = TextAlign.Center,
                     )
                     Spacer(Modifier.padding(Space.s4))
+                    val notice = endedNotice
+                    if (state == AuthState.SignedOut && notice != null) {
+                        Text(notice, style = HotMessType.body, color = Color.White, textAlign = TextAlign.Center)
+                    }
                     if (signingIn) {
                         CircularProgressIndicator(color = Color.White)
                     } else {

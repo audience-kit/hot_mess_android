@@ -22,6 +22,7 @@ import social.hotmess.android.session.AuthState
 import social.hotmess.android.session.BrandStore
 import social.hotmess.android.session.SessionStore
 import social.hotmess.android.support.ErrorReporter
+import social.hotmess.core.GraphQLCable
 import social.hotmess.core.HotMessApi
 import social.hotmess.core.PassBook
 
@@ -64,6 +65,8 @@ class AppGraph(context: Context, val configuration: AppConfiguration = AppConfig
     }
 
     init {
+        // A socket the server refused as unauthorized ends the session as a 401 does.
+        GraphQLCable.onUnauthorized = { token -> scope.launch { session.sessionRejected(token) } }
         scope.launch {
             session.state.collect {
                 when (it) {
