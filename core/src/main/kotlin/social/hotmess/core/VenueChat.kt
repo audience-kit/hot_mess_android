@@ -1,6 +1,7 @@
 package social.hotmess.core
 
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.transform
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -9,7 +10,6 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
-import okhttp3.OkHttpClient
 import java.time.Instant
 import java.util.UUID
 
@@ -411,22 +411,32 @@ object ChatProtocol {
 }
 
 /**
- * A live connection to a chat room, a venue's or a locale's, in [audienceId]: one `GraphQLChannel`
- * subscription running the room's subscription. Saying something is [HotMessApi.sendChatMessage].
+ * A chat room, a venue's or a locale's, in [audienceId], followed on the app's [CableConnection]: one
+ * `GraphQLChannel` subscription running the room's subscription. Saying something is
+ * [HotMessApi.sendChatMessage].
  */
 class VenueChatConnection(
     private val room: ChatRoom,
-    private val url: String,
-    private val token: String?,
     private val audienceId: String,
-    private val client: OkHttpClient = OkHttpClient(),
+    private val cable: CableConnection,
 ) {
     sealed interface Event {
         data object Connected : Event
         data class Received(val message: VenueMessage) : Event
-        data class Disconnected(val reason: String?) : Event
+
+        /**
+         * The socket dropped. With [reconnects] the cable is reconnecting, and the room is joined again
+         * (a [Connected] and fresh roster and history follow) on the same flow; without, the flow ends.
+         */
+        data class Disconnected(val reason: String?, val reconnects: Boolean) : Event
         data object Rejected : Event
         data object Left : Event
+
+        /**
+         * The server ended the room's operation (`more: false`) with no ChatLeft or refusal; the flow ends
+         * after it, and subscribing again starts the room over.
+         */
+        data object Ended : Event
         data class Range(val outOfRange: Boolean) : Event
 
         /** Everyone in the room now, by lowercase user id, and who they are and the viewer's friends. */
@@ -450,28 +460,29 @@ class VenueChatConnection(
         data object Cleared : Event
     }
 
-    /** Connects when collected and closes the socket when the collector goes away. */
-    fun events(): Flow<Event> = GraphQLCable.connect(
-        client,
-        url,
-        token,
+    /**
+     * Follows the room while collected, across reconnects; the flow ends when the room refuses this
+     * person, the server ends the operation, or the connection is refused.
+     */
+    fun events(): Flow<Event> = cable.subscribe(
         audienceId,
-        execute = { identifier -> ChatProtocol.execute(identifier, room) },
-        onFrame = { envelope, emit ->
-            var open = true
-            for (frame in ChatProtocol.frames(envelope)) {
+        ChatProtocol.document(room),
+        JsonObject(mapOf("id" to JsonPrimitive(room.id.lowercase()))),
+    ).transform { event ->
+        when (event) {
+            // ChatJoined, after the operation runs, says the room is joined.
+            CableEvent.Subscribed -> Unit
+            CableEvent.Rejected -> emit(Event.Rejected)
+            is CableEvent.Disconnected -> emit(Event.Disconnected(event.reason, event.reconnects))
+            is CableEvent.Result -> for (frame in ChatProtocol.frames(event.result)) {
                 when (frame) {
-                    // GraphQLCable runs the operation once the channel is confirmed.
                     ChatProtocol.Frame.Subscribed -> Unit
                     ChatProtocol.Frame.Connected -> emit(Event.Connected)
-                    ChatProtocol.Frame.Disconnected -> emit(Event.Disconnected(null))
+                    ChatProtocol.Frame.Disconnected -> emit(Event.Disconnected(null, reconnects = true))
                     ChatProtocol.Frame.Rejected -> emit(Event.Rejected)
                     ChatProtocol.Frame.Left -> emit(Event.Left)
-                    ChatProtocol.Frame.Ended -> {
-                        // The server ended the room's operation; the caller reconnects to start it over.
-                        emit(Event.Disconnected(null))
-                        open = false
-                    }
+                    // The server ended the room's operation; the cable ends the flow.
+                    ChatProtocol.Frame.Ended -> emit(Event.Ended)
                     is ChatProtocol.Frame.Message -> emit(Event.Received(frame.message))
                     is ChatProtocol.Frame.Range -> emit(Event.Range(frame.outOfRange))
                     is ChatProtocol.Frame.Roster -> emit(Event.Roster(frame.online, frame.people, frame.friends))
@@ -483,8 +494,6 @@ class VenueChatConnection(
                     ChatProtocol.Frame.Cleared -> emit(Event.Cleared)
                 }
             }
-            open
-        },
-        onClosed = { reason, emit -> emit(Event.Disconnected(reason)) },
-    )
+        }
+    }
 }

@@ -22,6 +22,7 @@ import social.hotmess.android.session.AuthState
 import social.hotmess.android.session.BrandStore
 import social.hotmess.android.session.SessionStore
 import social.hotmess.android.support.ErrorReporter
+import social.hotmess.core.CableConnection
 import social.hotmess.core.GraphQLCable
 import social.hotmess.core.HotMessApi
 import social.hotmess.core.PassBook
@@ -45,11 +46,19 @@ class AppGraph(context: Context, val configuration: AppConfiguration = AppConfig
     /** Square's card entry, for Square venues' cover; MainActivity passes it card entry's result. */
     val squareCardEntry = SquareCardEntry()
 
+    /**
+     * The one Action Cable socket every GraphQL subscription shares (chat rooms, your notifications). It's
+     * open while something is subscribed: the app in front and signed in, or a chat room on screen.
+     */
+    val cable = CableConnection(
+        url = checkNotNull(GraphQLCable.realtimeUrl(configuration.baseUrl)) { "No realtime URL for ${configuration.baseUrl}" },
+        token = { session.sessionToken },
+    )
+
     /** Your notifications over the cable while the app is in front, shown in the app. */
     val notifications = InAppNotifications(
         scope = scope,
-        baseUrl = configuration.baseUrl,
-        token = { session.sessionToken },
+        cable = cable,
         audienceId = { api.client.audienceId() },
         onShown = { notification -> notification.ping?.let { pingUpdated(it.pingId) } },
     )
@@ -66,7 +75,7 @@ class AppGraph(context: Context, val configuration: AppConfiguration = AppConfig
 
     init {
         // A socket the server refused as unauthorized ends the session as a 401 does.
-        GraphQLCable.onUnauthorized = { token -> scope.launch { session.sessionRejected(token) } }
+        cable.onUnauthorized = { token -> scope.launch { session.sessionRejected(token) } }
         scope.launch {
             session.state.collect {
                 when (it) {
@@ -74,6 +83,7 @@ class AppGraph(context: Context, val configuration: AppConfiguration = AppConfig
                         passes.clear()
                         api.friends.clear()
                         notifications.clear()
+                        cable.disconnect()
                     }
                     AuthState.SignedIn -> if (isForeground) notifications.start()
                     else -> Unit

@@ -7,9 +7,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.takeWhile
 import kotlinx.coroutines.launch
-import social.hotmess.core.GraphQLCable
+import social.hotmess.core.CableConnection
 import social.hotmess.core.NotificationStreamConnection
 import social.hotmess.core.PushNotification
 import social.hotmess.core.RecentNotifications
@@ -21,12 +20,12 @@ import social.hotmess.core.RecentNotifications
  *
  * [HotMessApplication][social.hotmess.android.HotMessApplication] calls [setForeground] from the
  * process lifecycle and [start]/[stop] as the app comes and goes or the session signs in and out.
- * Reconnects after a drop with backoff, like a chat room.
+ * It's one subscription on the app's shared [CableConnection], which reconnects after a drop and runs
+ * it again.
  */
 class InAppNotifications(
     private val scope: CoroutineScope,
-    private val baseUrl: String,
-    private val token: () -> String?,
+    private val cable: CableConnection,
     private val audienceId: suspend () -> String?,
     /** Called on the main thread for each notification shown here (a Ping reloads Now). */
     private val onShown: (PushNotification) -> Unit,
@@ -49,20 +48,29 @@ class InAppNotifications(
     /** Subscribes, unless it already is. */
     fun start() {
         if (job?.isActive == true) return
-        val url = GraphQLCable.realtimeUrl(baseUrl) ?: return
         job = scope.launch {
+            // The audience comes over HTTP; keep asking until it does.
             var backoff = 1_000L
-            while (true) {
-                val audience = try {
+            var audience: String? = null
+            while (audience == null) {
+                audience = try {
                     audienceId()
                 } catch (e: CancellationException) {
                     throw e
                 } catch (_: Exception) {
                     null
                 }
-                if (audience != null) {
-                    var rejected = false
-                    NotificationStreamConnection(url, token(), audience).events().takeWhile { event ->
+                if (audience == null) {
+                    delay(backoff)
+                    backoff = (backoff * 2).coerceAtMost(30_000L)
+                }
+            }
+            backoff = 1_000L
+            while (true) {
+                var ended = false
+                try {
+                    // The cable reconnects and resubscribes on its own after a drop.
+                    NotificationStreamConnection(audience, cable).events().collect { event ->
                         when (event) {
                             NotificationStreamConnection.Event.Connected -> {
                                 live = true
@@ -70,14 +78,16 @@ class InAppNotifications(
                             }
                             is NotificationStreamConnection.Event.Received -> receive(event.notification)
                             is NotificationStreamConnection.Event.Disconnected -> live = false
-                            NotificationStreamConnection.Event.Rejected -> rejected = true
+                            NotificationStreamConnection.Event.Rejected -> live = false
+                            NotificationStreamConnection.Event.Ended -> ended = true
                         }
-                        !rejected
-                    }.collect {}
+                    }
+                } finally {
                     live = false
-                    // Signed out, or a server without the subscription: FCM alone until the app comes back.
-                    if (rejected) return@launch
                 }
+                // Refused (signed out, or a server without the subscription): FCM alone until the app comes
+                // back. Only an operation the server ended is subscribed again, after a while.
+                if (!ended) return@launch
                 delay(backoff)
                 backoff = (backoff * 2).coerceAtMost(30_000L)
             }

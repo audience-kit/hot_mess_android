@@ -43,7 +43,6 @@ import social.hotmess.android.ui.components.RichContent
 import social.hotmess.android.ui.components.RoomBanner
 import social.hotmess.android.ui.components.RoomBannerKind
 import social.hotmess.core.AppRoute
-import social.hotmess.core.ChatProtocol
 import social.hotmess.core.ChatRoom
 import social.hotmess.core.FriendDirectory
 import social.hotmess.core.RecordId
@@ -91,13 +90,13 @@ class VenueChatModel(private val graph: AppGraph, private val room: ChatRoom) : 
     private var job: Job? = null
     private var heartbeat: Job? = null
 
-    /** Connects while the screen is showing, reconnecting after a drop. */
+    /**
+     * Follows the room on the app's shared cable while the screen is showing. The cable reconnects after
+     * a drop and joins the room again on the same flow: offline until then, and ChatJoined refreshes the room.
+     * Only when the server ends the room's operation does this subscribe again itself, after a backoff.
+     */
     fun connect() {
         if (job?.isActive == true) return
-        val url = ChatProtocol.realtimeUrl(graph.configuration.baseUrl) ?: run {
-            _status.value = Status.OFFLINE
-            return
-        }
         if (heartbeat?.isActive != true) {
             heartbeat = viewModelScope.launch {
                 while (true) {
@@ -110,11 +109,11 @@ class VenueChatModel(private val graph: AppGraph, private val room: ChatRoom) : 
             _status.value = Status.CONNECTING
             // The server checks for a recent position at the venue (or in the locale) before letting anyone in.
             graph.location.reportAgain()
+            // The cable runs GraphQL for one audience: the configured one, the session's, or the host's.
             var backoff = 1_000L
-            while (true) {
-                _status.value = Status.CONNECTING
-                // The cable runs GraphQL for one audience: the configured one, the session's, or the host's.
-                val audienceId = try {
+            var audienceId: String? = null
+            while (audienceId == null) {
+                audienceId = try {
                     graph.api.client.audienceId()
                 } catch (e: CancellationException) {
                     throw e
@@ -125,11 +124,14 @@ class VenueChatModel(private val graph: AppGraph, private val room: ChatRoom) : 
                     _status.value = Status.OFFLINE
                     delay(backoff)
                     backoff = (backoff * 2).coerceAtMost(30_000L)
-                    continue
+                    _status.value = Status.CONNECTING
                 }
-                val current = VenueChatConnection(room, url, graph.session.sessionToken, audienceId)
+            }
+            backoff = 1_000L
+            while (true) {
                 var away = false
-                current.events().takeWhile { event ->
+                var ended = false
+                VenueChatConnection(room, audienceId, graph.cable).events().takeWhile { event ->
                     when (event) {
                         VenueChatConnection.Event.Connected -> {
                             _status.value = Status.CONNECTED
@@ -157,23 +159,28 @@ class VenueChatModel(private val graph: AppGraph, private val room: ChatRoom) : 
                         is VenueChatConnection.Event.Removed -> _messages.value = _messages.value.filterNot { it.id == event.id }
                         VenueChatConnection.Event.Cleared -> _messages.value = emptyList()
                         is VenueChatConnection.Event.Disconnected -> {
+                            // Reconnecting (or over): the next roster says who's here; until then nobody is known to be.
                             _status.value = Status.OFFLINE
-                            // The next roster says who's here; until then nobody is known to be.
                             _people.value = RoomPeople()
                             _reachable.value = emptySet()
                         }
+                        VenueChatConnection.Event.Ended -> ended = true
                         VenueChatConnection.Event.Rejected, VenueChatConnection.Event.Left -> away = true
                     }
                     !away
                 }.collect()
                 if (away) {
-                    // Reconnecting won't help until they're back; "Try again" reconnects.
+                    // Reconnecting won't help until they're back; "Try again" subscribes again.
                     _status.value = Status.AWAY
                     return@launch
                 }
                 _status.value = Status.OFFLINE
+                // Cable drops are the cable's to reconnect; only an operation the server ended is ours to
+                // start over. Anything else (signed out, refused) stays offline.
+                if (!ended) return@launch
                 delay(backoff)
                 backoff = (backoff * 2).coerceAtMost(30_000L)
+                _status.value = Status.CONNECTING
             }
         }
     }

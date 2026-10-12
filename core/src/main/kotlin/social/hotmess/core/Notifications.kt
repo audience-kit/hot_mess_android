@@ -1,13 +1,13 @@
 package social.hotmess.core
 
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.transform
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
-import okhttp3.OkHttpClient
 import java.time.Instant
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.locks.ReentrantLock
@@ -37,7 +37,7 @@ data class PushNotification(
 }
 
 /**
- * `myNotifications` on the [GraphQLCable]: one operation, no variables. Nothing arrives on subscribing
+ * `myNotifications` on the [CableConnection]: one operation, no variables. Nothing arrives on subscribing
  * (the first result, if any, has no data); every notification after is one result.
  */
 object NotificationProtocol {
@@ -116,47 +116,40 @@ object NotificationProtocol {
     private fun JsonObject.string(key: String): String? = (this[key] as? JsonPrimitive)?.contentOrNull?.takeIf { it.isNotBlank() }
 }
 
-/** A live `myNotifications` subscription, on its own socket, while collected. */
+/** A live `myNotifications` subscription on the app's [CableConnection], while collected. */
 class NotificationStreamConnection(
-    private val url: String,
-    private val token: String?,
     private val audienceId: String,
-    private val client: OkHttpClient = OkHttpClient(),
+    private val cable: CableConnection,
 ) {
     sealed interface Event {
         data object Connected : Event
         data class Received(val notification: PushNotification) : Event
         data object Rejected : Event
-        data class Disconnected(val reason: String?) : Event
+
+        /** The server ended the operation (`more: false`); the flow ends, and subscribing again starts it over. */
+        data object Ended : Event
+
+        /** The socket dropped; with [reconnects] it's reconnecting and [Connected] follows, else the flow ends. */
+        data class Disconnected(val reason: String?, val reconnects: Boolean) : Event
     }
 
-    fun events(): Flow<Event> = GraphQLCable.connect(
-        client,
-        url,
-        token,
-        audienceId,
-        execute = NotificationProtocol::execute,
-        onFrame = { envelope, emit ->
-            var open = true
-            for (frame in NotificationProtocol.frames(envelope)) {
+    /** Ends when refused, when the server ends the operation, or when the connection is refused. */
+    fun events(): Flow<Event> = cable.subscribe(audienceId, NotificationProtocol.DOCUMENT).transform { event ->
+        when (event) {
+            CableEvent.Subscribed -> emit(Event.Connected)
+            CableEvent.Rejected -> emit(Event.Rejected)
+            is CableEvent.Disconnected -> emit(Event.Disconnected(event.reason, event.reconnects))
+            is CableEvent.Result -> for (frame in NotificationProtocol.frames(event.result)) {
                 when (frame) {
                     NotificationProtocol.Frame.Subscribed -> emit(Event.Connected)
                     is NotificationProtocol.Frame.Notification -> emit(Event.Received(frame.notification))
-                    NotificationProtocol.Frame.Rejected -> {
-                        emit(Event.Rejected)
-                        open = false
-                    }
-                    NotificationProtocol.Frame.Disconnected -> emit(Event.Disconnected(null))
-                    NotificationProtocol.Frame.Ended -> {
-                        emit(Event.Disconnected(null))
-                        open = false
-                    }
+                    NotificationProtocol.Frame.Rejected -> emit(Event.Rejected)
+                    NotificationProtocol.Frame.Disconnected -> emit(Event.Disconnected(null, reconnects = true))
+                    NotificationProtocol.Frame.Ended -> emit(Event.Ended)
                 }
             }
-            open
-        },
-        onClosed = { reason, emit -> emit(Event.Disconnected(reason)) },
-    )
+        }
+    }
 }
 
 /**
