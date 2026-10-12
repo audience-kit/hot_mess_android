@@ -126,6 +126,9 @@ class NotificationStreamConnection(
         data class Received(val notification: PushNotification) : Event
         data object Rejected : Event
 
+        /** The server ended the operation (`more: false`); the flow ends, and subscribing again starts it over. */
+        data object Ended : Event
+
         /** The socket dropped; with [reconnects] it's reconnecting and [Connected] follows, else the flow ends. */
         data class Disconnected(val reason: String?, val reconnects: Boolean) : Event
     }
@@ -142,7 +145,7 @@ class NotificationStreamConnection(
                     is NotificationProtocol.Frame.Notification -> emit(Event.Received(frame.notification))
                     NotificationProtocol.Frame.Rejected -> emit(Event.Rejected)
                     NotificationProtocol.Frame.Disconnected -> emit(Event.Disconnected(null, reconnects = true))
-                    NotificationProtocol.Frame.Ended -> emit(Event.Disconnected(null, reconnects = false))
+                    NotificationProtocol.Frame.Ended -> emit(Event.Ended)
                 }
             }
         }

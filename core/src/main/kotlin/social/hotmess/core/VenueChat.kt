@@ -431,6 +431,12 @@ class VenueChatConnection(
         data class Disconnected(val reason: String?, val reconnects: Boolean) : Event
         data object Rejected : Event
         data object Left : Event
+
+        /**
+         * The server ended the room's operation (`more: false`) with no ChatLeft or refusal; the flow ends
+         * after it, and subscribing again starts the room over.
+         */
+        data object Ended : Event
         data class Range(val outOfRange: Boolean) : Event
 
         /** Everyone in the room now, by lowercase user id, and who they are and the viewer's friends. */
@@ -476,7 +482,7 @@ class VenueChatConnection(
                     ChatProtocol.Frame.Rejected -> emit(Event.Rejected)
                     ChatProtocol.Frame.Left -> emit(Event.Left)
                     // The server ended the room's operation; the cable ends the flow.
-                    ChatProtocol.Frame.Ended -> emit(Event.Disconnected(null, reconnects = false))
+                    ChatProtocol.Frame.Ended -> emit(Event.Ended)
                     is ChatProtocol.Frame.Message -> emit(Event.Received(frame.message))
                     is ChatProtocol.Frame.Range -> emit(Event.Range(frame.outOfRange))
                     is ChatProtocol.Frame.Roster -> emit(Event.Roster(frame.online, frame.people, frame.friends))

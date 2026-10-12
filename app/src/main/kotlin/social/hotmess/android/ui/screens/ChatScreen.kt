@@ -93,6 +93,7 @@ class VenueChatModel(private val graph: AppGraph, private val room: ChatRoom) : 
     /**
      * Follows the room on the app's shared cable while the screen is showing. The cable reconnects after
      * a drop and joins the room again on the same flow: offline until then, and ChatJoined refreshes the room.
+     * Only when the server ends the room's operation does this subscribe again itself, after a backoff.
      */
     fun connect() {
         if (job?.isActive == true) return
@@ -126,43 +127,61 @@ class VenueChatModel(private val graph: AppGraph, private val room: ChatRoom) : 
                     _status.value = Status.CONNECTING
                 }
             }
-            var away = false
-            VenueChatConnection(room, audienceId, graph.cable).events().takeWhile { event ->
-                when (event) {
-                    VenueChatConnection.Event.Connected -> _status.value = Status.CONNECTED
-                    is VenueChatConnection.Event.Received -> receive(event.message)
-                    is VenueChatConnection.Event.Range -> _outOfRange.value = event.outOfRange
-                    is VenueChatConnection.Event.Roster -> {
-                        // All the viewer's friends, by full name, so the room and its lines show them that way.
-                        graph.api.friends.record(event.friends)
-                        _people.value = _people.value.roster(event.online, event.people)
-                    }
-                    is VenueChatConnection.Event.PresenceChanged -> {
-                        _people.value = if (event.online) {
-                            _people.value.joined(event.userId, event.name, event.avatarUrl)
-                        } else {
-                            _people.value.left(event.userId)
+            backoff = 1_000L
+            while (true) {
+                var away = false
+                var ended = false
+                VenueChatConnection(room, audienceId, graph.cable).events().takeWhile { event ->
+                    when (event) {
+                        VenueChatConnection.Event.Connected -> {
+                            _status.value = Status.CONNECTED
+                            backoff = 1_000L
                         }
-                        val id = event.userId.lowercase()
-                        _reachable.value = if (event.reachable) _reachable.value + id else _reachable.value - id
+                        is VenueChatConnection.Event.Received -> receive(event.message)
+                        is VenueChatConnection.Event.Range -> _outOfRange.value = event.outOfRange
+                        is VenueChatConnection.Event.Roster -> {
+                            // All the viewer's friends, by full name, so the room and its lines show them that way.
+                            graph.api.friends.record(event.friends)
+                            _people.value = _people.value.roster(event.online, event.people)
+                        }
+                        is VenueChatConnection.Event.PresenceChanged -> {
+                            _people.value = if (event.online) {
+                                _people.value.joined(event.userId, event.name, event.avatarUrl)
+                            } else {
+                                _people.value.left(event.userId)
+                            }
+                            val id = event.userId.lowercase()
+                            _reachable.value = if (event.reachable) _reachable.value + id else _reachable.value - id
+                        }
+                        is VenueChatConnection.Event.History -> history(event.messages, event.pinned)
+                        is VenueChatConnection.Event.Pin -> pin(event.id, event.announcement)
+                        // An admin removed a line, or cleared the room; a pinned announcement goes with its line.
+                        is VenueChatConnection.Event.Removed -> _messages.value = _messages.value.filterNot { it.id == event.id }
+                        VenueChatConnection.Event.Cleared -> _messages.value = emptyList()
+                        is VenueChatConnection.Event.Disconnected -> {
+                            // Reconnecting (or over): the next roster says who's here; until then nobody is known to be.
+                            _status.value = Status.OFFLINE
+                            _people.value = RoomPeople()
+                            _reachable.value = emptySet()
+                        }
+                        VenueChatConnection.Event.Ended -> ended = true
+                        VenueChatConnection.Event.Rejected, VenueChatConnection.Event.Left -> away = true
                     }
-                    is VenueChatConnection.Event.History -> history(event.messages, event.pinned)
-                    is VenueChatConnection.Event.Pin -> pin(event.id, event.announcement)
-                    // An admin removed a line, or cleared the room; a pinned announcement goes with its line.
-                    is VenueChatConnection.Event.Removed -> _messages.value = _messages.value.filterNot { it.id == event.id }
-                    VenueChatConnection.Event.Cleared -> _messages.value = emptyList()
-                    is VenueChatConnection.Event.Disconnected -> {
-                        // Reconnecting (or over): the next roster says who's here; until then nobody is known to be.
-                        _status.value = Status.OFFLINE
-                        _people.value = RoomPeople()
-                        _reachable.value = emptySet()
-                    }
-                    VenueChatConnection.Event.Rejected, VenueChatConnection.Event.Left -> away = true
+                    !away
+                }.collect()
+                if (away) {
+                    // Reconnecting won't help until they're back; "Try again" subscribes again.
+                    _status.value = Status.AWAY
+                    return@launch
                 }
-                !away
-            }.collect()
-            // Reconnecting won't help until they're back; "Try again" subscribes again.
-            _status.value = if (away) Status.AWAY else Status.OFFLINE
+                _status.value = Status.OFFLINE
+                // Cable drops are the cable's to reconnect; only an operation the server ended is ours to
+                // start over. Anything else (signed out, refused) stays offline.
+                if (!ended) return@launch
+                delay(backoff)
+                backoff = (backoff * 2).coerceAtMost(30_000L)
+                _status.value = Status.CONNECTING
+            }
         }
     }
 

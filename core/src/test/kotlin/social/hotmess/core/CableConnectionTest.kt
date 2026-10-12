@@ -310,3 +310,63 @@ class CableConnectionTest {
         assertFalse(cable.isActive)
     }
 }
+
+@OptIn(ExperimentalCoroutinesApi::class)
+class OperationEndTest {
+    private class FakeSocket(val listener: CableSocket.Listener) : CableSocket {
+        val sent = mutableListOf<String>()
+        override fun send(text: String): Boolean = sent.add(text)
+        override fun close(code: Int, reason: String?) = Unit
+    }
+
+    private class FakeFactory : CableSocketFactory {
+        val sockets = mutableListOf<FakeSocket>()
+        override fun open(url: String, token: String?, listener: CableSocket.Listener): CableSocket =
+            FakeSocket(listener).also { sockets += it }
+    }
+
+    /** Subscribes [flow], welcomes and confirms it, then has the server send [message] on it. */
+    private fun <T> TestScope.endWith(flow: (CableConnection) -> Flow<T>, message: String): Pair<List<T>, Job> {
+        val factory = FakeFactory()
+        val cable = CableConnection("wss://example.test/connection", { "t" }, factory, backgroundScope)
+        val events = mutableListOf<T>()
+        val job = backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { flow(cable).toList(events) }
+        runCurrent()
+        val socket = factory.sockets.single()
+        socket.listener.onMessage("""{"type":"welcome"}""")
+        val identifier = Json.parseToJsonElement(socket.sent.single()).jsonObject["identifier"]!!.jsonPrimitive.content
+        val quoted = JsonPrimitive(identifier).toString()
+        socket.listener.onMessage("""{"type":"confirm_subscription","identifier":$quoted}""")
+        socket.listener.onMessage("""{"identifier":$quoted,"message":$message}""")
+        runCurrent()
+        return events to job
+    }
+
+    @Test
+    fun aRoomTheServerEndedSaysSo() = runTest {
+        val room = ChatRoom.venue("b0f8b66a-e636-495d-9475-0f5317ea08e0")
+        val (events, job) = endWith({ VenueChatConnection(room, "AUDIENCE", it).events() }, """{"result":{"data":null},"more":false}""")
+        assertEquals(listOf<VenueChatConnection.Event>(VenueChatConnection.Event.Ended), events)
+        assertTrue(job.isCompleted)
+
+        // Leaving the room isn't an end to start over.
+        val (left, _) = endWith(
+            { VenueChatConnection(room, "AUDIENCE", it).events() },
+            """{"result":{"data":{"venueChat":{"__typename":"ChatLeft","reason":"BANNED"}}},"more":false}""",
+        )
+        assertEquals(VenueChatConnection.Event.Left, left.first())
+    }
+
+    @Test
+    fun notificationsTheServerEndedSaySo() = runTest {
+        val (events, job) = endWith({ NotificationStreamConnection("AUDIENCE", it).events() }, """{"result":{"data":null},"more":false}""")
+        assertEquals(listOf(NotificationStreamConnection.Event.Connected, NotificationStreamConnection.Event.Ended), events)
+        assertTrue(job.isCompleted)
+
+        val (refused, _) = endWith(
+            { NotificationStreamConnection("AUDIENCE", it).events() },
+            """{"result":{"errors":[{"message":"Sign in required"}]},"more":false}""",
+        )
+        assertEquals(NotificationStreamConnection.Event.Rejected, refused.last(), "a refusal isn't an end to start over")
+    }
+}

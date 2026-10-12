@@ -65,20 +65,31 @@ class InAppNotifications(
                     backoff = (backoff * 2).coerceAtMost(30_000L)
                 }
             }
-            try {
-                // The cable reconnects and resubscribes on its own; the flow ends only when refused (signed
-                // out, or a server without the subscription) or ended, and then it's FCM alone until the app
-                // comes back.
-                NotificationStreamConnection(audience, cable).events().collect { event ->
-                    when (event) {
-                        NotificationStreamConnection.Event.Connected -> live = true
-                        is NotificationStreamConnection.Event.Received -> receive(event.notification)
-                        is NotificationStreamConnection.Event.Disconnected -> live = false
-                        NotificationStreamConnection.Event.Rejected -> live = false
+            backoff = 1_000L
+            while (true) {
+                var ended = false
+                try {
+                    // The cable reconnects and resubscribes on its own after a drop.
+                    NotificationStreamConnection(audience, cable).events().collect { event ->
+                        when (event) {
+                            NotificationStreamConnection.Event.Connected -> {
+                                live = true
+                                backoff = 1_000L
+                            }
+                            is NotificationStreamConnection.Event.Received -> receive(event.notification)
+                            is NotificationStreamConnection.Event.Disconnected -> live = false
+                            NotificationStreamConnection.Event.Rejected -> live = false
+                            NotificationStreamConnection.Event.Ended -> ended = true
+                        }
                     }
+                } finally {
+                    live = false
                 }
-            } finally {
-                live = false
+                // Refused (signed out, or a server without the subscription): FCM alone until the app comes
+                // back. Only an operation the server ended is subscribed again, after a while.
+                if (!ended) return@launch
+                delay(backoff)
+                backoff = (backoff * 2).coerceAtMost(30_000L)
             }
         }
     }
