@@ -54,7 +54,7 @@ class ModelDecodingTest {
 
         assertEquals("DJ Glitter", person.name)
         assertEquals(SocialLink.Network.INSTAGRAM, person.socialLinks.single().network)
-        assertEquals("https://facebook.com/99", person.person.facebookUrl, "the Page comes through the profile facet")
+        assertEquals("https://facebook.com/99", person.person.facebookUrl, "the Page comes through the profile mixin")
         assertFalse(person.isLiked)
         assertEquals("Late Night", person.tracks.single().title)
         assertEquals(1, person.events.size)
@@ -620,9 +620,9 @@ class FormattingTest {
 
     @Test
     fun eventSubtitleJoinsWithAMiddleDot() {
-        val event = Event(id = "e", startAt = Instant.parse("2026-10-10T04:00:00Z"), venueFacet = EventVenueFacet(Venue(id = "v", name = "The Wildrose")))
+        val event = Event(id = "e", startAt = Instant.parse("2026-10-10T04:00:00Z"), venueMixin = EventVenueMixin(Venue(id = "v", name = "The Wildrose")))
         assertEquals("Fri 9pm · The Wildrose", Formatting.eventSubtitle(event, zone, Locale.US))
-        assertEquals("Fri 9pm · To be announced", Formatting.eventSubtitle(event.copy(venueFacet = null), zone, Locale.US))
+        assertEquals("Fri 9pm · To be announced", Formatting.eventSubtitle(event.copy(venueMixin = null), zone, Locale.US))
     }
 
     @Test
