@@ -33,7 +33,7 @@ class NotificationProtocolTest {
         val query = data["query"]!!.jsonPrimitive.content
         assertTrue(query.startsWith("subscription MyNotifications"), query)
         assertTrue(query.contains("myNotifications {"), query)
-        listOf("notificationId", "title", "body", "category", "data", "sentAt").forEach { assertTrue(query.contains(it), it) }
+        listOf("notificationId", "title", "body", "category", "url", "data", "sentAt").forEach { assertTrue(query.contains(it), it) }
     }
 
     @Test
@@ -41,7 +41,9 @@ class NotificationProtocolTest {
         val text = """
             {"identifier":"x","message":{"result":{"data":{"myNotifications":{
               "notificationId":"n-42","title":"Sam pinged","body":"Out at The Lounge","category":"PING",
-              "data":{"kind":"ping","ping_id":"p-1","notification_id":"n-42","count":3},
+              "url":"https://hotmess.social/pings/0f4e8c2a-7b1d-4c3e-9a5f-2d6b8e1c4a7f",
+              "data":{"kind":"ping","ping_id":"0f4e8c2a-7b1d-4c3e-9a5f-2d6b8e1c4a7f","notification_id":"n-42","count":3,
+                "url":"https://hotmess.social/pings/0f4e8c2a-7b1d-4c3e-9a5f-2d6b8e1c4a7f"},
               "sentAt":"2026-10-11T22:15:00.123Z"}}},"more":true}}
         """.trimIndent()
         val frames = NotificationProtocol.parse(text)
@@ -53,16 +55,29 @@ class NotificationProtocolTest {
         assertEquals("PING", notification.category)
         assertEquals(Instant.parse("2026-10-11T22:15:00.123Z"), notification.sentAt)
         assertEquals("3", notification.data["count"], "non-string data reads as FCM's strings")
-        assertEquals(PingPush(PingPush.Kind.PING, "p-1"), notification.ping)
+        assertEquals(AppRoute.NowPing("0f4e8c2a-7b1d-4c3e-9a5f-2d6b8e1c4a7f"), notification.route, "routed on url")
+        assertEquals(PingPush("0f4e8c2a-7b1d-4c3e-9a5f-2d6b8e1c4a7f", "ping"), notification.ping)
+    }
+
+    @Test
+    fun theUrlIsPutInTheDataAsFcmCarriesIt() {
+        val url = "https://hotmess.social/pings/0f4e8c2a-7b1d-4c3e-9a5f-2d6b8e1c4a7f"
+        val fromField = NotificationProtocol.notification(json.parseToJsonElement("""{"notificationId":"n-9","url":"$url","data":{}}""").jsonObject)!!
+        assertEquals(url, fromField.data[PingPush.URL])
+        assertEquals("0f4e8c2a-7b1d-4c3e-9a5f-2d6b8e1c4a7f", fromField.ping?.pingId)
+
+        val fromData = NotificationProtocol.notification(json.parseToJsonElement("""{"notificationId":"n-10","data":{"url":"$url"}}""").jsonObject)!!
+        assertEquals(url, fromData.url)
+        assertEquals(AppRoute.NowPing("0f4e8c2a-7b1d-4c3e-9a5f-2d6b8e1c4a7f"), fromData.route)
     }
 
     @Test
     fun takesTheIdFromItsDataAndPutsItThere() {
         val fromData = NotificationProtocol.notification(
-            json.parseToJsonElement("""{"data":"{\"kind\":\"ping_join\",\"notification_id\":\"n-7\"}"}""").jsonObject,
+            json.parseToJsonElement("""{"data":"{\"kind\":\"ping_join\",\"ping_id\":\"p-7\",\"notification_id\":\"n-7\"}"}""").jsonObject,
         )!!
         assertEquals("n-7", fromData.notificationId)
-        assertEquals(PingPush(PingPush.Kind.PING_JOIN, null), fromData.ping)
+        assertEquals(PingPush("p-7", "ping_join"), fromData.ping)
 
         val fromField = NotificationProtocol.notification(json.parseToJsonElement("""{"notificationId":"n-8","data":{}}""").jsonObject)!!
         assertEquals("n-8", fromField.data[PushNotification.NOTIFICATION_ID])

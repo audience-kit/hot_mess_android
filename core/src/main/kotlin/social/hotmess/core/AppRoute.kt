@@ -27,7 +27,8 @@ sealed interface AppRoute {
 object DeepLink {
     /**
      * Reads `hotmess://venues/<uuid>` (the type is the host) and
-     * `https://hotmess.social/venues/<uuid>`; likewise `events` and `people`.
+     * `https://hotmess.social/venues/<uuid>`; likewise `events`, `people` and `pings` (a Ping opens Now).
+     * Pushes carry such a URL in `url`, which is what the app routes on.
      */
     fun route(url: String): AppRoute? {
         val uri = runCatching { URI(url) }.getOrNull() ?: return null
@@ -44,6 +45,7 @@ object DeepLink {
             "venues" -> AppRoute.VenueDetail(id)
             "events" -> AppRoute.EventDetail(id)
             "people" -> AppRoute.PersonDetail(id)
+            "pings" -> AppRoute.NowPing(id)
             else -> null
         }
     }

@@ -15,7 +15,7 @@ import kotlin.concurrent.withLock
 
 /**
  * A notification sent to you, as `Subscription.myNotifications` delivers it while the app is open: the
- * same one FCM delivers, with the same [notificationId] in both copies' [data] (alongside `kind` and
+ * same one FCM delivers, with the same [notificationId] in both copies' [data] (alongside `url`, `kind` and
  * `ping_id`), so the app shows one and drops the other.
  */
 data class PushNotification(
@@ -23,10 +23,15 @@ data class PushNotification(
     val title: String? = null,
     val body: String? = null,
     val category: String? = null,
-    /** What the app acts on (`kind`, `ping_id`, `notification_id`), as strings, like FCM's data map. */
+    /** The route the app opens for it (`https://hotmess.social/pings/<id>`); the data carries it too. */
+    val url: String? = null,
+    /** What the app acts on (`url`, `ping_id`, `notification_id`; `kind` for analytics), as strings, like FCM's data map. */
     val data: Map<String, String> = emptyMap(),
     val sentAt: Instant? = null,
 ) {
+    /** The screen it opens, from its [url]; null when the URL is missing or not one of the app's. */
+    val route: AppRoute? get() = url?.let(DeepLink::route)
+
     /** The Ping it's about, routed as a tapped FCM notification is, or null for anything else. */
     val ping: PingPush? get() = PingPush.parse(data)
 
@@ -47,7 +52,7 @@ object NotificationProtocol {
     }
 
     const val DOCUMENT: String =
-        "subscription MyNotifications { myNotifications { notificationId title body category data sentAt } }"
+        "subscription MyNotifications { myNotifications { notificationId title body category url data sentAt } }"
 
     fun execute(identifier: String): String = GraphQLCable.execute(identifier, DOCUMENT)
 
@@ -85,13 +90,15 @@ object NotificationProtocol {
     fun notification(event: JsonObject): PushNotification? {
         val data = dataMap(event["data"])
         val id = event.string("notificationId") ?: data[PushNotification.NOTIFICATION_ID] ?: return null
+        val url = event.string("url") ?: data[PingPush.URL]
         return PushNotification(
             notificationId = id,
             title = event.string("title"),
             body = event.string("body"),
             category = event.string("category"),
-            // The id is in the data as FCM's copy has it, whichever way it came.
-            data = data + (PushNotification.NOTIFICATION_ID to id),
+            url = url,
+            // The id and URL are in the data as FCM's copy has them, whichever way they came.
+            data = data + (PushNotification.NOTIFICATION_ID to id) + listOfNotNull(url?.let { PingPush.URL to it }),
             sentAt = event.string("sentAt")?.let(InstantSerializer::parse),
         )
     }

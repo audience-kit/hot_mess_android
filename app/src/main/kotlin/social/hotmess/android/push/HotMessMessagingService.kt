@@ -15,14 +15,17 @@ import com.google.firebase.messaging.RemoteMessage
 import social.hotmess.android.MainActivity
 import social.hotmess.android.R
 import social.hotmess.android.appGraph
+import social.hotmess.core.AppRoute
+import social.hotmess.core.DeepLink
 import social.hotmess.core.PingPush
 import social.hotmess.core.PushNotification
 
 /**
  * Firebase hands new tokens here. In the background Firebase shows notifications itself, and tapping
- * one opens [MainActivity] with the message's data (`kind`, `ping_id`) as extras. In the foreground
- * Firebase shows nothing, so a Ping push is shown here, with the same extras, and Now reloads, unless
- * the same notification (by `notification_id`) came over the cable and [InAppNotifications] showed it.
+ * one opens [MainActivity] with the message's data (`url`, `ping_id`; `kind` for analytics) as extras. In the
+ * foreground Firebase shows nothing, so a push whose `url` the app routes is shown here, with the same extras,
+ * and a Ping's reloads Now, unless the same notification (by `notification_id`) came over the cable and
+ * [InAppNotifications] showed it.
  */
 class HotMessMessagingService : FirebaseMessagingService() {
     override fun onNewToken(token: String) {
@@ -31,11 +34,13 @@ class HotMessMessagingService : FirebaseMessagingService() {
     }
 
     override fun onMessageReceived(message: RemoteMessage) {
-        val push = PingPush.parse(message.data) ?: return
+        val route = message.data[PingPush.URL]?.let(DeepLink::route)
+            ?: PingPush.parse(message.data)?.let { AppRoute.NowPing(it.pingId) }
+            ?: return
         val graph = applicationContext.appGraph
         // The in-app copy was shown (and reloaded Now) already, or gets a moment to be: drop this one.
         if (!graph.notifications.shouldPostSystemCopy(message.data[PushNotification.NOTIFICATION_ID])) return
-        graph.pingUpdated(push.pingId)
+        if (route is AppRoute.NowPing) graph.pingUpdated(route.pingId)
         val notification = message.notification ?: return
         show(applicationContext, notification.title, notification.body, message.data)
     }
@@ -54,7 +59,7 @@ class HotMessMessagingService : FirebaseMessagingService() {
             val open = Intent(context, MainActivity::class.java)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
             data.forEach { (key, value) -> open.putExtra(key, value) }
-            val id = data[PingPush.PING_ID]?.hashCode() ?: 0
+            val id = (data[PingPush.URL] ?: data[PingPush.PING_ID])?.hashCode() ?: 0
             val tap = PendingIntent.getActivity(context, id, open, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
 
             val notification = NotificationCompat.Builder(context, PING_CHANNEL)

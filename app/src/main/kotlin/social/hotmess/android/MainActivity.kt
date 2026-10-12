@@ -75,11 +75,11 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun handle(intent: Intent?) {
-        // A tapped Ping push: Firebase's own notification or ours both carry its data as extras.
+        // A tapped push: Firebase's own notification or ours both carry its data (`url` and friends) as extras.
         val extras = intent?.extras
         if (intent != null && extras != null) {
-            if (openPush(listOf(PingPush.KIND, PingPush.PING_ID).associateWith { extras.getString(it) })) {
-                intent.removeExtra(PingPush.KIND)
+            if (openPush(PingPush.KEYS.associateWith { extras.getString(it) })) {
+                PingPush.KEYS.forEach { intent.removeExtra(it) }
                 return
             }
         }
@@ -88,11 +88,17 @@ class MainActivity : ComponentActivity() {
         DeepLink.route(url)?.let { links.trySend(it) }
     }
 
-    /** Opens a push by its data (`kind`, `ping_id`): a Ping goes to Now, which reloads. False for anything else. */
+    /**
+     * Opens a push by its data: the `url` it carries is the route (a Ping's goes to Now, which reloads). `kind`
+     * is analytics only and never decides anything. False when the data has no route the app knows.
+     */
     private fun openPush(data: Map<String, String?>): Boolean {
-        val push = PingPush.parse(data) ?: return false
-        graph.pingUpdated(push.pingId)
-        links.trySend(AppRoute.NowPing(push.pingId))
+        val route = data[PingPush.URL]?.let(DeepLink::route)
+            // A push from before `url` was sent still names its Ping.
+            ?: PingPush.parse(data)?.let { AppRoute.NowPing(it.pingId) }
+            ?: return false
+        if (route is AppRoute.NowPing) graph.pingUpdated(route.pingId)
+        links.trySend(route)
         return true
     }
 }

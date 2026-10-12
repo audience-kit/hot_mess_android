@@ -22,6 +22,7 @@ import social.hotmess.android.session.AuthState
 import social.hotmess.android.session.BrandStore
 import social.hotmess.android.session.SessionStore
 import social.hotmess.android.support.ErrorReporter
+import social.hotmess.core.AppRoute
 import social.hotmess.core.CableConnection
 import social.hotmess.core.GraphQLCable
 import social.hotmess.core.HotMessApi
@@ -60,7 +61,7 @@ class AppGraph(context: Context, val configuration: AppConfiguration = AppConfig
         scope = scope,
         cable = cable,
         audienceId = { api.client.audienceId() },
-        onShown = { notification -> notification.ping?.let { pingUpdated(it.pingId) } },
+        onShown = { notification -> (notification.route as? AppRoute.NowPing)?.let { pingUpdated(it.pingId) } },
     )
 
     /** Whether the app is on screen, from the process lifecycle. */
