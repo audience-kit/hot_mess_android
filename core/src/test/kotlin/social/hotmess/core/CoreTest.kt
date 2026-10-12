@@ -190,12 +190,11 @@ class DeepLinkTest {
 
 class ChatProtocolTest {
     @Test
-    fun onlyAConnectionRefusedAsUnauthorizedEndsTheSession() {
-        assertTrue(GraphQLCable.isUnauthorizedDisconnect("""{"type":"disconnect","reason":"unauthorized","reconnect":false}"""))
-        assertFalse(GraphQLCable.isUnauthorizedDisconnect("""{"type":"disconnect","reason":"server_restart","reconnect":true}"""))
-        assertFalse(GraphQLCable.isUnauthorizedDisconnect("""{"type":"reject_subscription","identifier":"{}"}"""))
-        assertFalse(GraphQLCable.isUnauthorizedDisconnect("""{"type":"ping","message":1791691200}"""))
-        assertFalse(GraphQLCable.isUnauthorizedDisconnect("not json"))
+    fun buildsTheIdentifierWithSortedKeys() {
+        assertEquals(
+            """{"audience_id":"a0f8b66a-e636-495d-9475-0f5317ea08e0","channel":"GraphQLChannel","channelId":"c-1"}""",
+            GraphQLCable.identifier("A0F8B66A-E636-495D-9475-0F5317EA08E0", "c-1"),
+        )
     }
 
     private val venue = "b0f8b66a-e636-495d-9475-0f5317ea08e0"
