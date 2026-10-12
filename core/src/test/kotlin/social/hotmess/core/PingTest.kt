@@ -262,8 +262,8 @@ class PingApiTest {
     @Test
     fun withoutAPositionNowStillHasPings() = runTest {
         val (api, bodies) = api(
-            "query MyPing" to """{"data":{"audience":{"ping":{"myPing":${PingFixtures.MY_PING}}}}}""",
-            "query FriendPings" to """{"data":{"audience":{"ping":{"friendPings":[${PingFixtures.FRIEND_PING}]}}}}""",
+            "query MyPing" to """{"data":{"ping":{"myPing":${PingFixtures.MY_PING}}}}""",
+            "query FriendPings" to """{"data":{"ping":{"friendPings":[${PingFixtures.FRIEND_PING}]}}}""",
         )
         val now = api.nowOrPings(null)
         assertEquals("p-mine", now.myPing?.id)
@@ -334,8 +334,8 @@ class PingApiTest {
     @Test
     fun queriesPingsWithoutReportingLocation() = runTest {
         val (api, _) = api(
-            "query MyPing" to """{"data":{"audience":{"ping":{"myPing":null}}}}""",
-            "query FriendPings" to """{"data":{"audience":{"ping":{"friendPings":[${PingFixtures.FRIEND_PING}]}}}}""",
+            "query MyPing" to """{"data":{"ping":{"myPing":null}}}""",
+            "query FriendPings" to """{"data":{"ping":{"friendPings":[${PingFixtures.FRIEND_PING}]}}}""",
         )
         assertNull(api.myPing())
         assertEquals(1, api.friendPings().size)

@@ -432,28 +432,28 @@ private data class ReportLocationResponse(val reportLocation: LocationReport)
 
 /**
  * What reportLocation says about where the user is: the [venue] they're in, else their [locale] and its
- * [nearbyVenues]. Friends, events and Pings come from those objects' facets; [now] shapes it all for the
+ * [nearbyVenues]. Friends, events and Pings come from those objects' mixins; [now] shapes it all for the
  * Now screen, with the title and hero taken from the venue or the locale.
  */
 @Serializable
 private data class LocationReport(
-    /** Read twice: as the [Venue] and for its [VenueFacets]. */
+    /** Read twice: as the [Venue] and for its [VenueMixins]. */
     val venue: JsonObject? = null,
     val nearbyVenues: List<Venue>? = null,
     val locale: LocaleNode? = null,
     val audience: AudienceNode? = null,
 ) {
     @Serializable
-    data class VenueFacets(val events: UpcomingEvents? = null, val friends: FriendsFacet? = null)
+    data class VenueMixins(val events: UpcomingEvents? = null, val friends: FriendsMixin? = null)
 
     @Serializable
     data class LocaleNode(
         val id: String,
         val name: String? = null,
         @Serializable(with = BlankAsNullSerializer::class) val heroUrl: String? = null,
-        val chat: ChatFacet? = null,
+        val chat: ChatMixin? = null,
         val events: UpcomingEvents? = null,
-        val friends: FriendsFacet? = null,
+        val friends: FriendsMixin? = null,
     )
 
     @Serializable
@@ -468,14 +468,14 @@ private data class LocationReport(
         val ping = audience?.ping
         if (node != null) {
             val place = json.decodeFromJsonElement(Venue.serializer(), node)
-            val facets = json.decodeFromJsonElement(VenueFacets.serializer(), node)
+            val mixins = json.decodeFromJsonElement(VenueMixins.serializer(), node)
             return Now(
                 title = place.name,
                 imageUrl = place.heroUrl,
                 venue = place,
                 venues = nearbyVenues,
-                events = facets.events?.events.orEmpty(),
-                friends = facets.friends?.list.orEmpty(),
+                events = mixins.events?.events.orEmpty(),
+                friends = mixins.friends?.list.orEmpty(),
                 locale = nowLocale,
                 myPing = ping?.myPing,
                 friendPings = ping?.friendPings.orEmpty(),
@@ -513,12 +513,11 @@ private data class MeResponse(val me: Me? = null) {
 private data class ClosestLocaleResponse(val closestLocale: LocaleSummary? = null)
 
 @Serializable
-private data class VenuesResponse(val audience: Audience) {
-    @Serializable data class Audience(val venues: VenuesFacet? = null)
-    @Serializable data class VenuesFacet(val list: Nodes<Venue> = Nodes())
+private data class VenuesResponse(@SerialName("venues") val venuesMixin: VenuesMixin? = null) {
+    @Serializable data class VenuesMixin(val list: Nodes<Venue> = Nodes())
 
-    /** `audience { venues { list { nodes } } }`; a missing venues facet reads as none. */
-    val venues: List<Venue> get() = audience.venues?.list?.nodes.orEmpty()
+    /** `venues { list { nodes } }` on the root, the audience; a missing venues mixin reads as none. */
+    val venues: List<Venue> get() = venuesMixin?.list?.nodes.orEmpty()
 }
 
 /** A connection's `nodes`. */
@@ -536,11 +535,11 @@ private data class VenueNode(
     @Serializable(with = BlankAsNullSerializer::class) val heroUrl: String? = null,
     val point: String? = null,
     val profile: ListingProfile? = null,
-    val chat: ChatFacet? = null,
-    val tickets: VenueTicketsFacet? = null,
-    @SerialName("events") val eventsFacet: UpcomingEvents? = null,
-    val friends: FriendsFacet? = null,
-    val ping: PingFeedFacet? = null,
+    val chat: ChatMixin? = null,
+    val tickets: VenueTicketsMixin? = null,
+    @SerialName("events") val eventsMixin: UpcomingEvents? = null,
+    val friends: FriendsMixin? = null,
+    val ping: PingFeedMixin? = null,
 ) {
     val friendPings: List<Ping> get() = ping?.friendPings.orEmpty()
 
@@ -557,7 +556,7 @@ private data class VenueNode(
         tickets = tickets,
     )
 
-    val events: List<Event> get() = eventsFacet?.events.orEmpty()
+    val events: List<Event> get() = eventsMixin?.events.orEmpty()
 }
 
 @Serializable
@@ -569,12 +568,11 @@ private data class VenueResponse(val venues: Venues? = null) {
 }
 
 @Serializable
-private data class PeopleResponse(val audience: Audience) {
-    @Serializable data class Audience(@SerialName("people") val peopleFacet: PeopleFacet? = null)
-    @Serializable data class PeopleFacet(val list: Nodes<Person> = Nodes())
+private data class PeopleResponse(@SerialName("people") val peopleMixin: PeopleMixin? = null) {
+    @Serializable data class PeopleMixin(val list: Nodes<Person> = Nodes())
 
-    /** `audience { people { list { nodes } } }`; a missing people facet reads as none. */
-    val people: List<Person> get() = audience.peopleFacet?.list?.nodes.orEmpty()
+    /** `people { list { nodes } }` on the root, the audience; a missing people mixin reads as none. */
+    val people: List<Person> get() = peopleMixin?.list?.nodes.orEmpty()
 }
 
 @Serializable
@@ -587,8 +585,8 @@ private data class PersonResponse(val people: People? = null) {
 
 @Serializable
 private data class LocaleEventsResponse(val locale: Locale? = null) {
-    @Serializable data class Locale(@SerialName("events") val eventsFacet: UpcomingEvents? = null) {
-        val events: List<Event> get() = eventsFacet?.events.orEmpty()
+    @Serializable data class Locale(@SerialName("events") val eventsMixin: UpcomingEvents? = null) {
+        val events: List<Event> get() = eventsMixin?.events.orEmpty()
     }
 }
 
@@ -601,21 +599,20 @@ private data class EventResponse(val events: Events? = null) {
 }
 
 @Serializable
-private data class MyPingResponse(val audience: AudiencePings) {
-    /** `audience { ping { myPing } }`. */
-    val myPing: Ping? get() = audience.ping?.myPing
+private data class MyPingResponse(val ping: AudiencePings? = null) {
+    /** `ping { myPing }` on the root, the audience. */
+    val myPing: Ping? get() = ping?.myPing
 }
 
 @Serializable
-private data class FriendPingsResponse(val audience: AudiencePings) {
-    /** `audience { ping { friendPings } }`; a missing ping facet reads as none. */
-    val friendPings: List<Ping> get() = audience.ping?.friendPings.orEmpty()
+private data class FriendPingsResponse(val ping: AudiencePings? = null) {
+    /** `ping { friendPings }` on the root, the audience; a missing ping mixin reads as none. */
+    val friendPings: List<Ping> get() = ping?.friendPings.orEmpty()
 }
 
+/** The audience's ping mixin: the user's own Ping and friends' active ones. */
 @Serializable
-private data class AudiencePings(val ping: Pings? = null) {
-    @Serializable data class Pings(val myPing: Ping? = null, val friendPings: List<Ping> = emptyList())
-}
+private data class AudiencePings(val myPing: Ping? = null, val friendPings: List<Ping> = emptyList())
 
 @Serializable
 private data class PingPayload(val ping: Ping)

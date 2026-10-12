@@ -62,7 +62,7 @@ class CoverFormattingTest {
 }
 
 class CoverOfferTest {
-    private val venue = Venue(id = "v-1", name = "The Wildrose", tickets = VenueTicketsFacet(VenueCoverFacet(charge = tonight)))
+    private val venue = Venue(id = "v-1", name = "The Wildrose", tickets = VenueTicketsMixin(VenueCoverMixin(charge = tonight)))
 
     @Test
     fun aPayableCoverCanBePaid() {
@@ -72,16 +72,16 @@ class CoverOfferTest {
 
     @Test
     fun anotherCoverIsPaidAtTheDoor() {
-        assertEquals(CoverAction.PAY_AT_DOOR, CoverOffer.of(venue.copy(tickets = VenueTicketsFacet(VenueCoverFacet(charge = tonight.copy(payable = false)))))?.action)
+        assertEquals(CoverAction.PAY_AT_DOOR, CoverOffer.of(venue.copy(tickets = VenueTicketsMixin(VenueCoverMixin(charge = tonight.copy(payable = false)))))?.action)
     }
 
     @Test
     fun aPaidPassIsShownInstead() {
-        val offer = CoverOffer.of(venue.copy(tickets = VenueTicketsFacet(VenueCoverFacet(charge = tonight, viewerAdmission = paid))))!!
+        val offer = CoverOffer.of(venue.copy(tickets = VenueTicketsMixin(VenueCoverMixin(charge = tonight, viewerAdmission = paid))))!!
         assertEquals(CoverAction.SHOW_PASS, offer.action)
         assertEquals(paid, offer.pass)
         val pending = paid.copy(status = AdmissionStatus.PENDING)
-        assertEquals(CoverAction.PAY, CoverOffer.of(venue.copy(tickets = VenueTicketsFacet(VenueCoverFacet(charge = tonight, viewerAdmission = pending))))?.action)
+        assertEquals(CoverAction.PAY, CoverOffer.of(venue.copy(tickets = VenueTicketsMixin(VenueCoverMixin(charge = tonight, viewerAdmission = pending))))?.action)
     }
 
     @Test
@@ -89,19 +89,19 @@ class CoverOfferTest {
         val event = Event(
             id = "e-1",
             startAt = Instant.parse("2026-10-10T04:00:00Z"),
-            venueFacet = EventVenueFacet(venue),
-            tickets = EventTicketsFacet(EventCoverFacet(tonight)),
+            venueMixin = EventVenueMixin(venue),
+            tickets = EventTicketsMixin(EventCoverMixin(tonight)),
         )
         assertEquals(CoverAction.PAY, CoverOffer.of(event)?.action)
         assertTrue(CoverOffer.of(event)!!.tonight)
 
-        val nextWeek = event.copy(tickets = EventTicketsFacet(EventCoverFacet(tonight.copy(night = "2026-10-16"))))
+        val nextWeek = event.copy(tickets = EventTicketsMixin(EventCoverMixin(tonight.copy(night = "2026-10-16"))))
         assertEquals(CoverAction.PRICE_ONLY, CoverOffer.of(nextWeek)?.action)
         assertEquals("Cover $11.12 · from 9pm", Formatting.coverLine(nextWeek.coverCharge!!, CoverOffer.of(nextWeek)!!.tonight, Locale.US))
 
-        val withPass = event.copy(venueFacet = EventVenueFacet(venue.copy(tickets = VenueTicketsFacet(VenueCoverFacet(charge = tonight, viewerAdmission = paid)))))
+        val withPass = event.copy(venueMixin = EventVenueMixin(venue.copy(tickets = VenueTicketsMixin(VenueCoverMixin(charge = tonight, viewerAdmission = paid)))))
         assertEquals(CoverAction.SHOW_PASS, CoverOffer.of(withPass)?.action)
-        assertEquals(CoverAction.PRICE_ONLY, CoverOffer.of(event.copy(venueFacet = null))?.action)
+        assertEquals(CoverAction.PRICE_ONLY, CoverOffer.of(event.copy(venueMixin = null))?.action)
         assertNull(CoverOffer.of(event.copy(tickets = null)))
     }
 }

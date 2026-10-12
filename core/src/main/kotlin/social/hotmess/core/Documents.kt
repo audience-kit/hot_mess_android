@@ -10,7 +10,7 @@ object Documents {
     /** How many of the locale's upcoming events Now lists away from a venue. */
     const val LOCALE_EVENT_LIMIT: Int = 5
 
-    /** A venue, with its address, phone and Facebook Page under its profile facet. */
+    /** A venue, with its address, phone and Facebook Page under its profile mixin. */
     const val VENUE_FIELDS: String =
         "id name description distance point photoUrl heroUrl profile { address phone facebook { facebookId isLiked } }"
 
@@ -18,22 +18,22 @@ object Documents {
     const val CHAT_LINE_FIELDS: String = "id message name userId avatarUrl sentAt presence role kind endsAt postedAsVenue postedAsPerson"
 
     /**
-     * A room's last few chat lines, oldest first, in the venue's or locale's chat facet (`chat { ... }`); empty unless
+     * A room's last few chat lines, oldest first, in the venue's or locale's chat mixin (`chat { ... }`); empty unless
      * the viewer is in the room or an admin.
      */
     const val RECENT_MESSAGES: String = "recentMessages(limit: 3) { nodes { $CHAT_LINE_FIELDS } }"
 
-    /** Tonight's cover at a venue and the user's pass for it, in the cover facet inside the venue's tickets facet. */
+    /** Tonight's cover at a venue and the user's pass for it, in the cover mixin inside the venue's tickets mixin. */
     const val VENUE_COVER_FIELDS: String =
         "tickets { cover { charge { ${Queries.COVER_CHARGE_FIELDS} } viewerAdmission { ${Queries.ADMISSION_FIELDS} } } }"
 
-    /** A person, with their Facebook Page under their profile facet. */
+    /** A person, with their Facebook Page under their profile mixin. */
     const val PERSON_FIELDS: String = "id name pictureUrl bannerUrl profile { facebook { facebookId isLiked } }"
 
-    /** A venue's or person's social links, a connection in the profile facet (merged with the fields' own `profile`). */
+    /** A venue's or person's social links, a connection in the profile mixin (merged with the fields' own `profile`). */
     const val PROFILE_SOCIAL_LINKS: String = "profile { socialLinks { nodes { id handle provider url } } }"
 
-    /** An event, with its venue under the event's venue facet (`venue { venue }`). */
+    /** An event, with its venue under the event's venue mixin (`venue { venue }`). */
     const val EVENT_FIELDS: String =
         "id name startAt endAt facebookId bannerUrl isFeatured viewerRsvp venue { venue { $VENUE_FIELDS } }"
 
@@ -86,7 +86,7 @@ object Documents {
 
     val VENUES: String = """
         query Venues {
-          audience { venues { list { nodes { $VENUE_FIELDS hidden order locale { id name label } } } } }
+          venues { list { nodes { $VENUE_FIELDS hidden order locale { id name label } } } }
         }
     """.trimIndent()
 
@@ -108,7 +108,7 @@ object Documents {
 
     val PEOPLE: String = """
         query People {
-          audience { people { list { nodes { $PERSON_FIELDS order } } } }
+          people { list { nodes { $PERSON_FIELDS order } } }
         }
     """.trimIndent()
 
@@ -149,13 +149,13 @@ object Documents {
 
     val MY_PING: String = """
         query MyPing {
-          audience { ping { myPing { $PING_FIELDS } } }
+          ping { myPing { $PING_FIELDS } }
         }
     """.trimIndent()
 
     val FRIEND_PINGS: String = """
         query FriendPings {
-          audience { ping { friendPings { $PING_FIELDS } } }
+          ping { friendPings { $PING_FIELDS } }
         }
     """.trimIndent()
 

@@ -38,17 +38,17 @@ data class Venue(
     val locale: LocaleSummary? = null,
     val hidden: Boolean = false,
     val order: Int = 0,
-    /** Its chat facet; read through [recentMessages]. */
-    private val chat: ChatFacet? = null,
-    /** Its profile facet: address, phone, links and Facebook Page. Read through [address] and friends. */
+    /** Its chat mixin; read through [recentMessages]. */
+    private val chat: ChatMixin? = null,
+    /** Its profile mixin: address, phone, links and Facebook Page. Read through [address] and friends. */
     private val profile: ListingProfile? = null,
     /**
-     * Its tickets facet, holding the cover facet (`tickets { cover }`); null when not asked for or the audience doesn't
+     * Its tickets mixin, holding the cover mixin (`tickets { cover }`); null when not asked for or the audience doesn't
      * take cover. Read through [coverCharge] and friends.
      */
-    private val tickets: VenueTicketsFacet? = null,
+    private val tickets: VenueTicketsMixin? = null,
 ) {
-    private val cover: VenueCoverFacet? get() = tickets?.cover
+    private val cover: VenueCoverMixin? get() = tickets?.cover
 
     /** The last few lines of its chat room, oldest first; Now and the venue screen ask, and only people there (or admins) get them. */
     val recentMessages: List<ChatLine> get() = chat?.lines.orEmpty()
@@ -83,51 +83,51 @@ data class Venue(
     val shareUrl: String get() = "https://hotmess.social/venues/${id.lowercase()}"
 }
 
-/** A venue's tickets facet (`Venue.tickets`), read for the cover facet the cover module nests in it. */
+/** A venue's tickets mixin (`Venue.tickets`), read for the cover mixin the cover module nests in it. */
 @Serializable
-data class VenueTicketsFacet(val cover: VenueCoverFacet? = null)
+data class VenueTicketsMixin(val cover: VenueCoverMixin? = null)
 
-/** A venue's cover facet (`Venue.tickets.cover`), as much of it as the app asks for. */
+/** A venue's cover mixin (`Venue.tickets.cover`), as much of it as the app asks for. */
 @Serializable
-data class VenueCoverFacet(
+data class VenueCoverMixin(
     val charge: CoverCharge? = null,
     val viewerAdmission: Admission? = null,
     val canWorkDoor: Boolean = false,
 )
 
-/** An event's tickets facet (`Event.tickets`), read for the cover facet the cover module nests in it. */
+/** An event's tickets mixin (`Event.tickets`), read for the cover mixin the cover module nests in it. */
 @Serializable
-data class EventTicketsFacet(val cover: EventCoverFacet? = null)
+data class EventTicketsMixin(val cover: EventCoverMixin? = null)
 
-/** An event's cover facet (`Event.tickets.cover`). */
+/** An event's cover mixin (`Event.tickets.cover`). */
 @Serializable
-data class EventCoverFacet(val charge: CoverCharge? = null)
+data class EventCoverMixin(val charge: CoverCharge? = null)
 
-/** An event's venue facet (`Event.venue`): its venue, if it has one yet. */
+/** An event's venue mixin (`Event.venue`): its venue, if it has one yet. */
 @Serializable
-data class EventVenueFacet(val venue: Venue? = null)
+data class EventVenueMixin(val venue: Venue? = null)
 
-/** A venue's or event's ping facet (`Venue.ping`, `Event.ping`): friends' active Pings that pick it. */
+/** A venue's or event's ping mixin (`Venue.ping`, `Event.ping`): friends' active Pings that pick it. */
 @Serializable
-data class PingFeedFacet(val friendPings: List<Ping> = emptyList())
+data class PingFeedMixin(val friendPings: List<Ping> = emptyList())
 
 /**
- * A venue's or locale's chat facet (`chat { open recentMessages }`): whether the user can join its room, and the
+ * A venue's or locale's chat mixin (`chat { open recentMessages }`): whether the user can join its room, and the
  * room's last few lines, oldest first (a connection, asked for as `nodes`).
  */
 @Serializable
-data class ChatFacet(val open: Boolean = false, private val recentMessages: Connection<ChatLine>? = null) {
+data class ChatMixin(val open: Boolean = false, private val recentMessages: Connection<ChatLine>? = null) {
     val lines: List<ChatLine> get() = recentMessages?.nodes.orEmpty().filterNotNull()
 }
 
-/** An event's people facet (`people { lineup }`): who's hosting or playing, a connection asked for as `nodes`. */
+/** An event's people mixin (`people { lineup }`): who's hosting or playing, a connection asked for as `nodes`. */
 @Serializable
-data class EventPeopleFacet(private val lineup: Connection<Person>? = null) {
+data class EventPeopleMixin(private val lineup: Connection<Person>? = null) {
     val people: List<Person> get() = lineup?.nodes.orEmpty().filterNotNull()
 }
 
 /**
- * An events facet's upcoming events (`Venue.events`, `Locale.events`, `Person.events`): `upcoming` is a
+ * An events mixin's upcoming events (`Venue.events`, `Locale.events`, `Person.events`): `upcoming` is a
  * connection, asked for as `nodes` (every event, since no `first` is given).
  */
 @Serializable
@@ -136,7 +136,7 @@ data class UpcomingEvents(private val upcoming: Connection<Event>? = null) {
 }
 
 /**
- * A person's music facet (`Person.music`): their newest tracks, a connection asked for as `nodes`.
+ * A person's music mixin (`Person.music`): their newest tracks, a connection asked for as `nodes`.
  */
 @Serializable
 data class PersonMusic(private val tracks: Connection<Track>? = null) {
@@ -144,8 +144,8 @@ data class PersonMusic(private val tracks: Connection<Track>? = null) {
 }
 
 /**
- * A venue's or person's profile facet (`Venue.profile`, `Person.profile`), as much of it as the app asks
- * for. `socialLinks` is a connection asked for as `nodes`; [facebook] is the facebook module's facet.
+ * A venue's or person's profile mixin (`Venue.profile`, `Person.profile`), as much of it as the app asks
+ * for. `socialLinks` is a connection asked for as `nodes`; [facebook] is the facebook module's mixin.
  */
 @Serializable
 data class ListingProfile(
@@ -185,7 +185,7 @@ data class Person(
     @Serializable(with = BlankAsNullSerializer::class) val pictureUrl: String? = null,
     @Serializable(with = BlankAsNullSerializer::class) val bannerUrl: String? = null,
     val order: Int = 0,
-    /** Their profile facet, for the Facebook Page. Read through [facebookId] and [isLiked]. */
+    /** Their profile mixin, for the Facebook Page. Read through [facebookId] and [isLiked]. */
     private val profile: ListingProfile? = null,
 ) {
     val facebookId: String? get() = profile?.facebook?.facebookId
@@ -205,20 +205,20 @@ data class PersonDetail(
     val name: String = "",
     @Serializable(with = BlankAsNullSerializer::class) val pictureUrl: String? = null,
     @Serializable(with = BlankAsNullSerializer::class) val bannerUrl: String? = null,
-    @SerialName("events") private val eventsFacet: UpcomingEvents? = null,
-    /** Their profile facet: links and Facebook Page. Read through [socialLinks], [facebookId] and [isLiked]. */
+    @SerialName("events") private val eventsMixin: UpcomingEvents? = null,
+    /** Their profile mixin: links and Facebook Page. Read through [socialLinks], [facebookId] and [isLiked]. */
     private val profile: ListingProfile? = null,
-    @SerialName("music") private val musicFacet: PersonMusic? = null,
+    @SerialName("music") private val musicMixin: PersonMusic? = null,
     val members: List<Person> = emptyList(),
     val groups: List<Person> = emptyList(),
 ) {
-    /** Their upcoming events, from the events facet; empty when the audience has no events. */
-    val events: List<Event> get() = eventsFacet?.events.orEmpty()
+    /** Their upcoming events, from the events mixin; empty when the audience has no events. */
+    val events: List<Event> get() = eventsMixin?.events.orEmpty()
 
-    /** Their newest tracks, from the music facet; empty when the audience has no music. */
-    val tracks: List<Track> get() = musicFacet?.trackList.orEmpty()
+    /** Their newest tracks, from the music mixin; empty when the audience has no music. */
+    val tracks: List<Track> get() = musicMixin?.trackList.orEmpty()
 
-    /** Where else to find them, from the profile facet. */
+    /** Where else to find them, from the profile mixin. */
     val socialLinks: List<SocialLink> get() = profile?.links.orEmpty()
 
     val facebookId: String? get() = profile?.facebook?.facebookId
@@ -306,27 +306,27 @@ data class Event(
     @Serializable(with = BlankAsNullSerializer::class) val bannerUrl: String? = null,
     val isFeatured: Boolean = false,
     @SerialName("viewerRsvp") val rsvp: Rsvp = Rsvp.UNSURE,
-    /** Its venue facet; read the venue through [venue]. */
-    @SerialName("venue") private val venueFacet: EventVenueFacet? = null,
-    /** Its people facet; read through [people]. Only the event screen asks for it. */
-    @SerialName("people") private val peopleFacet: EventPeopleFacet? = null,
-    /** Its tickets facet, holding the cover facet; read through [coverCharge]. Only the event screen asks. */
-    private val tickets: EventTicketsFacet? = null,
-    /** Its ping facet; read through [friendPings]. Only the event screen asks for it. */
-    @SerialName("ping") private val pingFeed: PingFeedFacet? = null,
+    /** Its venue mixin; read the venue through [venue]. */
+    @SerialName("venue") private val venueMixin: EventVenueMixin? = null,
+    /** Its people mixin; read through [people]. Only the event screen asks for it. */
+    @SerialName("people") private val peopleMixin: EventPeopleMixin? = null,
+    /** Its tickets mixin, holding the cover mixin; read through [coverCharge]. Only the event screen asks. */
+    private val tickets: EventTicketsMixin? = null,
+    /** Its ping mixin; read through [friendPings]. Only the event screen asks for it. */
+    @SerialName("ping") private val pingFeed: PingFeedMixin? = null,
 ) {
     /** Where it is; null when it has no venue yet ("To be announced"). */
-    val venue: Venue? get() = venueFacet?.venue
+    val venue: Venue? get() = venueMixin?.venue
 
     /** Who's hosting or playing; only the event screen asks for it. */
-    val people: List<Person> get() = peopleFacet?.people.orEmpty()
+    val people: List<Person> get() = peopleMixin?.people.orEmpty()
 
     /** Friends' active Pings that pick this event; only the event screen asks for it. */
     val friendPings: List<Ping> get() = pingFeed?.friendPings.orEmpty()
 
     /** With [ping] in place of the copy among its friends' Pings. */
     fun replacingFriendPing(ping: Ping): Event =
-        copy(pingFeed = PingFeedFacet(friendPings.map { if (it.id == ping.id) ping else it }))
+        copy(pingFeed = PingFeedMixin(friendPings.map { if (it.id == ping.id) ping else it }))
 
     /** The cover at its venue that night; null when there's none or it sells tickets. Only the event screen asks. */
     val coverCharge: CoverCharge? get() = tickets?.cover?.charge
@@ -359,11 +359,11 @@ data class Friend(
 }
 
 /**
- * The friends module's facet on a venue or locale (`friends { list { nodes } venues { nodes } }`): your
+ * The friends module's mixin on a venue or locale (`friends { list { nodes } venues { nodes } }`): your
  * friends out there lately and, on a locale, how many at each of its venues. Null where the module is off.
  */
 @Serializable
-data class FriendsFacet(
+data class FriendsMixin(
     @SerialName("list") private val listNodes: Connection<Friend>? = null,
     @SerialName("venues") private val venueNodes: Connection<FriendVenue>? = null,
 ) {
