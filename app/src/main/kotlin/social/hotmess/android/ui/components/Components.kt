@@ -281,7 +281,7 @@ fun SocialLinkRow(link: SocialLink, onClick: (() -> Unit)?) {
             SocialLink.Network.INSTAGRAM -> R.drawable.social_instagram
             SocialLink.Network.SOUNDCLOUD -> R.drawable.social_soundcloud
             SocialLink.Network.X -> R.drawable.social_x
-            SocialLink.Network.SPOTIFY, SocialLink.Network.APPLE_MUSIC, null -> null
+            SocialLink.Network.SPOTIFY, SocialLink.Network.APPLE_MUSIC, SocialLink.Network.APPLE_PODCASTS, SocialLink.Network.PODCAST_RSS, null -> null
         }
         val music = link.network == SocialLink.Network.SPOTIFY || link.network == SocialLink.Network.APPLE_MUSIC
         if (glyph != null) {

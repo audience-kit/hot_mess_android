@@ -255,6 +255,8 @@ data class SocialLink(
             "soundcloud" -> Network.SOUNDCLOUD
             "spotify" -> Network.SPOTIFY
             "apple_music" -> Network.APPLE_MUSIC
+            "apple_podcasts" -> Network.APPLE_PODCASTS
+            "podcast_rss" -> Network.PODCAST_RSS
             "twitter", "x" -> Network.X
             else -> null
         }
@@ -264,10 +266,12 @@ data class SocialLink(
         get() = when (network) {
             Network.SPOTIFY -> "Spotify"
             Network.APPLE_MUSIC -> "Apple Music"
+            Network.APPLE_PODCASTS -> "Apple Podcasts"
+            Network.PODCAST_RSS -> "Podcast RSS"
             else -> "/$handle"
         }
 
-    enum class Network { FACEBOOK, INSTAGRAM, SOUNDCLOUD, SPOTIFY, APPLE_MUSIC, X }
+    enum class Network { FACEBOOK, INSTAGRAM, SOUNDCLOUD, SPOTIFY, APPLE_MUSIC, APPLE_PODCASTS, PODCAST_RSS, X }
 
     /** The app fans tip them with, for a Cash App or Venmo link; null for a social profile. */
     val tipApp: String?
