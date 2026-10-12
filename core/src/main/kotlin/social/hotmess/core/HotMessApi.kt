@@ -513,12 +513,11 @@ private data class MeResponse(val me: Me? = null) {
 private data class ClosestLocaleResponse(val closestLocale: LocaleSummary? = null)
 
 @Serializable
-private data class VenuesResponse(val audience: Audience) {
-    @Serializable data class Audience(val venues: VenuesFacet? = null)
+private data class VenuesResponse(@SerialName("venues") val venuesFacet: VenuesFacet? = null) {
     @Serializable data class VenuesFacet(val list: Nodes<Venue> = Nodes())
 
-    /** `audience { venues { list { nodes } } }`; a missing venues facet reads as none. */
-    val venues: List<Venue> get() = audience.venues?.list?.nodes.orEmpty()
+    /** `venues { list { nodes } }` on the root, the audience; a missing venues facet reads as none. */
+    val venues: List<Venue> get() = venuesFacet?.list?.nodes.orEmpty()
 }
 
 /** A connection's `nodes`. */
@@ -569,12 +568,11 @@ private data class VenueResponse(val venues: Venues? = null) {
 }
 
 @Serializable
-private data class PeopleResponse(val audience: Audience) {
-    @Serializable data class Audience(@SerialName("people") val peopleFacet: PeopleFacet? = null)
+private data class PeopleResponse(@SerialName("people") val peopleFacet: PeopleFacet? = null) {
     @Serializable data class PeopleFacet(val list: Nodes<Person> = Nodes())
 
-    /** `audience { people { list { nodes } } }`; a missing people facet reads as none. */
-    val people: List<Person> get() = audience.peopleFacet?.list?.nodes.orEmpty()
+    /** `people { list { nodes } }` on the root, the audience; a missing people facet reads as none. */
+    val people: List<Person> get() = peopleFacet?.list?.nodes.orEmpty()
 }
 
 @Serializable
@@ -601,21 +599,20 @@ private data class EventResponse(val events: Events? = null) {
 }
 
 @Serializable
-private data class MyPingResponse(val audience: AudiencePings) {
-    /** `audience { ping { myPing } }`. */
-    val myPing: Ping? get() = audience.ping?.myPing
+private data class MyPingResponse(val ping: AudiencePings? = null) {
+    /** `ping { myPing }` on the root, the audience. */
+    val myPing: Ping? get() = ping?.myPing
 }
 
 @Serializable
-private data class FriendPingsResponse(val audience: AudiencePings) {
-    /** `audience { ping { friendPings } }`; a missing ping facet reads as none. */
-    val friendPings: List<Ping> get() = audience.ping?.friendPings.orEmpty()
+private data class FriendPingsResponse(val ping: AudiencePings? = null) {
+    /** `ping { friendPings }` on the root, the audience; a missing ping facet reads as none. */
+    val friendPings: List<Ping> get() = ping?.friendPings.orEmpty()
 }
 
+/** The audience's ping facet: the user's own Ping and friends' active ones. */
 @Serializable
-private data class AudiencePings(val ping: Pings? = null) {
-    @Serializable data class Pings(val myPing: Ping? = null, val friendPings: List<Ping> = emptyList())
-}
+private data class AudiencePings(val myPing: Ping? = null, val friendPings: List<Ping> = emptyList())
 
 @Serializable
 private data class PingPayload(val ping: Ping)

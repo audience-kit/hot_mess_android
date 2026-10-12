@@ -86,7 +86,7 @@ object Documents {
 
     val VENUES: String = """
         query Venues {
-          audience { venues { list { nodes { $VENUE_FIELDS hidden order locale { id name label } } } } }
+          venues { list { nodes { $VENUE_FIELDS hidden order locale { id name label } } } }
         }
     """.trimIndent()
 
@@ -108,7 +108,7 @@ object Documents {
 
     val PEOPLE: String = """
         query People {
-          audience { people { list { nodes { $PERSON_FIELDS order } } } }
+          people { list { nodes { $PERSON_FIELDS order } } }
         }
     """.trimIndent()
 
@@ -149,13 +149,13 @@ object Documents {
 
     val MY_PING: String = """
         query MyPing {
-          audience { ping { myPing { $PING_FIELDS } } }
+          ping { myPing { $PING_FIELDS } }
         }
     """.trimIndent()
 
     val FRIEND_PINGS: String = """
         query FriendPings {
-          audience { ping { friendPings { $PING_FIELDS } } }
+          ping { friendPings { $PING_FIELDS } }
         }
     """.trimIndent()
 
