@@ -6,11 +6,8 @@ import com.audiencekit.AudienceKitClient
 import com.audiencekit.AudienceKitException
 import com.audiencekit.Coordinates
 import com.audiencekit.CoverPurchase
-import com.audiencekit.DoorNight
-import com.audiencekit.DoorVenue
 import com.audiencekit.GraphQLError
 import com.audiencekit.RSVPState
-import com.audiencekit.ScanResult
 import com.audiencekit.graphQLVariables
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -184,15 +181,6 @@ class HotMessApi(val client: AudienceKitClient) {
 
     /** The user's passes, newest first. */
     suspend fun admissions(): List<Admission> = call { client.admissions() }
-
-    /** Venues whose door the user can work; empty for almost everyone. */
-    suspend fun doorVenues(): List<DoorVenue> = call { client.doorVenues() }
-
-    /** Tonight's counts at a venue's door. */
-    suspend fun door(venueId: String): DoorNight? = call { client.venueDoor(venueId) }?.door
-
-    /** Checks a scanned pass at a venue's door. */
-    suspend fun scan(venueId: String, code: String): ScanResult = mutate { client.scanAdmission(venueId, code) }
 
     // endregion
 

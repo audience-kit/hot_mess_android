@@ -21,7 +21,7 @@ dependencies {
     api(libs.kotlinx.coroutines.core)
     api(libs.kotlinx.serialization.json)
     api(libs.okhttp)
-    // Draws pass QR codes and reads them for Door mode.
+    // Draws pass QR codes (and reads them back in tests).
     implementation(libs.zxing.core)
 
     testImplementation(kotlin("test"))
