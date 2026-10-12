@@ -189,6 +189,15 @@ class DeepLinkTest {
 }
 
 class ChatProtocolTest {
+    @Test
+    fun onlyAConnectionRefusedAsUnauthorizedEndsTheSession() {
+        assertTrue(GraphQLCable.isUnauthorizedDisconnect("""{"type":"disconnect","reason":"unauthorized","reconnect":false}"""))
+        assertFalse(GraphQLCable.isUnauthorizedDisconnect("""{"type":"disconnect","reason":"server_restart","reconnect":true}"""))
+        assertFalse(GraphQLCable.isUnauthorizedDisconnect("""{"type":"reject_subscription","identifier":"{}"}"""))
+        assertFalse(GraphQLCable.isUnauthorizedDisconnect("""{"type":"ping","message":1791691200}"""))
+        assertFalse(GraphQLCable.isUnauthorizedDisconnect("not json"))
+    }
+
     private val venue = "b0f8b66a-e636-495d-9475-0f5317ea08e0"
     private val audience = "A0F8B66A-E636-495D-9475-0F5317EA08E0"
 
@@ -727,8 +736,8 @@ class HotMessApiTest {
     @Test
     fun meHasTheirPhoto() = runTest {
         val (api, bodies) = api(
-            "query Me" to """{"data":{"me":{"id":"5b3c8a72-4e19-4d06-b2f5-8c7a1e0d9b22","name":"Billie Jean",
-                "photo":{"cdnUrl":"https://cdn.example/billie.jpg"}}}}""",
+            "query Me" to """{"data":{"me":{"self":{"id":"5b3c8a72-4e19-4d06-b2f5-8c7a1e0d9b22","name":"Billie Jean",
+                "photo":{"cdnUrl":"https://cdn.example/billie.jpg"}}}}}""",
         )
         val me = api.me()!!
 

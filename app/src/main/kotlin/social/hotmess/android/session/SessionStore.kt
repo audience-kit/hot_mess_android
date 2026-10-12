@@ -56,6 +56,13 @@ class SessionStore(
 
     val isSignedIn: Boolean get() = _state.value == AuthState.SignedIn
 
+    /**
+     * Why sign-in is showing, when the API ended the session rather than the person signing out. Cleared by the next
+     * sign-in.
+     */
+    private val _endedNotice = MutableStateFlow<String?>(null)
+    val endedNotice: StateFlow<String?> = _endedNotice.asStateFlow()
+
     /** The session token, needed outside the SDK only for the chat websocket. */
     val sessionToken: String? get() = audienceKit.sessionToken()
 
@@ -65,10 +72,7 @@ class SessionStore(
     init {
         scope.launch {
             audienceKit.sessionEvents.collect { event ->
-                if (event == SessionEvent.SESSION_ENDED && _state.value != AuthState.SignedOut) {
-                    _user.value = null
-                    _state.value = AuthState.SignedOut
-                }
+                if (event == SessionEvent.SESSION_ENDED) sessionEnded()
             }
         }
     }
@@ -95,6 +99,7 @@ class SessionStore(
                 throw e
             } catch (e: ApiError.Unauthorized) {
                 // The SDK has already dropped the token.
+                _endedNotice.value = ENDED_MESSAGE
             } catch (e: Exception) {
                 // A network blip shouldn't sign anyone out; the screens show their own errors.
                 signedIn()
@@ -183,8 +188,30 @@ class SessionStore(
     }
 
     private fun signedIn() {
+        _endedNotice.value = null
         _state.value = AuthState.SignedIn
         push.register()
+    }
+
+    /**
+     * A realtime socket's server refused [token] (Action Cable's `unauthorized` disconnect): the session ends as it
+     * does when an HTTP call gets a 401. Ignored unless [token] is still the stored one, so a refusal from before a
+     * new sign-in, or a second socket's, changes nothing.
+     */
+    fun sessionRejected(token: String) {
+        if (runCatching { audienceKit.sessionToken() }.getOrNull() != token) return
+        audienceKit.signOut()
+        sessionEnded()
+    }
+
+    /**
+     * Back to sign-in, once, saying why. Only from the signed-in state: a refusal of the old token during a new
+     * sign-in, or while [restore] is working (it handles its own), changes nothing.
+     */
+    private fun sessionEnded() {
+        if (!_state.compareAndSet(AuthState.SignedIn, AuthState.SignedOut)) return
+        _user.value = null
+        _endedNotice.value = ENDED_MESSAGE
     }
 
     fun signOut() {
@@ -205,6 +232,8 @@ class SessionStore(
     }
 
     companion object {
+        const val ENDED_MESSAGE = "Your session has ended. Please sign in again."
+
         /** The app's own preferences (the remembered locale and the like). */
         const val PREFERENCES = "social.hotmess.preferences"
 
