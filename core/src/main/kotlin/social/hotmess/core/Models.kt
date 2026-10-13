@@ -78,7 +78,7 @@ data class Venue(
     /** What goes under the name in a list row. */
     val summary: String? get() = description?.takeIf { it.isNotBlank() } ?: address?.takeIf { it.isNotBlank() }
 
-    val facebookUrl: String? get() = facebookId?.let { "https://facebook.com/$it" }
+    val facebookUrl: String? get() = profile?.facebook?.link ?: facebookId?.let { "https://facebook.com/$it" }
 
     val shareUrl: String get() = "https://hotmess.social/venues/${id.lowercase()}"
 }
@@ -163,7 +163,7 @@ data class ListingProfile(
 
 /** A listing's Facebook Page ID and whether the user likes it (`profile.facebook`). */
 @Serializable
-data class FacebookProfile(val facebookId: String? = null, val isLiked: Boolean = false)
+data class FacebookProfile(val facebookId: String? = null, val isLiked: Boolean = false, val link: String? = null)
 
 /** A Relay connection's `nodes`, which GraphQL types as nullable items. */
 @Serializable
@@ -195,7 +195,7 @@ data class Person(
 
     val isLiked: Boolean get() = profile?.facebook?.isLiked == true
 
-    val facebookUrl: String? get() = facebookId?.let { "https://facebook.com/$it" }
+    val facebookUrl: String? get() = profile?.facebook?.link ?: facebookId?.let { "https://facebook.com/$it" }
 }
 
 /**

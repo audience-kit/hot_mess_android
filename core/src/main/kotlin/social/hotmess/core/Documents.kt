@@ -22,7 +22,7 @@ object Documents {
      * there's none.
      */
     const val VENUE_FIELDS: String =
-        "id name description distance point photoUrl bannerUrl profile { address phone facebook { facebookId isLiked } }"
+        "id name description distance point photoUrl bannerUrl profile { address phone facebook { facebookId isLiked link } }"
 
     /** A chat line as a preview shows it: rich messages in words (`message`), with the sender's role and presence. */
     const val CHAT_LINE_FIELDS: String = "id message name userId avatarUrl sentAt presence role kind endsAt postedAsVenue postedAsPerson"
@@ -38,7 +38,7 @@ object Documents {
         "tickets { cover { charge { ${Queries.COVER_CHARGE_FIELDS} } viewerAdmission { ${Queries.ADMISSION_FIELDS} } } }"
 
     /** A person, with their Facebook Page under their profile mixin. */
-    const val PERSON_FIELDS: String = "id name avatarUrl bannerUrl profile { facebook { facebookId isLiked } }"
+    const val PERSON_FIELDS: String = "id name avatarUrl bannerUrl profile { facebook { facebookId isLiked link } }"
 
     /** A venue's or person's social links, a connection in the profile mixin (merged with the fields' own `profile`). */
     const val PROFILE_SOCIAL_LINKS: String = "profile { socialLinks { nodes { id handle provider url } } }"

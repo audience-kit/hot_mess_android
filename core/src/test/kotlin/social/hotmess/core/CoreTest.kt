@@ -22,6 +22,17 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class ModelDecodingTest {
+    @Test
+    fun preservesPublicGroupLinksForPeopleAndVenues() {
+        val link = "https://www.facebook.com/groups/123456789"
+        val venue = HotMessApi.json.decodeFromString(Venue.serializer(),
+            """{"id":"v-1","name":"Community","profile":{"facebook":{"facebookId":"123456789","link":"$link"}}}""")
+        val person = HotMessApi.json.decodeFromString(Person.serializer(),
+            """{"id":"p-1","name":"Community","profile":{"facebook":{"facebookId":"123456789","link":"$link"}}}""")
+        assertEquals(link, venue.facebookUrl)
+        assertEquals(link, person.facebookUrl)
+    }
+
     private val json = HotMessApi.json
 
     @Test
