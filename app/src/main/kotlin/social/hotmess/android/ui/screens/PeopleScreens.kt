@@ -152,7 +152,11 @@ fun PersonScreen(id: String, navigator: Navigator) {
                     item { DetailSection("Events") { EmptyRow("Nothing coming up yet.") } }
                 } else {
                     cardSection("events", "Events", detail.events, key = { it.id }) { event ->
-                        EventCard(event, onClick = { navigator.open(AppRoute.EventDetail(event.id)) })
+                        EventCard(
+                            event,
+                            onClick = { navigator.open(AppRoute.EventDetail(event.id)) },
+                            photoUrl = event.photoUrl(Event.PhotoPriority.VENUE_FIRST, personFallback = detail.person),
+                        )
                     }
                 }
                 if (detail.tracks.isNotEmpty()) {

@@ -348,6 +348,28 @@ data class Event(
     val facebookUrl: String? get() = facebookId?.let { "https://facebook.com/events/$it" }
 
     val shareUrl: String get() = "https://hotmess.social/events/${id.lowercase()}"
+
+    enum class PhotoPriority { STANDARD, VENUE_FIRST, PERSON_FIRST }
+
+    /**
+     * Background photo for an event card:
+     * In a person view, event -> venue -> person (VENUE_FIRST)
+     * In a venue view, event -> person -> venue (PERSON_FIRST)
+     */
+    fun photoUrl(
+        priority: PhotoPriority = PhotoPriority.STANDARD,
+        venueFallback: Venue? = null,
+        personFallback: Person? = null,
+    ): String? {
+        val venueBg = venue?.bannerUrl ?: venue?.photoUrl ?: venueFallback?.bannerUrl ?: venueFallback?.photoUrl
+        val person = people.firstOrNull() ?: personFallback
+        val personBg = person?.bannerUrl ?: person?.avatarUrl
+        return when (priority) {
+            PhotoPriority.VENUE_FIRST -> bannerUrl ?: venueBg ?: personBg
+            PhotoPriority.PERSON_FIRST -> bannerUrl ?: personBg ?: venueBg
+            PhotoPriority.STANDARD -> bannerUrl ?: venueBg ?: personBg
+        }
+    }
 }
 
 /**

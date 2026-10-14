@@ -301,9 +301,9 @@ fun VenueCard(
  * Interested only), and the name with when and where at the bottom. Featured events are taller.
  */
 @Composable
-fun EventCard(event: Event, onClick: () -> Unit, modifier: Modifier = Modifier) {
+fun EventCard(event: Event, onClick: () -> Unit, modifier: Modifier = Modifier, photoUrl: String? = null) {
     PhotoCard(
-        url = event.bannerUrl,
+        url = photoUrl ?: event.bannerUrl,
         onClick = onClick,
         modifier = modifier,
         minHeight = if (event.isFeatured) Sizes.photoCardFeatured else Sizes.photoCard,

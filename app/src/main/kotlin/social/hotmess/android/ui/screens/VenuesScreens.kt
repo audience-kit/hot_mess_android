@@ -350,7 +350,11 @@ fun VenueScreen(id: String, navigator: Navigator) {
                     item { DetailSection("Events") { EmptyRow("There's nothing coming up here yet.") } }
                 } else {
                     cardSection("events", "Events", overview.events, key = { it.id }) { event ->
-                        EventCard(event, onClick = { navigator.open(AppRoute.EventDetail(event.id)) })
+                        EventCard(
+                            event,
+                            onClick = { navigator.open(AppRoute.EventDetail(event.id)) },
+                            photoUrl = event.photoUrl(Event.PhotoPriority.PERSON_FIRST, venueFallback = venue),
+                        )
                     }
                 }
             }
