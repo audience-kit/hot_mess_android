@@ -55,6 +55,20 @@ class FacebookLoginDialogTest {
     }
 
     @Test
+    fun namesTheConfigurationsExtraPermissions() {
+        val business = FacebookLoginDialog(
+            appId = "713525445368431",
+            permissions = listOf("public_profile", "email", "user_friends"),
+            packageName = "social.hotmess.android.signintest",
+            configId = "4085560021745660",
+            configScope = listOf("pages_show_list"),
+        )
+
+        assertEquals("4085560021745660", query(business.url(state = "s-1"))["config_id"])
+        assertEquals("pages_show_list", query(business.url(state = "s-1"))["scope"])
+    }
+
+    @Test
     fun readsTheCodeFromTheRedirect() {
         val result = dialog.result("fbconnect://cct.social.hotmess.android.staging?code=abc%2B1&state=s-1#_=_", "s-1")
 

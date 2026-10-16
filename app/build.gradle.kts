@@ -46,6 +46,8 @@ data class Environment(
     val audienceKitEnvironment: String = "production",
     /** The Login for Business configuration, for a Business-type Facebook app. */
     val facebookLoginConfigId: String = "",
+    /** Permissions to name alongside [facebookLoginConfigId], comma-separated. */
+    val facebookLoginScope: String = "",
     /**
      * Opens Facebook's dialog in an ephemeral Custom Tab, which doesn't share Chrome's cookies, so
      * whoever is signed in to facebook.com in Chrome doesn't get in the sign-in test's way.
@@ -67,6 +69,8 @@ val environments = mapOf(
     // Staging, signing in with the AudienceKit platform app instead: Meta won't make new Facebook test users or
     // add the ones there are to another app, so this is the only app the sign-in test's users work on.
     "signInTest" to Environment("signInTest", "https://api.next.audiencekit.com", "", "713525445368431", "staging", "4085560021745660", privateSignIn = true,
+        // The service app won't issue a token unless the request names pages_show_list.
+        facebookLoginScope = "pages_show_list",
         audienceHost = "hotmess.admin.next.audiencekit.com"),
     "release" to Environment("release", "https://api.audiencekit.com", "b0f8b66a-e636-495d-9475-0f5317ea08e0", "1168782378316790"),
 )
@@ -157,6 +161,7 @@ android {
         buildConfigField("String", "AUDIENCE_ID", "\"${environment.audienceId}\"")
         buildConfigField("String", "FACEBOOK_APP_ID", "\"${environment.facebookAppId}\"")
         buildConfigField("String", "FACEBOOK_LOGIN_CONFIG_ID", "\"${environment.facebookLoginConfigId}\"")
+        buildConfigField("String", "FACEBOOK_LOGIN_SCOPE", "\"${environment.facebookLoginScope}\"")
         buildConfigField("String", "GOOGLE_SERVER_CLIENT_ID", "\"${environment.googleServerClientId.ifEmpty { secret("google.serverClientId") }}\"")
         buildConfigField("boolean", "PRIVATE_SIGN_IN", environment.privateSignIn.toString())
         buildConfigField("String", "AUDIENCEKIT_ENVIRONMENT", "\"${environment.audienceKitEnvironment}\"")
