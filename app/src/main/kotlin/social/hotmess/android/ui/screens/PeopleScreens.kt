@@ -63,6 +63,7 @@ import social.hotmess.android.ui.rememberLoader
 import social.hotmess.android.ui.theme.HotMessType
 import social.hotmess.android.ui.theme.Space
 import social.hotmess.core.AppRoute
+import social.hotmess.core.Event
 import social.hotmess.core.Person
 import social.hotmess.core.PersonDetail
 import social.hotmess.core.PhotoTone

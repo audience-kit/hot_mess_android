@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -37,6 +38,7 @@ import social.hotmess.android.session.AuthState
 import social.hotmess.android.ui.LocalAppGraph
 import social.hotmess.android.ui.components.Message
 import social.hotmess.android.ui.components.PrimaryButton
+import social.hotmess.android.ui.components.SecondaryButton
 import social.hotmess.android.ui.components.SpectrumBar
 import social.hotmess.android.ui.openUrl
 import social.hotmess.android.ui.theme.HotMessTheme
@@ -56,7 +58,7 @@ fun LaunchScreen() {
 
 /** Sign-in, skinned with the audience's branding, always dark over the photo. */
 @Composable
-fun LoginScreen(onSignIn: () -> Unit) {
+fun LoginScreen(onSignIn: () -> Unit, onGoogleSignIn: () -> Unit = {}) {
     val graph = LocalAppGraph.current
     val state by graph.session.state.collectAsStateWithLifecycle()
     val branding by graph.brand.branding.collectAsStateWithLifecycle()
@@ -102,9 +104,14 @@ fun LoginScreen(onSignIn: () -> Unit) {
                         CircularProgressIndicator(color = Color.White)
                     } else {
                         PrimaryButton("Continue with Facebook", onClick = onSignIn, modifier = Modifier.fillMaxWidth())
+                        SecondaryButton(
+                            "Continue with Google",
+                            onClick = onGoogleSignIn,
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 44.dp),
+                        )
                     }
                     Text(
-                        "We use your Facebook profile to find your friends and the nights near you.",
+                        "We use your Facebook profile to find your friends and the nights near you. With Google, you can connect Facebook later.",
                         style = HotMessType.bodySmall,
                         color = Color.White.copy(alpha = 0.8f),
                         textAlign = TextAlign.Center,

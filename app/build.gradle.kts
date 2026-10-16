@@ -56,6 +56,7 @@ data class Environment(
      * hotmess.admin.audiencekit.com resolves by subdomain; switch to hotmess.social once that domain is verified.
      */
     val audienceHost: String = "hotmess.admin.audiencekit.com",
+    val googleServerClientId: String = "",
 )
 
 val environments = mapOf(
@@ -156,6 +157,7 @@ android {
         buildConfigField("String", "AUDIENCE_ID", "\"${environment.audienceId}\"")
         buildConfigField("String", "FACEBOOK_APP_ID", "\"${environment.facebookAppId}\"")
         buildConfigField("String", "FACEBOOK_LOGIN_CONFIG_ID", "\"${environment.facebookLoginConfigId}\"")
+        buildConfigField("String", "GOOGLE_SERVER_CLIENT_ID", "\"${environment.googleServerClientId.ifEmpty { secret("google.serverClientId") }}\"")
         buildConfigField("boolean", "PRIVATE_SIGN_IN", environment.privateSignIn.toString())
         buildConfigField("String", "AUDIENCEKIT_ENVIRONMENT", "\"${environment.audienceKitEnvironment}\"")
         resValue(
@@ -209,6 +211,9 @@ dependencies {
     implementation(libs.coil.compose)
     implementation(libs.coil.network.okhttp)
     implementation(libs.androidx.browser)
+    implementation(libs.androidx.credentials)
+    implementation(libs.androidx.credentials.play.services.auth)
+    implementation(libs.googleid)
     // Facebook Login brings an old Fragment; the Activity Result API needs 1.3 or later.
     implementation(libs.androidx.fragment)
     implementation(libs.maplibre)

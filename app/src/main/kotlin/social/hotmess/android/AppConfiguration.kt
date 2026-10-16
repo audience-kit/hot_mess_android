@@ -9,6 +9,7 @@ data class AppConfiguration(
     val audienceHost: String = BuildConfig.AUDIENCE_HOST,
     val audienceId: String? = BuildConfig.AUDIENCE_ID.ifBlank { null },
     val facebookAppId: String = BuildConfig.FACEBOOK_APP_ID,
+    val googleServerClientId: String = BuildConfig.GOOGLE_SERVER_CLIENT_ID,
     /** The Login for Business configuration, for a build that signs in with a Business-type app. */
     val facebookLoginConfigId: String? = BuildConfig.FACEBOOK_LOGIN_CONFIG_ID.ifBlank { null },
     /** Signs in through an ephemeral Custom Tab that doesn't share Chrome's Facebook cookies (Sign-in Test). */

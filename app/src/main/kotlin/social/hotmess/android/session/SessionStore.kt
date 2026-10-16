@@ -182,6 +182,34 @@ class SessionStore(
         }
     }
 
+    fun beginGoogleSignIn() {
+        _state.value = AuthState.SigningIn
+    }
+
+    fun signInWithGoogle(idToken: String, displayName: String? = null) {
+        scope.launch { exchangeGoogle(idToken, displayName) }
+    }
+
+    private suspend fun exchangeGoogle(idToken: String, displayName: String?) {
+        _state.value = AuthState.SigningIn
+        try {
+            val result = audienceKit.signInWithGoogle(
+                idToken = idToken,
+                device = DeviceDescription.current(context),
+                name = displayName,
+            )
+            val id = social.hotmess.core.RecordId.normalize(result.userId)
+            _user.value = id?.let { User(it, displayName ?: "") }
+            _user.value = runCatching { api.me() }.getOrNull() ?: _user.value
+            signedIn()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.e("HotMess", "Google sign-in failed: ${e.message}")
+            _state.value = AuthState.Failed(signInFailureMessage(e))
+        }
+    }
+
     /**
      * What to say when the exchange fails. A refused sign-in is a 400 INVALID whose message is Facebook's reason,
      * shown as it is; a 401 is the API refusing the token outright; anything else is generic.

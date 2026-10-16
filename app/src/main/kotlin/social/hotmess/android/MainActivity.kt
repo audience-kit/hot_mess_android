@@ -12,9 +12,17 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.core.net.toUri
+import androidx.credentials.CredentialManager
+import androidx.credentials.CustomCredential
+import androidx.credentials.GetCredentialRequest
+import androidx.credentials.exceptions.GetCredentialCancellationException
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.lifecycleScope
+import com.google.android.libraries.identity.googleid.GetGoogleIdOption
+import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.receiveAsFlow
+import kotlinx.coroutines.launch
 import social.hotmess.android.ui.HotMessApp
 import social.hotmess.android.ui.LocalAppGraph
 import social.hotmess.android.ui.components.NotificationBanner
@@ -39,7 +47,7 @@ class MainActivity : ComponentActivity() {
             HotMessTheme(branding = branding?.theme) {
                 CompositionLocalProvider(LocalAppGraph provides graph) {
                     Box(Modifier.fillMaxSize()) {
-                        HotMessApp(links = linkFlow, onSignIn = ::signIn)
+                        HotMessApp(links = linkFlow, onSignIn = ::signIn, onGoogleSignIn = ::signInWithGoogle)
                         // A notification that came over the cable while the app is open; a tap opens it as a push's would.
                         NotificationBanner(graph.notifications) { notification -> openPush(notification.data) }
                     }
@@ -72,6 +80,46 @@ class MainActivity : ComponentActivity() {
             .setEphemeralBrowsingEnabled(graph.configuration.privateSignIn)
             .build()
             .launchUrl(this, url.toUri())
+    }
+
+    private fun signInWithGoogle() {
+        val serverClientId = graph.configuration.googleServerClientId
+        if (serverClientId.isBlank()) {
+            graph.session.signInFailed("Google sign-in isn't set up for this build yet.")
+            return
+        }
+
+        graph.session.beginGoogleSignIn()
+        lifecycleScope.launch {
+            try {
+                val credentialManager = CredentialManager.create(this@MainActivity)
+                val googleIdOption = GetGoogleIdOption.Builder()
+                    .setFilterByAuthorizedAccounts(false)
+                    .setServerClientId(serverClientId)
+                    .setAutoSelectEnabled(false)
+                    .build()
+
+                val request = GetCredentialRequest.Builder()
+                    .addCredentialOption(googleIdOption)
+                    .build()
+
+                val result = credentialManager.getCredential(this@MainActivity, request)
+                val credential = result.credential
+                if (credential is CustomCredential && credential.type == GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL) {
+                    val googleIdTokenCredential = GoogleIdTokenCredential.createFrom(credential.data)
+                    graph.session.signInWithGoogle(
+                        idToken = googleIdTokenCredential.idToken,
+                        displayName = googleIdTokenCredential.displayName,
+                    )
+                } else {
+                    graph.session.signInFailed("Unexpected credential type returned from Google.")
+                }
+            } catch (e: GetCredentialCancellationException) {
+                graph.session.signInCancelled()
+            } catch (e: Exception) {
+                graph.session.signInFailed(e.message ?: "Google sign-in failed.")
+            }
+        }
     }
 
     private fun handle(intent: Intent?) {
