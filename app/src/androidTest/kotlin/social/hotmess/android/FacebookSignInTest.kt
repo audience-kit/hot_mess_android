@@ -192,6 +192,6 @@ class FacebookSignInTest {
         val LOG_IN: Pattern = Pattern.compile("(?i)log ?in")
         val ANOTHER_ACCOUNT: Pattern = Pattern.compile("(?i)not you\\??|(log in|use) (to |with )?(another|a different) (account|profile)|switch accounts?")
         val CHROME_FIRST_RUN: Pattern = Pattern.compile("(?i)use without an account|stay signed out|no,? thanks|accept & continue")
-        val FACEBOOK_ERROR: Pattern = Pattern.compile("(?i).*(went wrong|not allowed by the application configuration|app not active|invalid app id).*")
+        val FACEBOOK_ERROR: Pattern = Pattern.compile("(?i).*(went wrong|not allowed by the application configuration|app not active|invalid app id|app isn.t available).*")
     }
 }
