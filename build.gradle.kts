@@ -12,7 +12,7 @@ buildscript {
         }
         dependencies {
             // Keep in step with `agp` in gradle/libs.versions.toml.
-            classpath("com.android.tools.build:gradle:9.3.3")
+            classpath("com.android.tools.build:gradle:9.1.0")
         }
     }
 }

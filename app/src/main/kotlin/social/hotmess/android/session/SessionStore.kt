@@ -281,7 +281,7 @@ class SessionStore(
          * until it's back on, everyone's friends list is empty and no email is stored. Turn it back on once Meta
          * approves them.
          */
-        const val ASKS_FOR_REVIEWED_PERMISSIONS = false
+        const val ASKS_FOR_REVIEWED_PERMISSIONS = true
 
         /** What sign-in asks Facebook for. */
         private val PERMISSIONS =
