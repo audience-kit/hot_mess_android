@@ -46,8 +46,6 @@ data class Environment(
     val audienceKitEnvironment: String = "production",
     /** The Login for Business configuration, for a Business-type Facebook app. */
     val facebookLoginConfigId: String = "",
-    /** Permissions to name alongside [facebookLoginConfigId], comma-separated. */
-    val facebookLoginScope: String = "",
     /**
      * Opens Facebook's dialog in an ephemeral Custom Tab, which doesn't share Chrome's cookies, so
      * whoever is signed in to facebook.com in Chrome doesn't get in the sign-in test's way.
@@ -66,12 +64,10 @@ val environments = mapOf(
     "debug" to Environment("debug", "http://10.0.2.2:3000", "", "842337999153841"),
     "staging" to Environment("staging", "https://api.next.audiencekit.com", "", "1660272792277019", "staging",
         audienceHost = "hotmess.admin.next.audiencekit.com"),
-    // Staging, signing in with the AudienceKit platform app instead: Meta won't make new Facebook test users or
-    // add the ones there are to another app, so this is the only app the sign-in test's users work on.
-    "signInTest" to Environment("signInTest", "https://api.next.audiencekit.com", "", "713525445368431", "staging", "4085560021745660", privateSignIn = true,
-        // The service app won't issue a token unless the request names pages_show_list.
-        facebookLoginScope = "pages_show_list",
-        audienceHost = "hotmess.admin.next.audiencekit.com"),
+    // Debug for the sign-in test: Hot Mess's development app against the local API. The app is in development
+    // mode, so the test signs its account (which needs a role on the app) in to Chrome first, and sign-in shares
+    // Chrome's session rather than using a private tab.
+    "signInTest" to Environment("signInTest", "http://10.0.2.2:3000", "", "2967605370250663"),
     "release" to Environment("release", "https://api.audiencekit.com", "b0f8b66a-e636-495d-9475-0f5317ea08e0", "1168782378316790"),
 )
 
@@ -148,20 +144,21 @@ android {
         }
     }
 
-    // UI tests sign in against the real API as Facebook test users, which only work on the platform
-    // app, so they run on Sign-in Test: Staging on that app.
+    // UI tests sign in against the real API, so they run on Sign-in Test: Staging in a private Custom Tab.
     testBuildType = "signInTest"
     // It looks like Staging.
     sourceSets.getByName("signInTest").res.srcDir("src/staging/res")
 
     buildTypes.configureEach {
         val environment = environments.getValue(name)
-        buildConfigField("String", "API_BASE_URL", "\"${environment.apiBaseUrl}\"")
+        // scripts/ui-tests.py runs the sign-in test against the API it starts: `-Photmess.testApiUrl=…`.
+        val apiBaseUrl = providers.gradleProperty("hotmess.testApiUrl").orNull?.takeIf { name == "signInTest" }
+            ?: environment.apiBaseUrl
+        buildConfigField("String", "API_BASE_URL", "\"$apiBaseUrl\"")
         buildConfigField("String", "AUDIENCE_HOST", "\"${environment.audienceHost}\"")
         buildConfigField("String", "AUDIENCE_ID", "\"${environment.audienceId}\"")
         buildConfigField("String", "FACEBOOK_APP_ID", "\"${environment.facebookAppId}\"")
         buildConfigField("String", "FACEBOOK_LOGIN_CONFIG_ID", "\"${environment.facebookLoginConfigId}\"")
-        buildConfigField("String", "FACEBOOK_LOGIN_SCOPE", "\"${environment.facebookLoginScope}\"")
         buildConfigField("String", "GOOGLE_SERVER_CLIENT_ID", "\"${environment.googleServerClientId.ifEmpty { secret("google.serverClientId") }}\"")
         buildConfigField("boolean", "PRIVATE_SIGN_IN", environment.privateSignIn.toString())
         buildConfigField("String", "AUDIENCEKIT_ENVIRONMENT", "\"${environment.audienceKitEnvironment}\"")
@@ -176,7 +173,7 @@ android {
             },
         )
         manifestPlaceholders["facebookAppId"] = environment.facebookAppId
-        manifestPlaceholders["usesCleartextTraffic"] = (environment.name == "debug").toString()
+        manifestPlaceholders["usesCleartextTraffic"] = apiBaseUrl.startsWith("http:").toString()
     }
 
     buildFeatures {

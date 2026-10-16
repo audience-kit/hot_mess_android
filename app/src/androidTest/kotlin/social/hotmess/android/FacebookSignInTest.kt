@@ -11,6 +11,7 @@ import androidx.test.uiautomator.UiObject2
 import androidx.test.uiautomator.Until
 import java.util.regex.Pattern
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
 import org.junit.Assume.assumeTrue
 import org.junit.Before
@@ -24,8 +25,10 @@ import org.junit.runner.RunWith
  *
  * The test user comes from the `fbEmail`, `fbPassword` and optional `fbName` runner arguments (see
  * scripts/facebook-signin-test.sh); without them the test is skipped. The optional `fbAppId` is the
- * Facebook app the test users belong to, which has to be the build's. Sign-in opens in an ephemeral
- * Chrome Custom Tab, so whoever is signed in to Facebook in Chrome itself doesn't matter.
+ * Facebook app the test users belong to, which has to be the build's. Hot Mess's development app is in
+ * development mode, where Facebook turns away anyone it doesn't know before its login form ("App not
+ * active"), so the test logs the account in to m.facebook.com in Chrome first and sign-in's Custom Tab
+ * shares that session.
  */
 @RunWith(AndroidJUnit4::class)
 class FacebookSignInTest {
@@ -42,6 +45,10 @@ class FacebookSignInTest {
     fun wake() {
         device.wakeUp()
         device.executeShellCommand("wm dismiss-keyguard")
+        // Signed in, Hot Mess asks for location, notifications and nearby devices; the dialogs would cover the tabs.
+        for (permission in listOf("ACCESS_FINE_LOCATION", "ACCESS_COARSE_LOCATION", "POST_NOTIFICATIONS", "BLUETOOTH_SCAN")) {
+            device.executeShellCommand("pm grant $app android.permission.$permission")
+        }
     }
 
     @Test
@@ -58,6 +65,7 @@ class FacebookSignInTest {
             )
         }
 
+        signInToFacebookInChrome()
         launch()
         signOutIfSignedIn()
         val signIn = device.wait(Until.findObject(inApp().text("Continue with Facebook")), TIMEOUT)
@@ -66,7 +74,11 @@ class FacebookSignInTest {
 
         walkFacebook()
 
-        device.findObject(inApp().text("Me")).click()
+        // The tabs redraw as the first data arrives, so the Me tab found a moment ago can be gone.
+        val opened = (1..5).any {
+            runCatching { device.wait(Until.findObject(inApp().text("Me")), TIMEOUT)!!.click() }.isSuccess
+        }
+        assertTrue("Signed in, but the Me tab couldn't be opened", opened)
         if (name != null) {
             assertNotNull(
                 "Signed in, but Me doesn't show $name. Chrome may be signed in to Facebook as someone else.",
@@ -147,6 +159,50 @@ class FacebookSignInTest {
         fail("Hot Mess didn't reach its tabs after Facebook")
     }
 
+    /** Logs the account in to m.facebook.com in Chrome, unless Chrome already has a Facebook session. */
+    private fun signInToFacebookInChrome() {
+        val context = instrumentation.context
+        context.startActivity(
+            Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://m.facebook.com/login/"))
+                .setPackage(CHROME)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+        )
+        assertNotNull("Chrome didn't open", device.wait(Until.hasObject(By.pkg(CHROME).depth(0)), TIMEOUT))
+
+        var submitted = false
+        val deadline = System.currentTimeMillis() + 60_000
+        while (System.currentTimeMillis() < deadline) {
+            device.findObject(By.text(CHROME_FIRST_RUN))?.let {
+                it.click()
+                device.waitForIdle()
+                continue
+            }
+            val fields = device.findObjects(By.pkg(CHROME).clazz("android.widget.EditText"))
+                .filter { it.visibleBounds.height() > 0 }
+            if (!submitted && fields.size >= 2) {
+                fields.first().fill(email!!)
+                fields.last().fill(password!!)
+                (device.findObject(By.clickable(true).text(LOG_IN)) ?: device.findObject(By.desc(LOG_IN)))?.click()
+                    ?: device.pressEnter()
+                submitted = true
+                device.waitForIdle()
+                Thread.sleep(3_000)
+                continue
+            }
+            // "Save your login info?" and other offers after logging in.
+            (device.findObject(By.text(NOT_NOW)) ?: device.findObject(By.desc(NOT_NOW)))?.let {
+                it.click()
+                device.waitForIdle()
+                continue
+            }
+            // No login form: signed in, by this run or an earlier one.
+            if (fields.size < 2 && (submitted || System.currentTimeMillis() > deadline - 50_000)) break
+            Thread.sleep(1_000)
+        }
+        // Close Chrome's tab rather than leaving it behind, or sign-in's Custom Tab opens in its task.
+        device.executeShellCommand("am force-stop $CHROME")
+    }
+
     private fun launch() {
         val context = instrumentation.context
         val intent = context.packageManager.getLaunchIntentForPackage(app)!!
@@ -184,6 +240,7 @@ class FacebookSignInTest {
 
     private companion object {
         const val TIMEOUT = 20_000L
+        const val CHROME = "com.android.chrome"
         // Login for Business ends on "… has been connected to AudienceKit" with Got it.
         val CONTINUE: Pattern = Pattern.compile("(?i)continue|got it")
         val CONTINUE_AS: Pattern = Pattern.compile("(?i)continue as (.+?)\\??$")
