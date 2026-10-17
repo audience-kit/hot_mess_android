@@ -62,6 +62,19 @@ object Documents {
         }
     """.trimIndent()
 
+    /** Whether the signed-in user gets pushes about rooms they left in the last 30 minutes. Off until they turn it on. */
+    val RECENT_CHAT_PUSH: String = """
+        query RecentChatPush {
+          me { recentChatPush }
+        }
+    """.trimIndent()
+
+    val SET_RECENT_CHAT_PUSH: String = """
+        mutation SetRecentChatPush(${'$'}enabled: Boolean!) {
+          setRecentChatPush(input: { enabled: ${'$'}enabled }) { recentChatPush }
+        }
+    """.trimIndent()
+
     val CLOSEST_LOCALE: String = """
         query ClosestLocale(${'$'}near: CoordinatesInput!) {
           closestLocale(near: ${'$'}near) { id name label }

@@ -56,6 +56,8 @@
                 <data android:pathPrefix="/venues/" />
                 <data android:pathPrefix="/events/" />
                 <data android:pathPrefix="/people/" />
+                <!-- A locale's chat room (a venue's, /venues/<id>/chat, is under /venues/). -->
+                <data android:pathPattern="/locales/.*/chat" />
             </intent-filter>
 
             <!-- Facebook's login dialog redirects to fbconnect://cct.<application id> with a code. -->

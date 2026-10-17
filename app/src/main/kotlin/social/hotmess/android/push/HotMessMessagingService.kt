@@ -16,11 +16,13 @@ import social.hotmess.android.MainActivity
 import social.hotmess.android.R
 import social.hotmess.android.appGraph
 import social.hotmess.core.PingPush
+import social.hotmess.core.RecentChatPush
 
 /**
  * Firebase hands new tokens here. In the background Firebase shows notifications itself, and tapping
- * one opens [MainActivity] with the message's data (`kind`, `ping_id`) as extras. In the foreground
- * Firebase shows nothing, so a Ping push is shown here, with the same extras, and Now reloads.
+ * one opens [MainActivity] with the message's data (`kind`, `ping_id`, or a recent chat's `url`) as
+ * extras. In the foreground Firebase shows nothing, so a Ping push is shown here, with the same extras,
+ * and Now reloads; likewise a push about a chat room the user just left, which opens the room.
  */
 class HotMessMessagingService : FirebaseMessagingService() {
     override fun onNewToken(token: String) {
@@ -29,30 +31,44 @@ class HotMessMessagingService : FirebaseMessagingService() {
     }
 
     override fun onMessageReceived(message: RemoteMessage) {
+        RecentChatPush.parse(message.data)?.let { push ->
+            val notification = message.notification ?: return
+            val id = (push.messageId ?: push.url).hashCode()
+            show(applicationContext, notification.title, notification.body, message.data, CHAT_CHANNEL, "Chat rooms", id)
+            return
+        }
         val push = PingPush.parse(message.data) ?: return
         applicationContext.appGraph.pingUpdated(push.pingId)
         val notification = message.notification ?: return
-        show(applicationContext, notification.title, notification.body, message.data)
+        show(applicationContext, notification.title, notification.body, message.data, PING_CHANNEL, "Pings", push.pingId?.hashCode() ?: 0)
     }
 
     companion object {
         const val PING_CHANNEL = "pings"
+        const val CHAT_CHANNEL = "chat"
 
-        private fun show(context: Context, title: String?, body: String?, data: Map<String, String>) {
+        private fun show(
+            context: Context,
+            title: String?,
+            body: String?,
+            data: Map<String, String>,
+            channel: String,
+            channelName: String,
+            id: Int,
+        ) {
             val granted = ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) ==
                 PackageManager.PERMISSION_GRANTED || android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.TIRAMISU
             if (!granted) return
 
             val manager = context.getSystemService(NotificationManager::class.java)
-            manager.createNotificationChannel(NotificationChannel(PING_CHANNEL, "Pings", NotificationManager.IMPORTANCE_HIGH))
+            manager.createNotificationChannel(NotificationChannel(channel, channelName, NotificationManager.IMPORTANCE_HIGH))
 
             val open = Intent(context, MainActivity::class.java)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
             data.forEach { (key, value) -> open.putExtra(key, value) }
-            val id = data[PingPush.PING_ID]?.hashCode() ?: 0
             val tap = PendingIntent.getActivity(context, id, open, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
 
-            val notification = NotificationCompat.Builder(context, PING_CHANNEL)
+            val notification = NotificationCompat.Builder(context, channel)
                 .setSmallIcon(R.mipmap.ic_launcher_monochrome)
                 .setContentTitle(title)
                 .setContentText(body)

@@ -144,10 +144,19 @@ data class ChatRoom(val kind: Kind, val id: String) {
  * as announcements are pinned and unpinned; and `"presence":"push"`, on a presence frame or a line, for a
  * friend outside the room whom a notification reaches.
  *
+ * Someone whose last connection leaves stays listed, offline, for a while: their offline (or push)
+ * presence frame carries `recent_until`, and a roster may add `recent`, who left lately (the latest
+ * first): `[{"user_id":…,"name":…,"avatar_url":…,"friend":…,"presence":"offline"|"push","last_seen_at":…,
+ * "recent_until":…}]`, people who aren't in `people`. Without `recent_until`, `last_seen_at` plus
+ * [RECENT] stands in.
+ *
  * When an admin removes a line the room hears `{"type":"removed","id":…}`, and when they clear the room
  * `{"type":"cleared","cleared_at":…}`: every line so far is gone.
  */
 object ChatProtocol {
+    /** How long a room lists someone after they leave, when the frame doesn't say (the server's ChatVisit::RECENT). */
+    val RECENT: java.time.Duration = java.time.Duration.ofMinutes(30)
+
     // Lenient, so an id sent as a number still reads as a string rather than dropping the line.
     private val json = Json {
         ignoreUnknownKeys = true
@@ -171,17 +180,20 @@ object ChatProtocol {
 
         /**
          * Everyone in the room now, by lowercase user id, sent on joining; with [people] (who they are)
-         * and [friends] (all the joiner's friends, full names) from newer servers.
+         * and [friends] (all the joiner's friends, full names) from newer servers, and [recent], who left
+         * lately, each with their [RoomPerson.recentUntil].
          */
         data class Roster(
             val online: Set<String>,
             val people: List<RoomPerson> = emptyList(),
             val friends: List<Friend> = emptyList(),
+            val recent: List<RoomPerson> = emptyList(),
         ) : Frame
 
         /**
          * Someone (by lowercase user id) came into the room or left it; a newcomer with their [name] and
-         * [avatarUrl] when sent. Someone who left but whom a notification reaches is [reachable].
+         * [avatarUrl] when sent. Someone who left but whom a notification reaches is [reachable], and the
+         * room lists someone who left until [recentUntil] when sent.
          */
         data class PresenceChanged(
             val userId: String,
@@ -189,6 +201,7 @@ object ChatProtocol {
             val name: String? = null,
             val avatarUrl: String? = null,
             val reachable: Boolean = false,
+            val recentUntil: Instant? = null,
         ) : Frame
 
         /** The room's recent lines, oldest first, and its pinned announcement, sent on joining. */
@@ -268,7 +281,20 @@ object ChatProtocol {
             val id = friend.string("user_id") ?: return@mapNotNull null
             Friend(id.lowercase(), friend.string("name").orEmpty())
         }
-        return Frame.Roster(online.mapNotNull { (it as? JsonPrimitive)?.contentOrNull?.lowercase() }.toSet(), people, friends)
+        val recent = (message["recent"] as? JsonArray).orEmpty().mapNotNull { entry ->
+            val person = entry as? JsonObject ?: return@mapNotNull null
+            val id = person.string("user_id") ?: return@mapNotNull null
+            val until = person.instant("recent_until") ?: person.instant("last_seen_at")?.plus(RECENT) ?: return@mapNotNull null
+            RoomPerson(
+                userId = id.lowercase(),
+                name = person.string("name"),
+                avatarUrl = person.string("avatar_url"),
+                friend = (person["friend"] as? JsonPrimitive)?.booleanOrNull ?: false,
+                recentUntil = until,
+                reachable = person.string("presence").equals("push", ignoreCase = true),
+            )
+        }
+        return Frame.Roster(online.mapNotNull { (it as? JsonPrimitive)?.contentOrNull?.lowercase() }.toSet(), people, friends, recent)
     }
 
     private fun line(element: kotlinx.serialization.json.JsonElement?): VenueMessage? {
@@ -298,8 +324,11 @@ object ChatProtocol {
             name = if (online) message.string("name") else null,
             avatarUrl = if (online) message.string("avatar_url") else null,
             reachable = presence.equals("push", ignoreCase = true),
+            recentUntil = if (online) null else message.instant("recent_until"),
         )
     }
+
+    private fun JsonObject.instant(key: String): Instant? = string(key)?.let(InstantSerializer::parse)
 
     /** A string field, or null when it's missing, not a string-like value, or blank. */
     private fun JsonObject.string(key: String): String? = (this[key] as? JsonPrimitive)?.contentOrNull.blankToNull()
@@ -381,11 +410,15 @@ class VenueChatConnection(
         data object Left : Event
         data class Range(val outOfRange: Boolean) : Event
 
-        /** Everyone in the room now, by lowercase user id, and who they are and the viewer's friends when sent. */
+        /**
+         * Everyone in the room now, by lowercase user id, and who they are, the viewer's friends and who
+         * left lately when sent.
+         */
         data class Roster(
             val online: Set<String>,
             val people: List<RoomPerson> = emptyList(),
             val friends: List<Friend> = emptyList(),
+            val recent: List<RoomPerson> = emptyList(),
         ) : Event
 
         data class PresenceChanged(
@@ -394,6 +427,7 @@ class VenueChatConnection(
             val name: String? = null,
             val avatarUrl: String? = null,
             val reachable: Boolean = false,
+            val recentUntil: Instant? = null,
         ) : Event
 
         data class History(val messages: List<VenueMessage>, val pinned: VenueMessage?) : Event
@@ -423,9 +457,9 @@ class VenueChatConnection(
                     ChatProtocol.Frame.Left -> trySend(Event.Left)
                     is ChatProtocol.Frame.Message -> trySend(Event.Received(frame.message))
                     is ChatProtocol.Frame.Range -> trySend(Event.Range(frame.outOfRange))
-                    is ChatProtocol.Frame.Roster -> trySend(Event.Roster(frame.online, frame.people, frame.friends))
+                    is ChatProtocol.Frame.Roster -> trySend(Event.Roster(frame.online, frame.people, frame.friends, frame.recent))
                     is ChatProtocol.Frame.PresenceChanged ->
-                        trySend(Event.PresenceChanged(frame.userId, frame.online, frame.name, frame.avatarUrl, frame.reachable))
+                        trySend(Event.PresenceChanged(frame.userId, frame.online, frame.name, frame.avatarUrl, frame.reachable, frame.recentUntil))
                     is ChatProtocol.Frame.History -> trySend(Event.History(frame.messages, frame.pinned))
                     is ChatProtocol.Frame.Pin -> trySend(Event.Pin(frame.id, frame.announcement))
                     is ChatProtocol.Frame.Removed -> trySend(Event.Removed(frame.id))

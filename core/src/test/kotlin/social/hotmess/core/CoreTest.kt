@@ -177,6 +177,32 @@ class DeepLinkTest {
     }
 
     @Test
+    fun readsChatRoomLinks() {
+        assertEquals(AppRoute.Chat(ChatRoom.venue(id)), DeepLink.route("https://hotmess.social/venues/${id.uppercase()}/chat"))
+        assertEquals(AppRoute.Chat(ChatRoom.locale(id)), DeepLink.route("https://hotmess.social/locales/$id/chat"))
+        assertEquals(AppRoute.Chat(ChatRoom.venue(id)), DeepLink.route("hotmess://venues/$id/chat"))
+        assertEquals(AppTab.VENUES, AppRoute.Chat(ChatRoom.venue(id)).tab)
+        assertEquals(AppTab.NOW, AppRoute.Chat(ChatRoom.locale(id)).tab)
+        // A venue's other pages are still its page; a locale has no page but its chat.
+        assertEquals(AppRoute.VenueDetail(id), DeepLink.route("https://hotmess.social/venues/$id/events"))
+        assertNull(DeepLink.route("https://hotmess.social/locales/$id"))
+        assertNull(DeepLink.route("https://hotmess.social/people/$id/chat"))
+    }
+
+    @Test
+    fun readsRecentChatPushes() {
+        val url = "https://hotmess.social/locales/$id/chat"
+        val push = RecentChatPush.parse(
+            mapOf("kind" to "recent_chat", "room_id" to id, "message_id" to "m-1", "url" to url, "notification_id" to "n-1"),
+        )
+        assertEquals(RecentChatPush(url, id, "m-1"), push)
+        assertEquals(AppRoute.Chat(ChatRoom.locale(id)), push?.route)
+        assertNull(RecentChatPush.parse(mapOf("kind" to "recent_chat", "url" to "")))
+        assertNull(RecentChatPush.parse(mapOf("kind" to "recent_chat", "url" to "https://hotmess.social/about")))
+        assertNull(RecentChatPush.parse(mapOf("kind" to "ping", "url" to url)))
+    }
+
+    @Test
     fun ignoresAnythingElse() {
         assertNull(DeepLink.route("https://hotmess.social/venues/not-a-uuid"))
         assertNull(DeepLink.route("https://hotmess.social/about"))
@@ -447,6 +473,37 @@ class ChatProtocolTest {
     }
 
     @Test
+    fun readsWhoWasHereRecently() {
+        val until = Instant.parse("2026-10-17T05:30:00Z")
+        assertEquals(
+            ChatProtocol.Frame.PresenceChanged("u-3", online = false, reachable = true, recentUntil = until),
+            ChatProtocol.parse(
+                """{"identifier":"x","message":{"type":"presence","user_id":"u-3","presence":"push","recent_until":"2026-10-17T05:30:00Z"}}""",
+            ),
+        )
+        // Coming back is never "recent".
+        assertEquals(
+            ChatProtocol.Frame.PresenceChanged("u-3", online = true),
+            ChatProtocol.parse("""{"identifier":"x","message":{"type":"presence","user_id":"u-3","presence":"online","recent_until":"2026-10-17T05:30:00Z"}}"""),
+        )
+
+        val frame = ChatProtocol.parse(
+            """{"identifier":"x","message":{"type":"roster","online":["u-1"],
+              "recent":[{"user_id":"U-4","name":"Wren Fox","friend":true,"presence":"push",
+                         "last_seen_at":"2026-10-17T05:00:00Z","recent_until":"2026-10-17T05:30:00Z"},
+                        {"user_id":"u-5","name":"Jo P.","presence":"offline","last_seen_at":"2026-10-17T04:50:00.000+00:00"},
+                        {"user_id":"u-6"}, "junk"]}}""",
+        ) as ChatProtocol.Frame.Roster
+        assertEquals(
+            listOf(
+                RoomPerson("u-4", "Wren Fox", friend = true, recentUntil = until, reachable = true),
+                RoomPerson("u-5", "Jo P.", recentUntil = Instant.parse("2026-10-17T05:20:00Z")),
+            ),
+            frame.recent,
+        )
+    }
+
+    @Test
     fun sendsOnlyTheText() {
         val frame = HotMessApi.json.parseToJsonElement(ChatProtocol.message(venue, "hi")).jsonObject
         assertEquals("""{"message":"hi"}""", frame["data"]!!.jsonPrimitive.content)
@@ -498,6 +555,48 @@ class RoomPeopleTest {
         room = room.described("u-3", "Someone Else", null).described("u-4", "Not Here", null)
         assertEquals("Kiko M.", room["u-3"]?.name)
         assertNull(room["u-4"])
+    }
+
+    @Test
+    fun keepsWhoLeftUntilTheirTimeIsUp() {
+        val now = Instant.parse("2026-10-17T05:00:00Z")
+        val soon = now.plusSeconds(600)
+        val later = now.plusSeconds(1_200)
+        var room = RoomPeople().roster(
+            setOf("u-1", "u-2"),
+            listOf(RoomPerson("u-2", "Jo P.")),
+            recent = listOf(RoomPerson("u-1", "Back Again", recentUntil = later), RoomPerson("u-3", "Wren Fox", recentUntil = soon)),
+        )
+        // Someone back in the room isn't recent.
+        assertEquals(setOf("u-1", "u-2"), room.online)
+        assertEquals(setOf("u-1", "u-2", "u-3"), room.ids)
+
+        room = room.left("U-2", later, reachable = true, now = now)
+        assertEquals(RoomPerson("u-2", "Jo P.", recentUntil = later, reachable = true), room["u-2"])
+        assertEquals(setOf("u-1"), room.online)
+        // An older server says nothing about how long, and a time already past is no time: they're gone.
+        assertNull(room.left("u-1", now = now)["u-1"])
+        assertNull(room.left("u-1", now.minusSeconds(1), now = now)["u-1"])
+
+        // Coming back clears it, and keeps the name.
+        assertEquals(RoomPerson("u-2", "Jo P."), room.joined("u-2")["u-2"])
+
+        assertEquals(setOf("u-1", "u-2", "u-3"), room.pruned(now).ids)
+        assertEquals(setOf("u-1", "u-2"), room.pruned(soon).ids)
+        assertEquals(setOf("u-1"), room.pruned(later).ids)
+        assertTrue(room.pruned(now) === room)
+    }
+
+    @Test
+    fun hereNowPutsWhoLeftLastAfterEveryoneHere() {
+        val now = Instant.parse("2026-10-17T05:00:00Z")
+        val people = listOf(
+            RoomPerson("u-early", "Amy R.", recentUntil = now.plusSeconds(60)),
+            RoomPerson("u-late", "Zed Q.", recentUntil = now.plusSeconds(1_200)),
+            RoomPerson("u-here", "Wren Fox"),
+            RoomPerson("u-friend", "Bo Turner", friend = true),
+        )
+        assertEquals(listOf("u-friend", "u-here", "u-late", "u-early"), RoomPeople.hereNow(people, null).map { it.userId })
     }
 
     @Test
