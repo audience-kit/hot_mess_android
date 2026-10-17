@@ -78,7 +78,7 @@ builds must use a number higher than the previous release.
 | `debug` | `http://10.0.2.2:3000` (the API on your machine, from the emulator) | 842337999153841 | `social.hotmess.android.development` |
 | `staging` | `https://api.next.audiencekit.com` | 1660272792277019 | `social.hotmess.android.staging` |
 | `release` | `https://api.audiencekit.com` | 1168782378316790 | `social.hotmess.android.app` |
-| `signInTest` | `https://api.next.audiencekit.com` | 713525445368431 (AudienceKit platform) | `social.hotmess.android.signintest` |
+| `signInTest` | `http://10.0.2.2:3000` | 2967605370250663 (Hot Mess development) | `social.hotmess.android.signintest` |
 
 Hot Mess is a consumer app: sign-in is classic Facebook Login on the build's Facebook app, asking
 only for `public_profile` until App Review is approved, like the iOS app. It opens Facebook's OAuth dialog
@@ -99,11 +99,11 @@ door. Passes are on the Me tab. Scanning passes at the door is the separate Velv
 `FacebookSignInTest` (`app/src/androidTest`) signs in on a connected phone as a Facebook test user and
 checks the Me tab shows them. `scripts/facebook-signin-test.sh` loads `FB_TEST_ANDROID_EMAIL`,
 `FB_TEST_ANDROID_PASSWORD` and `FB_TEST_ANDROID_NAME` from `~/.config/audience-kit/fb_test_users.env`;
-without them it's skipped. The test users belong to the AudienceKit platform app (713525445368431),
-and Meta won't add them to another app or make new ones, so connected tests run on `signInTest`:
-Staging, signing in with that app. It's a Business-type app, so that build opens the dialog with its
-Login for Business configuration and redirects to `fb713525445368431://authorize/`, like the iOS app. With `FB_TEST_APP_ID` set to the app the users belong to, the test stops
-early when that isn't the build's.
+without them it's skipped. Connected tests run on `signInTest`: Debug, signing in with Hot Mess's
+development app (2967605370250663) through classic Facebook Login against the local API on port 3000,
+which has to be running with that app's credentials. The account needs a role on that app (Facebook
+test users of another app can't sign in to it). The AudienceKit service app isn't used for testing. With `FB_TEST_APP_ID` set to the app the users belong to, the test stops early when
+that isn't the build's.
 That build signs in through an ephemeral Custom Tab, which doesn't share Chrome's cookies, so it
 doesn't matter who is signed in to facebook.com in Chrome (Chrome 136 or later). Like any
 connected test run, it uninstalls the app when it finishes.

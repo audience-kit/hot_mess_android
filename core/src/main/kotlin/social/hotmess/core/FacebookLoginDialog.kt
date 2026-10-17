@@ -13,15 +13,13 @@ import java.net.URLEncoder
  *
  * A Business-type Facebook app only accepts the dialog with its Login for Business [configId], which
  * stands in for the permissions. Then, like the iOS app, it redirects to `fb<app id>://authorize/`,
- * which has to be one of the app's Valid OAuth Redirect URIs. [configScope] is sent with it, for a
- * permission Facebook wants named in the request too (the service app needs `pages_show_list`).
+ * which has to be one of the app's Valid OAuth Redirect URIs.
  */
 class FacebookLoginDialog(
     val appId: String,
     private val permissions: List<String>,
     packageName: String,
     private val configId: String? = null,
-    private val configScope: List<String> = emptyList(),
 ) {
     val redirectUri: String = if (configId != null) "fb$appId://authorize/" else "fbconnect://cct.$packageName"
 
@@ -32,12 +30,7 @@ class FacebookLoginDialog(
             add("redirect_uri" to redirectUri)
             add("response_type" to "code")
             add("state" to state)
-            if (configId != null) {
-                add("config_id" to configId)
-                if (configScope.isNotEmpty()) add("scope" to configScope.joinToString(","))
-            } else {
-                add("scope" to permissions.joinToString(","))
-            }
+            if (configId != null) add("config_id" to configId) else add("scope" to permissions.joinToString(","))
         }
         return "https://www.facebook.com/v26.0/dialog/oauth?" +
             query.joinToString("&") { (name, value) -> "$name=${URLEncoder.encode(value, Charsets.UTF_8)}" }
