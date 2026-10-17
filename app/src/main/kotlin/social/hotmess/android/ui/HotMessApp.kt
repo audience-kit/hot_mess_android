@@ -77,7 +77,7 @@ import social.hotmess.core.ChatRoom
 @Serializable data class VenueRoute(val id: String)
 @Serializable data class EventRoute(val id: String)
 @Serializable data class PersonRoute(val id: String)
-/** A chat room: a venue's, or with [locale] a locale's. */
+/** A chat room: a venue's, or with [locale] a locale's. A blank [name] (from a link) is looked up. */
 @Serializable data class ChatRoute(val id: String, val name: String, val locale: Boolean = false)
 /** A cover pass, with its live QR code. */
 @Serializable data class PassRoute(val id: String)
@@ -182,6 +182,12 @@ private fun MainShell(links: Flow<AppRoute>) {
                     is AppRoute.PersonDetail -> PersonRoute(route.id)
                     // A tab of its own, not a screen to push: getting to the tab is all it needs.
                     is AppRoute.NowPing -> return
+                    // A venue's room over its page, so Back goes there; a locale's over Now.
+                    is AppRoute.Chat -> {
+                        val locale = route.room.kind == ChatRoom.Kind.LOCALE
+                        if (!locale) navController.navigate(VenueRoute(route.room.id))
+                        ChatRoute(route.room.id, "", locale = locale)
+                    }
                 },
             )
         }

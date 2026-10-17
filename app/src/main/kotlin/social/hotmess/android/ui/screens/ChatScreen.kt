@@ -12,6 +12,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -20,6 +21,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -71,7 +73,8 @@ class VenueChatModel(private val graph: AppGraph, private val room: ChatRoom) : 
 
     /**
      * Who is in the room now, by lowercase user id, with their names and photos where the room sends
-     * them: the roster on joining, then presence frames. Empty while disconnected.
+     * them: the roster on joining, then presence frames. Someone who left stays listed, offline, until
+     * their `recentUntil`. Empty while disconnected.
      */
     private val _people = MutableStateFlow(RoomPeople())
     val people: StateFlow<RoomPeople> = _people.asStateFlow()
@@ -86,6 +89,7 @@ class VenueChatModel(private val graph: AppGraph, private val room: ChatRoom) : 
     private var connection: VenueChatConnection? = null
     private var job: Job? = null
     private var heartbeat: Job? = null
+    private var prune: Job? = null
 
     /** Connects while the screen is showing, reconnecting after a drop. */
     fun connect() {
@@ -99,6 +103,15 @@ class VenueChatModel(private val graph: AppGraph, private val room: ChatRoom) : 
                 while (true) {
                     delay(HEARTBEAT_MS)
                     graph.location.reportAgain()
+                }
+            }
+        }
+        if (prune?.isActive != true) {
+            // Whoever was here recently drops off the list once their time is up.
+            prune = viewModelScope.launch {
+                while (true) {
+                    delay(PRUNE_MS)
+                    _people.value = _people.value.pruned()
                 }
             }
         }
@@ -123,13 +136,14 @@ class VenueChatModel(private val graph: AppGraph, private val room: ChatRoom) : 
                         is VenueChatConnection.Event.Roster -> {
                             // All the viewer's friends, by full name, so the room and its lines show them that way.
                             graph.api.friends.record(event.friends)
-                            _people.value = _people.value.roster(event.online, event.people)
+                            _people.value = _people.value.roster(event.online, event.people, event.recent)
                         }
                         is VenueChatConnection.Event.PresenceChanged -> {
                             _people.value = if (event.online) {
                                 _people.value.joined(event.userId, event.name, event.avatarUrl)
                             } else {
-                                _people.value.left(event.userId)
+                                // Listed until recentUntil, offline (or with the push dot), when the room says so.
+                                _people.value.left(event.userId, event.recentUntil, event.reachable)
                             }
                             val id = event.userId.lowercase()
                             _reachable.value = if (event.reachable) _reachable.value + id else _reachable.value - id
@@ -197,6 +211,8 @@ class VenueChatModel(private val graph: AppGraph, private val room: ChatRoom) : 
         job = null
         heartbeat?.cancel()
         heartbeat = null
+        prune?.cancel()
+        prune = null
         connection = null
         _people.value = RoomPeople()
         _reachable.value = emptySet()
@@ -212,12 +228,23 @@ class VenueChatModel(private val graph: AppGraph, private val room: ChatRoom) : 
 
     private companion object {
         const val HEARTBEAT_MS = 4 * 60 * 1000L
+        const val PRUNE_MS = 15 * 1000L
     }
 }
 
 @Composable
-fun VenueChatScreen(room: ChatRoom, venueName: String, navigator: Navigator) {
+fun VenueChatScreen(room: ChatRoom, name: String, navigator: Navigator) {
     val graph = LocalAppGraph.current
+    // A room opened from a link or a push comes without its name: the venue's, or the locale's when it's the app's.
+    val venueName by produceState(name.ifBlank { roomNameFallback(room, graph) }, room, name) {
+        if (name.isNotBlank() || room.kind != ChatRoom.Kind.VENUE) return@produceState
+        try {
+            value = graph.api.venueOverview(room.id).venue.name.ifBlank { value }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+        }
+    }
     val model = viewModel(key = "chat-${room.kind}-${room.id}") { VenueChatModel(graph, room) }
     val isLocale = room.kind == ChatRoom.Kind.LOCALE
     val messages by model.messages.collectAsStateWithLifecycle()
@@ -263,15 +290,16 @@ fun VenueChatScreen(room: ChatRoom, venueName: String, navigator: Navigator) {
             if (banner != null) RoomBanner(banner, venueName, isLocale = isLocale)
             val userId = user?.id
             val friends = graph.api.friends
-            // Who's here, friends first; a roster can add friends' full names, so it redraws the thread too.
+            // Who's here, the viewer then friends first; a roster can add friends' full names, so it redraws the thread too.
             val hereNow = remember(people, userId) {
                 RoomPeople.hereNow(people.byId.values, userId) { friends.fullName(it) }
             }
-            HereNowStrip(hereNow)
+            HereNowStrip(hereNow, reachable, viewerId = userId)
             val thread = remember(messages, userId, people) { messages.map { it.threadMessage(userId, friends) } }
             // Green for everyone in the room, yellow for friends outside it whom a notification reaches.
             val presence = remember(people, reachable) {
-                reachable.associateWith { Presence.PUSH } + people.ids.associateWith { Presence.ONLINE }
+                val push = reachable + people.byId.values.filter { it.isRecent && it.reachable }.map { it.userId }
+                push.associateWith { Presence.PUSH } + people.online.associateWith { Presence.ONLINE }
             }
             ChatThread(
                 thread,
@@ -289,6 +317,12 @@ fun VenueChatScreen(room: ChatRoom, venueName: String, navigator: Navigator) {
             )
         }
     }
+}
+
+/** What a room without a name is called until (or unless) it's looked up. */
+private fun roomNameFallback(room: ChatRoom, graph: AppGraph): String = when (room.kind) {
+    ChatRoom.Kind.VENUE -> "Chat"
+    ChatRoom.Kind.LOCALE -> graph.location.locale.value?.takeIf { RecordId.same(it.id, room.id) }?.name ?: "Small talk"
 }
 
 /**

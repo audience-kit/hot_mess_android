@@ -5,13 +5,19 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.rounded.ConfirmationNumber
 import androidx.compose.material.icons.rounded.BugReport
 import androidx.compose.material.icons.rounded.Email
 import androidx.compose.material.icons.rounded.LocationOn
+import androidx.compose.material.icons.rounded.Notifications
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -19,12 +25,17 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.launch
 import social.hotmess.android.location.LocationAccess
 import social.hotmess.android.ui.LocalAppGraph
 import social.hotmess.android.ui.Navigator
@@ -32,6 +43,7 @@ import social.hotmess.android.ui.ScreenScaffold
 import social.hotmess.android.ui.components.Avatar
 import social.hotmess.android.ui.components.DangerRow
 import social.hotmess.android.ui.components.DetailInset
+import social.hotmess.android.ui.components.DetailRowPadding
 import social.hotmess.android.ui.components.DetailSection
 import social.hotmess.android.ui.components.Feed
 import social.hotmess.android.ui.components.InfoRow
@@ -44,7 +56,7 @@ import social.hotmess.android.ui.theme.tokens
 
 private enum class Confirm { RESET, SIGN_OUT }
 
-/** You: who you're signed in as, location access, feedback, about the app, and signing out. */
+/** You: who you're signed in as, location access, chat notifications, feedback, about the app, and signing out. */
 @Composable
 fun MeScreen(navigator: Navigator) {
     val graph = LocalAppGraph.current
@@ -55,8 +67,36 @@ fun MeScreen(navigator: Navigator) {
     var confirm by remember { mutableStateOf<Confirm?>(null) }
     var reportingProblem by remember { mutableStateOf(false) }
     val configuration = graph.configuration
+    val scope = rememberCoroutineScope()
+    // Pushes about rooms they just left (me.recentChatPush); null until known, and the row stays hidden
+    // when the server can't say (signed out, or an older API).
+    var recentChatPush by remember { mutableStateOf<Boolean?>(null) }
 
     LaunchedEffect(Unit) { graph.session.refreshUser() }
+    LaunchedEffect(Unit) {
+        if (!graph.session.isSignedIn) return@LaunchedEffect
+        recentChatPush = try {
+            graph.api.recentChatPush()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    fun setRecentChatPush(enabled: Boolean) {
+        val before = recentChatPush
+        recentChatPush = enabled
+        scope.launch {
+            recentChatPush = try {
+                graph.api.setRecentChatPush(enabled)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                before
+            }
+        }
+    }
 
     ScreenScaffold(title = "Me") {
         Feed {
@@ -100,6 +140,19 @@ fun MeScreen(navigator: Navigator) {
                     if (access == LocationAccess.DENIED) {
                         RowDivider()
                         InfoRow("Open settings", onClick = context::openAppSettings, trailing = Icons.AutoMirrored.Rounded.KeyboardArrowRight)
+                    }
+                }
+            }
+            recentChatPush?.let { enabled ->
+                item {
+                    DetailSection("Notifications") {
+                        SwitchRow(
+                            "Rooms you just left",
+                            "Get a push when people keep talking in a chat room you left in the last 30 minutes",
+                            checked = enabled,
+                            icon = Icons.Rounded.Notifications,
+                            onCheckedChange = ::setRecentChatPush,
+                        )
                     }
                 }
             }
@@ -163,6 +216,30 @@ fun MeScreen(navigator: Navigator) {
                 }
             },
             dismissButton = { TextButton(onClick = { confirm = null }) { Text("Cancel") } },
+        )
+    }
+}
+
+/** A setting that's on or off: a title, a muted line on what it does, and a switch; the whole row toggles it. */
+@Composable
+private fun SwitchRow(title: String, detail: String, checked: Boolean, icon: ImageVector, onCheckedChange: (Boolean) -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .toggleable(value = checked, role = Role.Switch, onValueChange = onCheckedChange)
+            .padding(DetailRowPadding),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(Space.s3),
+    ) {
+        Icon(icon, contentDescription = null, tint = tokens.inkMuted, modifier = Modifier.size(20.dp))
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(title, style = HotMessType.body, color = tokens.ink)
+            Text(detail, style = HotMessType.bodySmall, color = tokens.inkMuted)
+        }
+        Switch(
+            checked = checked,
+            onCheckedChange = null,
+            colors = SwitchDefaults.colors(checkedTrackColor = tokens.accent, checkedThumbColor = tokens.onAccent),
         )
     }
 }

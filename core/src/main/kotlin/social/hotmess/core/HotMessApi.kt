@@ -302,6 +302,14 @@ class HotMessApi(val client: AudienceKitClient) {
         return User(id = id, name = name, avatarUrl = me.photo?.cdnUrl)
     }
 
+    /** Whether pushes about chat rooms the user left lately are on, or null when there's no signed-in user. */
+    suspend fun recentChatPush(): Boolean? = query(Documents.RECENT_CHAT_PUSH, RecentChatPushResponse.serializer()).me?.recentChatPush
+
+    /** Turns pushes about chat rooms the user left lately on or off; returns the setting as it now is. */
+    suspend fun setRecentChatPush(enabled: Boolean): Boolean =
+        mutate(Documents.SET_RECENT_CHAT_PUSH, SetRecentChatPushResponse.serializer(), graphQLVariables("enabled" to enabled))
+            .setRecentChatPush.recentChatPush
+
     // endregion
 
     private suspend fun <T> query(
@@ -428,6 +436,16 @@ private data class MeResponse(val me: Me? = null) {
     )
 
     @Serializable data class Photo(val cdnUrl: String? = null)
+}
+
+@Serializable
+private data class RecentChatPushResponse(val me: Me? = null) {
+    @Serializable data class Me(val recentChatPush: Boolean = false)
+}
+
+@Serializable
+private data class SetRecentChatPushResponse(val setRecentChatPush: Payload) {
+    @Serializable data class Payload(val recentChatPush: Boolean = false)
 }
 
 @Serializable

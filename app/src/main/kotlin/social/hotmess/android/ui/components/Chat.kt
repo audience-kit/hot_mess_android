@@ -95,6 +95,7 @@ import social.hotmess.android.ui.theme.tokens
 import social.hotmess.core.ChatKind
 import social.hotmess.core.ChatRole
 import social.hotmess.core.Formatting
+import social.hotmess.core.RecordId
 import social.hotmess.core.RoomPerson
 import social.hotmess.core.SharedEvent
 import social.hotmess.core.firstNameForDisplay
@@ -107,7 +108,7 @@ import java.time.Instant
  * it knows about venues or sockets; callers pass a room name and map their own message model to [ChatThreadMessage].
  */
 
-/** Whether someone can be reached right now. Offline draws nothing. */
+/** Whether someone can be reached right now. Offline draws nothing, except where a room lists someone who just left. */
 enum class Presence { ONLINE, PUSH, OFFLINE }
 
 /** The API's presence (GraphQL's `presence`) as the dot draws it; offline and unknown draw nothing. */
@@ -120,22 +121,36 @@ fun presenceOf(value: com.audiencekit.Presence?): Presence? = when (value) {
 /**
  * The presence dot: a solid `presence-online` disc, or a `presence-push` ring with a hollow centre,
  * each on a 2dp [ring] (`surface-raised` when unspecified; the surface it sits on). [size] is the
- * dot without its ring: 10 on 28 avatars, 12 on 40 and up. Offline and null draw nothing.
+ * dot without its ring: 10 on 28 avatars, 12 on 40 and up. Null draws nothing, and so does offline
+ * unless [showOffline] (a room's people who just left), which is a muted `border-strong` disc.
  */
 @Composable
-fun PresenceDot(state: Presence?, modifier: Modifier = Modifier, size: Dp = 10.dp, ring: Color = Color.Unspecified) {
-    if (state == null || state == Presence.OFFLINE) return
+fun PresenceDot(
+    state: Presence?,
+    modifier: Modifier = Modifier,
+    size: Dp = 10.dp,
+    ring: Color = Color.Unspecified,
+    showOffline: Boolean = false,
+) {
+    if (state == null || (state == Presence.OFFLINE && !showOffline)) return
     val ringColor = ring.takeOrElse { tokens.surfaceRaised }
     val online = tokens.presenceOnline
     val push = tokens.presencePush
     val edge = tokens.presencePushEdge
-    val label = if (state == Presence.ONLINE) "In chat now" else "Gets notifications"
+    val offline = tokens.borderStrong
+    val label = when (state) {
+        Presence.ONLINE -> "In chat now"
+        Presence.PUSH -> "Gets notifications"
+        Presence.OFFLINE -> "Offline"
+    }
     Canvas(modifier.size(size + 4.dp).semantics { contentDescription = label }) {
         val outer = this.size.minDimension / 2f
         val inner = outer - 2.dp.toPx()
         drawCircle(ringColor, radius = outer)
         if (state == Presence.ONLINE) {
             drawCircle(online, radius = inner)
+        } else if (state == Presence.OFFLINE) {
+            drawCircle(offline, radius = inner)
         } else {
             drawCircle(push, radius = inner)
             // The hollow centre, about half the dot (the web's radial gradient stops at 32–36%).
@@ -676,12 +691,21 @@ fun RoomBanner(kind: RoomBannerKind, roomName: String, modifier: Modifier = Modi
 /**
  * Who else is in the room, under its banner (and above any pinned announcement): "N here now", then a
  * row of faces with first names, in the order given (callers put friends first; see RoomPeople.hereNow).
- * A friend's face has an `accent` ring and a heart badge. Every face carries the online dot. Draws
- * nothing when [people] is empty, so pass everyone but the viewer.
+ * A friend's face has an `accent` ring and a heart badge. A face in the room carries the online dot;
+ * someone here recently (who left in the last half hour) the offline dot, or the push dot when they're
+ * [RoomPerson.reachable] or in [reachable]. The viewer ([viewerId]) is "You", in the room, and counts
+ * among "here now". Draws nothing when [people] is empty.
  */
 @Composable
-fun HereNowStrip(people: List<RoomPerson>, modifier: Modifier = Modifier) {
+fun HereNowStrip(
+    people: List<RoomPerson>,
+    reachable: Set<String> = emptySet(),
+    viewerId: String? = null,
+    modifier: Modifier = Modifier,
+) {
     if (people.isEmpty()) return
+    val here = people.count { !it.isRecent }
+    val recently = people.size - here
     val hairline = tokens.border
     Column(
         modifier
@@ -692,7 +716,7 @@ fun HereNowStrip(people: List<RoomPerson>, modifier: Modifier = Modifier) {
         verticalArrangement = Arrangement.spacedBy(Space.s1),
     ) {
         Text(
-            "${people.size} here now",
+            if (recently == 0) "$here here now" else "$here here now · $recently here recently",
             style = HotMessType.caption,
             color = tokens.inkMuted,
             modifier = Modifier.padding(horizontal = Space.s4),
@@ -701,16 +725,25 @@ fun HereNowStrip(people: List<RoomPerson>, modifier: Modifier = Modifier) {
             contentPadding = PaddingValues(horizontal = Space.s4),
             horizontalArrangement = Arrangement.spacedBy(Space.s2),
         ) {
-            items(people, key = { it.userId }) { person -> HereNowFace(person) }
+            items(people, key = { it.userId }) { person ->
+                val viewer = RecordId.same(person.userId, viewerId)
+                val presence = when {
+                    viewer || !person.isRecent -> Presence.ONLINE
+                    person.reachable || person.userId in reachable -> Presence.PUSH
+                    else -> Presence.OFFLINE
+                }
+                HereNowFace(if (viewer) person.copy(name = "You", friend = false, recentUntil = null) else person, presence)
+            }
         }
     }
 }
 
-/** One face in [HereNowStrip]: read out as "Aurora Bell, friend, here now". */
+/** One face in [HereNowStrip]: read out as "Aurora Bell, friend, here now", "You, here now", or "Jo P., here recently". */
 @Composable
-private fun HereNowFace(person: RoomPerson) {
+private fun HereNowFace(person: RoomPerson, presence: Presence) {
     val name = person.name ?: "Someone"
-    val description = if (person.friend) "$name, friend, here now" else "$name, here now"
+    val whenHere = if (person.isRecent) "here recently" else "here now"
+    val description = if (person.friend) "$name, friend, $whenHere" else "$name, $whenHere"
     val ringColor = tokens.accent
     Column(
         Modifier.width(56.dp).clearAndSetSemantics { contentDescription = description },
@@ -724,8 +757,9 @@ private fun HereNowFace(person: RoomPerson) {
                 name,
                 size = 40.dp,
                 modifier = Modifier.align(Alignment.Center),
-                presence = Presence.ONLINE,
+                presence = presence,
                 presenceRing = tokens.surfaceRaised,
+                showOffline = true,
             )
             if (person.friend) {
                 Box(
@@ -1158,6 +1192,9 @@ private val previewHereNow = listOf(
     RoomPerson("jo", "Jo P."),
     RoomPerson("kiko", "Kiko M."),
     RoomPerson("zed", "Zed Q."),
+    // Here recently: one a notification reaches, one offline.
+    RoomPerson("sam", "Sam Lee", friend = true, recentUntil = previewStart.plusSeconds(1_800), reachable = true),
+    RoomPerson("ri", "Ri M.", recentUntil = previewStart.plusSeconds(1_200)),
 )
 
 @Preview(name = "Here now", widthDp = 360, heightDp = 420)

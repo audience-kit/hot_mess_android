@@ -211,7 +211,8 @@ fun RemoteImage(url: String?, modifier: Modifier = Modifier, contentScale: Conte
 /**
  * A round avatar. Without a photo it shows initials on a spectrum colour, chosen by name. With a
  * [presence], a [PresenceDot] sits at its bottom-right (10 on avatars under 40, 12 from 40 up), ringed
- * in [presenceRing] (`surface-raised` when unspecified; pass the surface the avatar sits on). A place
+ * in [presenceRing] (`surface-raised` when unspecified; pass the surface the avatar sits on); offline
+ * draws nothing unless [showOffline] (see PresenceDot). A place
  * (a venue posting in chat) passes a rounded-square [shape], so it never looks like a person.
  */
 @Composable
@@ -223,6 +224,7 @@ fun Avatar(
     presence: Presence? = null,
     presenceRing: Color = Color.Unspecified,
     shape: Shape = CircleShape,
+    showOffline: Boolean = false,
 ) {
     val band = (name.hashCode().absoluteValue) % tokens.spectrum.size
     Box(modifier.size(size)) {
@@ -243,11 +245,12 @@ fun Avatar(
                 AsyncImage(model = url, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
             }
         }
-        if (presence != null && presence != Presence.OFFLINE) {
+        if (presence != null && (presence != Presence.OFFLINE || showOffline)) {
             PresenceDot(
                 presence,
                 size = if (size >= 40.dp) 12.dp else 10.dp,
                 ring = presenceRing,
+                showOffline = showOffline,
                 modifier = Modifier.align(Alignment.BottomEnd).offset(x = 1.dp, y = 1.dp),
             )
         }

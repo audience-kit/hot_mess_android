@@ -18,6 +18,7 @@ import social.hotmess.android.ui.theme.HotMessTheme
 import social.hotmess.core.AppRoute
 import social.hotmess.core.DeepLink
 import social.hotmess.core.PingPush
+import social.hotmess.core.RecentChatPush
 
 class MainActivity : ComponentActivity() {
     private val graph by lazy { appGraph }
@@ -70,6 +71,17 @@ class MainActivity : ComponentActivity() {
         // A tapped Ping push: Firebase's own notification or ours both carry its data as extras.
         val extras = intent?.extras
         if (intent != null && extras != null) {
+            // A tapped push about a chat room they just left opens the room.
+            val chat = RecentChatPush.parse(
+                listOf(RecentChatPush.KIND, RecentChatPush.URL, RecentChatPush.ROOM_ID, RecentChatPush.MESSAGE_ID)
+                    .associateWith { extras.getString(it) },
+            )
+            val route = chat?.route
+            if (route != null) {
+                intent.removeExtra(RecentChatPush.KIND)
+                links.trySend(route)
+                return
+            }
             val push = PingPush.parse(listOf(PingPush.KIND, PingPush.PING_ID).associateWith { extras.getString(it) })
             if (push != null) {
                 intent.removeExtra(PingPush.KIND)
