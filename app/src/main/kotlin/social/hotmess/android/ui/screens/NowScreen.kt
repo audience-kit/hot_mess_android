@@ -80,6 +80,8 @@ import social.hotmess.core.AppRoute
 import social.hotmess.core.ChatLine
 import social.hotmess.core.CoverAction
 import social.hotmess.core.CoverOffer
+import social.hotmess.core.Event
+import social.hotmess.core.Formatting
 import social.hotmess.core.Friend
 import social.hotmess.core.FriendVenue
 import social.hotmess.core.Now
@@ -164,24 +166,30 @@ fun NowScreen(navigator: Navigator) {
                     hero = {
                         HeroHeader(now.imageUrl, topInset, onTone = { heroTone = it }) {
                             val venue = now.venue
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(Space.s3),
-                                modifier = if (venue != null) Modifier.clickable(
-                                    role = Role.Button,
-                                    onClickLabel = "View venue details",
-                                    onClick = { navigator.open(AppRoute.VenueDetail(venue.id)) },
-                                ) else Modifier,
-                            ) {
-                                Text(
-                                    venue?.name ?: title,
-                                    style = HotMessType.display,
-                                    maxLines = 2,
-                                    overflow = TextOverflow.Ellipsis,
-                                    modifier = Modifier.weight(1f, fill = false).semantics { heading() },
-                                )
-                                if (venue != null) {
-                                    Icon(Icons.AutoMirrored.Rounded.KeyboardArrowRight, contentDescription = null)
+                            val event = now.event
+                            // At an event: it leads, with its time and place (or host) underneath.
+                            if (event != null) {
+                                EventHeadline(event, onOpen = { navigator.open(AppRoute.EventDetail(event.id)) })
+                            } else {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(Space.s3),
+                                    modifier = if (venue != null) Modifier.clickable(
+                                        role = Role.Button,
+                                        onClickLabel = "View venue details",
+                                        onClick = { navigator.open(AppRoute.VenueDetail(venue.id)) },
+                                    ) else Modifier,
+                                ) {
+                                    Text(
+                                        venue?.name ?: title,
+                                        style = HotMessType.display,
+                                        maxLines = 2,
+                                        overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier.weight(1f, fill = false).semantics { heading() },
+                                    )
+                                    if (venue != null) {
+                                        Icon(Icons.AutoMirrored.Rounded.KeyboardArrowRight, contentDescription = null)
+                                    }
                                 }
                             }
                         }
@@ -237,7 +245,7 @@ fun NowScreen(navigator: Navigator) {
                     }
                     nearby(now, coordinates != null, navigator)
                     now.venue?.let { venue ->
-                        item { SmallTalk(venue, now.friends, navigator) }
+                        item { SmallTalk(venue, now.event, now.friends, navigator) }
                     }
                     now.locale?.takeIf { now.venue == null && it.chatOpen }?.let { locale ->
                         item { LocaleSmallTalk(locale, navigator) }
@@ -285,13 +293,48 @@ private fun LazyListScope.nearby(now: Now, located: Boolean, navigator: Navigato
     }
 }
 
-/** The last few lines of the venue's chat, and the way into the room. */
+/** The event the user is at, heading Now: where it stands, its name, and when and where it is. */
 @Composable
-private fun SmallTalk(venue: Venue, friends: List<Friend>, navigator: Navigator) {
+private fun EventHeadline(event: Event, onOpen: () -> Unit) {
+    val now = Instant.now()
+    val end = event.endAt
+    // Now finds an event from an hour before it starts to an hour after it ends.
+    val stage = when {
+        event.startAt.isAfter(now) -> "Starting soon"
+        end != null && end.isBefore(now) -> "Just ended"
+        else -> "Happening now"
+    }
+    Column(
+        verticalArrangement = Arrangement.spacedBy(Space.s1),
+        modifier = Modifier.clickable(role = Role.Button, onClickLabel = "View event details", onClick = onOpen),
+    ) {
+        Text(stage.uppercase(), style = HotMessType.label)
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Space.s3)) {
+            Text(
+                event.name,
+                style = HotMessType.display,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f, fill = false).semantics { heading() },
+            )
+            Icon(Icons.AutoMirrored.Rounded.KeyboardArrowRight, contentDescription = null)
+        }
+        Text(Formatting.eventSubtitle(event), style = HotMessType.subheading, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    }
+}
+
+/**
+ * The last few lines of the venue's chat, and the way into the room. At an [event] the room is the event's:
+ * named and pictured for it, since its host may not be a listed venue.
+ */
+@Composable
+private fun SmallTalk(venue: Venue, event: Event?, friends: List<Friend>, navigator: Navigator) {
     val graph = LocalAppGraph.current
     val user by graph.session.user.collectAsStateWithLifecycle()
+    val roomName = event?.name ?: venue.name
+    val roomPhoto = event?.bannerUrl ?: venue.photoUrl
     val participants = buildList {
-        add(ChatPeekParticipant("venue-${venue.id}", venue.name, venue.photoUrl, isPlace = true))
+        add(ChatPeekParticipant("venue-${venue.id}", roomName, roomPhoto, isPlace = true))
         add(ChatPeekParticipant("viewer", "You", user?.avatarUrl))
         friends.filterNot { it.id.equals(user?.id, ignoreCase = true) }
             .distinctBy { it.id.lowercase() }.forEach { friend ->
@@ -303,8 +346,8 @@ private fun SmallTalk(venue: Venue, friends: List<Friend>, navigator: Navigator)
     ChatPeek(
         rememberPeekMessages(venue.recentMessages),
         title = "Small talk",
-        room = venue.name,
-        onOpen = { navigator.openChat(venue.id, venue.name) },
+        room = roomName,
+        onOpen = { navigator.openChat(venue.id, roomName) },
         presence = remember(venue.recentMessages) { peekPresence(venue.recentMessages) },
         participants = participants,
     )

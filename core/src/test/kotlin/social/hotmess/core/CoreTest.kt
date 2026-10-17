@@ -763,6 +763,25 @@ class HotMessApiTest {
     }
 
     @Test
+    fun nowLeadsWithTheEventTheUserIsAt() = runTest {
+        val bingo = """{"id":"e1","name":"Bingo","startAt":"2026-10-16T19:00:00Z","endAt":"2026-10-16T22:00:00Z",
+            "bannerUrl":"https://cdn.example/bingo.jpg"}"""
+        val (api, bodies) = api(
+            "ReportLocation" to """{"data":{"reportLocation":{"nearbyVenues":null,"event":$bingo,
+                "venue":{"id":"v1","name":"First Baptist","bannerUrl":"https://cdn.example/church.jpg",
+                  "events":{"upcoming":{"nodes":[$bingo]}}}}}}""",
+        )
+        val now = api.now(Coordinates(47.66, -117.40))
+
+        assertEquals("Bingo", now.title)
+        assertEquals("e1", now.event?.id)
+        assertEquals("https://cdn.example/bingo.jpg", now.imageUrl)
+        assertEquals("First Baptist", now.venue?.name)
+        assertTrue(now.events.isEmpty(), "the event isn't listed again under Events")
+        assertTrue(bodies.single().contains("event {"))
+    }
+
+    @Test
     fun nowAtAVenueHasItsRecentChatAndFriends() = runTest {
         val (api, _) = api(
             "ReportLocation" to """{"data":{"reportLocation":{"nearbyVenues":null,
