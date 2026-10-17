@@ -425,12 +425,13 @@ private data class StatusResponse(val clients: Clients? = null) {
 private data class ReportLocationResponse(val reportLocation: LocationReport)
 
 /**
- * What reportLocation says about where the user is: the [venue] they're in, else their [locale] and its
- * [nearbyVenues]. Friends, events and Pings come from those objects' mixins; [now] shapes it all for the
- * Now screen, with the title and hero taken from the venue or the locale.
+ * What reportLocation says about where the user is: the [event] they're at, the [venue] they're in, else
+ * their [locale] and its [nearbyVenues]. Friends, events and Pings come from those objects' mixins; [now]
+ * shapes it all for the Now screen, with the title and hero taken from the event, venue or locale.
  */
 @Serializable
 private data class LocationReport(
+    val event: Event? = null,
     /** Read twice: as the [Venue] and for its [VenueMixins]. */
     val venue: JsonObject? = null,
     val nearbyVenues: List<Venue>? = null,
@@ -469,11 +470,13 @@ private data class LocationReport(
             val place = json.decodeFromJsonElement(Venue.serializer(), node)
             val mixins = json.decodeFromJsonElement(VenueMixins.serializer(), node)
             return Now(
-                title = place.name,
-                imageUrl = place.bannerUrl ?: place.photoUrl,
+                title = event?.name ?: place.name,
+                imageUrl = event?.bannerUrl ?: place.bannerUrl ?: place.photoUrl,
+                event = event,
                 venue = place,
                 venues = nearbyVenues,
-                events = mixins.events?.events.orEmpty(),
+                // The event the user is at leads the screen, so it isn't listed again.
+                events = mixins.events?.events.orEmpty().filterNot { it.id == event?.id },
                 friends = mixins.friends?.list.orEmpty(),
                 locale = nowLocale,
                 myPing = ping?.myPing,
@@ -481,10 +484,11 @@ private data class LocationReport(
             )
         }
         return Now(
-            title = locale?.name?.let { "Happening Now in $it" } ?: "Happening Now",
-            imageUrl = locale?.bannerUrl,
+            title = event?.name ?: locale?.name?.let { "Happening Now in $it" } ?: "Happening Now",
+            imageUrl = event?.bannerUrl ?: locale?.bannerUrl,
+            event = event,
             venues = nearbyVenues,
-            events = locale?.events?.events.orEmpty().take(Documents.LOCALE_EVENT_LIMIT),
+            events = locale?.events?.events.orEmpty().filterNot { it.id == event?.id }.take(Documents.LOCALE_EVENT_LIMIT),
             friends = locale?.friends?.list.orEmpty(),
             friendVenues = locale?.friends?.venues.orEmpty(),
             locale = nowLocale,

@@ -65,6 +65,7 @@ object Documents {
     val REPORT_LOCATION: String = """
         mutation ReportLocation(${'$'}position: CoordinatesInput!) {
           reportLocation(input: { position: ${'$'}position }) {
+            event { $EVENT_FIELDS }
             venue {
               $VENUE_FIELDS chat { $RECENT_MESSAGES } $VENUE_COVER_FIELDS
               events { upcoming { nodes { $EVENT_FIELDS } } }

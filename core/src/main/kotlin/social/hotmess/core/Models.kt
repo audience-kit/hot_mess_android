@@ -562,6 +562,11 @@ data class PingJoin(val id: String, val user: Friend, val targetId: String? = nu
 data class Now(
     val title: String = "",
     val imageUrl: String? = null,
+    /**
+     * The event the user is at, from an hour before it starts to an hour after it ends. Now leads with it
+     * rather than its venue, which may be a host that isn't listed as a venue at all.
+     */
+    val event: Event? = null,
     /** The venue the user is in, when they're in one. */
     val venue: Venue? = null,
     /** Venues nearby, nearest first; null when the user is in a venue. */
