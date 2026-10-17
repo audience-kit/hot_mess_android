@@ -290,11 +290,11 @@ fun VenueChatScreen(room: ChatRoom, name: String, navigator: Navigator) {
             if (banner != null) RoomBanner(banner, venueName, isLocale = isLocale)
             val userId = user?.id
             val friends = graph.api.friends
-            // Who's here, friends first; a roster can add friends' full names, so it redraws the thread too.
+            // Who's here, the viewer then friends first; a roster can add friends' full names, so it redraws the thread too.
             val hereNow = remember(people, userId) {
                 RoomPeople.hereNow(people.byId.values, userId) { friends.fullName(it) }
             }
-            HereNowStrip(hereNow, reachable)
+            HereNowStrip(hereNow, reachable, viewerId = userId)
             val thread = remember(messages, userId, people) { messages.map { it.threadMessage(userId, friends) } }
             // Green for everyone in the room, yellow for friends outside it whom a notification reaches.
             val presence = remember(people, reachable) {

@@ -95,6 +95,7 @@ import social.hotmess.android.ui.theme.tokens
 import social.hotmess.core.ChatKind
 import social.hotmess.core.ChatRole
 import social.hotmess.core.Formatting
+import social.hotmess.core.RecordId
 import social.hotmess.core.RoomPerson
 import social.hotmess.core.SharedEvent
 import social.hotmess.core.firstNameForDisplay
@@ -692,11 +693,16 @@ fun RoomBanner(kind: RoomBannerKind, roomName: String, modifier: Modifier = Modi
  * row of faces with first names, in the order given (callers put friends first; see RoomPeople.hereNow).
  * A friend's face has an `accent` ring and a heart badge. A face in the room carries the online dot;
  * someone here recently (who left in the last half hour) the offline dot, or the push dot when they're
- * [RoomPerson.reachable] or in [reachable]. Draws nothing when [people] is empty, so pass everyone but
- * the viewer.
+ * [RoomPerson.reachable] or in [reachable]. The viewer ([viewerId]) is "You", in the room, and counts
+ * among "here now". Draws nothing when [people] is empty.
  */
 @Composable
-fun HereNowStrip(people: List<RoomPerson>, reachable: Set<String> = emptySet(), modifier: Modifier = Modifier) {
+fun HereNowStrip(
+    people: List<RoomPerson>,
+    reachable: Set<String> = emptySet(),
+    viewerId: String? = null,
+    modifier: Modifier = Modifier,
+) {
     if (people.isEmpty()) return
     val here = people.count { !it.isRecent }
     val recently = people.size - here
@@ -720,18 +726,19 @@ fun HereNowStrip(people: List<RoomPerson>, reachable: Set<String> = emptySet(), 
             horizontalArrangement = Arrangement.spacedBy(Space.s2),
         ) {
             items(people, key = { it.userId }) { person ->
+                val viewer = RecordId.same(person.userId, viewerId)
                 val presence = when {
-                    !person.isRecent -> Presence.ONLINE
+                    viewer || !person.isRecent -> Presence.ONLINE
                     person.reachable || person.userId in reachable -> Presence.PUSH
                     else -> Presence.OFFLINE
                 }
-                HereNowFace(person, presence)
+                HereNowFace(if (viewer) person.copy(name = "You", friend = false, recentUntil = null) else person, presence)
             }
         }
     }
 }
 
-/** One face in [HereNowStrip]: read out as "Aurora Bell, friend, here now", or "Jo P., here recently". */
+/** One face in [HereNowStrip]: read out as "Aurora Bell, friend, here now", "You, here now", or "Jo P., here recently". */
 @Composable
 private fun HereNowFace(person: RoomPerson, presence: Presence) {
     val name = person.name ?: "Someone"

@@ -93,14 +93,20 @@ data class RoomPeople(val byId: Map<String, RoomPerson> = emptyMap()) {
 
     companion object {
         /**
-         * The "Here now" strip's people: everyone but [viewerId], those in the room before those here
+         * The "Here now" strip's people: the viewer ([viewerId]) first when the room lists them, as in the
+         * room (they're looking at it) and never a friend; then those in the room before those here
          * recently (the latest to leave first); then friends first then everyone else, each by name
          * (case-insensitive; nameless last, then by id). Someone is a friend when the room says so or
          * [fullName] knows them (the viewer's FriendDirectory), whose full name then wins over the room's.
          */
-        fun hereNow(people: Collection<RoomPerson>, viewerId: String?, fullName: (String) -> String? = { null }): List<RoomPerson> =
+        fun hereNow(people: Collection<RoomPerson>, viewerId: String?, fullName: (String) -> String? = { null }): List<RoomPerson> {
+            val (viewer, others) = people.partition { RecordId.same(it.userId, viewerId) }
+            val me = viewer.firstOrNull()?.copy(friend = false, recentUntil = null, reachable = false)
+            return listOfNotNull(me) + sortedOthers(others, fullName)
+        }
+
+        private fun sortedOthers(people: List<RoomPerson>, fullName: (String) -> String?): List<RoomPerson> =
             people
-                .filterNot { RecordId.same(it.userId, viewerId) }
                 .map { person ->
                     val full = fullName(person.userId)
                     if (full == null) person else person.copy(name = full, friend = true)

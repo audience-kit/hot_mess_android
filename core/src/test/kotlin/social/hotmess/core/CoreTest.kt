@@ -492,12 +492,15 @@ class ChatProtocolTest {
               "recent":[{"user_id":"U-4","name":"Wren Fox","friend":true,"presence":"push",
                          "last_seen_at":"2026-10-17T05:00:00Z","recent_until":"2026-10-17T05:30:00Z"},
                         {"user_id":"u-5","name":"Jo P.","presence":"offline","last_seen_at":"2026-10-17T04:50:00.000+00:00"},
-                        {"user_id":"u-6"}, "junk"]}}""",
+                        {"user_id":"u-7","name":"DJ Host","presence":"offline","last_seen_at":null,"recent_until":"2026-10-17T09:00:00Z"},
+                        {"user_id":"u-6","last_seen_at":null}, "junk"]}}""",
         ) as ChatProtocol.Frame.Roster
         assertEquals(
             listOf(
                 RoomPerson("u-4", "Wren Fox", friend = true, recentUntil = until, reachable = true),
                 RoomPerson("u-5", "Jo P.", recentUntil = Instant.parse("2026-10-17T05:20:00Z")),
+                // A host who posted without joining has no last_seen_at, and stays until the event ends.
+                RoomPerson("u-7", "DJ Host", recentUntil = Instant.parse("2026-10-17T09:00:00Z")),
             ),
             frame.recent,
         )
@@ -584,6 +587,10 @@ class RoomPeopleTest {
         assertEquals(setOf("u-1", "u-2", "u-3"), room.pruned(now).ids)
         assertEquals(setOf("u-1", "u-2"), room.pruned(soon).ids)
         assertEquals(setOf("u-1"), room.pruned(later).ids)
+        // Hours away (a host until their event ends) is kept as long as it takes.
+        val host = RoomPeople().left("u-9", now.plusSeconds(4 * 3_600), now = now)
+        assertEquals(setOf("u-9"), host.pruned(now.plusSeconds(3 * 3_600)).ids)
+        assertTrue(host.pruned(now.plusSeconds(4 * 3_600)).ids.isEmpty())
         assertTrue(room.pruned(now) === room)
     }
 
@@ -600,7 +607,7 @@ class RoomPeopleTest {
     }
 
     @Test
-    fun hereNowPutsFriendsFirstAndLeavesOutTheViewer() {
+    fun hereNowPutsTheViewerThenFriendsFirst() {
         val viewer = "b0f8b66a-e636-495d-9475-0f5317ea08e0"
         val people = listOf(
             RoomPerson(viewer, "Me Myself"),
@@ -612,9 +619,12 @@ class RoomPeopleTest {
         )
         val directory = mapOf("u-bo" to "Bo Turner")
         val here = RoomPeople.hereNow(people, viewer.uppercase()) { directory[it] }
-        assertEquals(listOf("Bo Turner", "Wren Fox", "Amy R.", "zed Q.", null), here.map { it.name })
-        assertEquals(listOf(true, true, false, false, false), here.map { it.friend })
-        assertTrue(RoomPeople.hereNow(listOf(RoomPerson(viewer)), viewer).isEmpty())
+        assertEquals(listOf("Me Myself", "Bo Turner", "Wren Fox", "Amy R.", "zed Q.", null), here.map { it.name })
+        assertEquals(listOf(false, true, true, false, false, false), here.map { it.friend })
+        // The viewer is in the room they're looking at, even if a stale frame says they left.
+        val alone = RoomPeople.hereNow(listOf(RoomPerson(viewer, recentUntil = Instant.EPOCH)), viewer)
+        assertEquals(listOf(RoomPerson(viewer)), alone)
+        assertTrue(RoomPeople.hereNow(emptyList(), viewer).isEmpty())
     }
 }
 
